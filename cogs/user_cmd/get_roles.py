@@ -78,6 +78,9 @@ class VerifyView(disnake.ui.View):
 class Verify(commands.Cog):
     def __init__(self, bot: commands.Bot) -> None:
         self.bot = bot
+
+    async def cog_load(self) -> None:
+        """Вызывается после загрузки cog, когда event loop уже запущен."""
         self.bot.add_view(VerifyView())
 
     @commands.slash_command(name="verify", description="Отправить сообщение с кнопкой верификации")
@@ -123,7 +126,7 @@ class SelectGames(disnake.ui.Select):
             max_values=3,
         )
 
-    async def callback(self, interaction: disnake.MessageInteraction) -> None:  # type: ignore[override]
+    async def callback(self, interaction: disnake.MessageInteraction) -> None:  
         await interaction.response.defer(ephemeral=True)
 
         if not interaction.guild:
@@ -153,7 +156,6 @@ class SelectGames(disnake.ui.Select):
                 if role in interaction.author.roles:
                     roles_to_remove.append(role)
 
-        # Удаление ролей
         if roles_to_remove:
             try:
                 await interaction.author.remove_roles(*roles_to_remove, reason="Game roles updated")
@@ -165,7 +167,6 @@ class SelectGames(disnake.ui.Select):
                 await interaction.followup.send("Произошла ошибка при удалении ролей.", ephemeral=True)
                 return
 
-        # Добавление ролей
         if roles_to_add:
             try:
                 await interaction.author.add_roles(*roles_to_add, reason="Game roles updated")
@@ -189,8 +190,8 @@ class GameRoleView(disnake.ui.View):
 class GameRoles(commands.Cog):
     def __init__(self, bot: commands.Bot) -> None:
         self.bot = bot
-        # Добавляем view для постоянных сообщений (если нужно восстановить существующее сообщение)
-        # Можно убрать message_id, если не нужно привязывать к конкретному сообщению
+
+    async def cog_load(self) -> None:  
         self.bot.add_view(GameRoleView())
 
     @commands.slash_command(name="games", description="Отправить селектор игровых ролей")

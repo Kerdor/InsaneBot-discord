@@ -24,16 +24,13 @@ class CreateVoice(commands.Cog):
         before: disnake.VoiceState,
         after: disnake.VoiceState,
     ) -> None:
-        # Обработка создания нового канала
         join_channel = after.channel
         create_voice_channel_id = config.CHANNELS.get("create_voice")
         if join_channel and create_voice_channel_id and join_channel.id == create_voice_channel_id:
             category = join_channel.category
             if not category:
-                # Если канал не в категории, используем категорию из предыдущего канала или создаем в корне
                 category = before.channel.category if before.channel else None
 
-            # Проверка лимита каналов в категории
             if category:
                 voice_channels_in_category = [
                     ch for ch in category.channels if isinstance(ch, disnake.VoiceChannel)
@@ -44,7 +41,7 @@ class CreateVoice(commands.Cog):
                             "Извините, достигнут лимит каналов в этой категории. Попробуйте позже."
                         )
                     except disnake.HTTPException:
-                        pass  # Не можем отправить сообщение пользователю
+                        pass
                     return
 
             try:
@@ -77,26 +74,18 @@ class CreateVoice(commands.Cog):
                 await member.move_to(new_channel)
             except disnake.HTTPException as e:
                 logger.exception("Failed to move member %s to channel %s: %s", member.id, new_channel.id, e)
-                # Если не удалось переместить, удаляем созданный канал
                 try:
                     await new_channel.delete(reason="Failed to move user to channel")
                 except Exception:
                     pass
 
-        # Обработка удаления пустого канала
-        leave_channel = before.channel
-        if (
-            leave_channel
-            and leave_channel != join_channel
-            and leave_channel.name.startswith(ARENA_PREFIX)
-            and len(leave_channel.members) == 0
-        ):
+        if before.channel and before.channel != join_channel and before.channel.name.startswith(ARENA_PREFIX) and len(before.channel.members) == 0:
             try:
-                await leave_channel.delete(reason="Temporary arena channel is empty")
+                await before.channel.delete(reason="Temporary arena channel is empty")
             except disnake.Forbidden:
-                logger.warning("Bot doesn't have permission to delete channel %s", leave_channel.id)
+                logger.warning("Bot doesn't have permission to delete channel %s", before.channel.id)
             except disnake.HTTPException as e:
-                logger.exception("Failed to delete empty channel %s: %s", leave_channel.id, e)
+                logger.exception("Failed to delete empty channel %s: %s", before.channel.id, e)
 
 
 def setup(bot: commands.Bot) -> None:

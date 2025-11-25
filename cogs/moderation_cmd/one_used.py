@@ -59,13 +59,11 @@ SECTIONS: Tuple[Tuple[str, str], ...] = (
     ),
 )
 
-
 def build_rule_embeds() -> Iterable[disnake.Embed]:
     for title, description in SECTIONS:
         embed = disnake.Embed(color=0x2F3136)
         embed.add_field(name=title, value=description, inline=False)
         yield embed
-
 
 class OneUsedCommands(commands.Cog):
     def __init__(self, bot: commands.Bot) -> None:
@@ -73,9 +71,7 @@ class OneUsedCommands(commands.Cog):
 
     @commands.slash_command(name="rules", description="Отправить правила сервера в чат")
     async def rules_slash(self, inter: disnake.ApplicationCommandInteraction) -> None:
-        """Отправляет правила сервера."""
         try:
-            # Отвечаем на взаимодействие сразу, чтобы избежать timeout
             await inter.response.defer(ephemeral=True)
             
             embeds_sent = 0
@@ -109,7 +105,6 @@ class OneUsedCommands(commands.Cog):
                 await inter.followup.send("Произошла ошибка при отправке изображения правил.", ephemeral=True)
                 return
 
-            # Отправляем подтверждение пользователю
             if embeds_sent > 0:
                 await inter.followup.send("Правила отправлены.", ephemeral=True)
             else:

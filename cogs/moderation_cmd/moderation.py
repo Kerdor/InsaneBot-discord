@@ -146,7 +146,6 @@ class Moderation(commands.Cog):
             await inter.response.send_message("Нельзя заблокировать бота.", ephemeral=True)
             return
 
-        # Проверка иерархии, если пользователь на сервере
         member = inter.guild.get_member(user.id)
         if member and not _check_hierarchy(inter.author, member):
             await inter.response.send_message("Вы не можете забанить этого пользователя из-за иерархии ролей.", ephemeral=True)
@@ -209,7 +208,6 @@ class Moderation(commands.Cog):
             await inter.response.send_message(str(exc), ephemeral=True)
             return
 
-        # Максимальный тайм-аут в Discord - 28 дней
         max_timeout = datetime.timedelta(days=28)
         if delta > max_timeout:
             await inter.response.send_message("Максимальная длительность тайм-аута - 28 дней.", ephemeral=True)
@@ -242,7 +240,6 @@ class Moderation(commands.Cog):
                 await logs_channel.send(embed=embed)
             except Exception as e:
                 logger.exception("Failed to send timeout log: %s", e)
-
 
 def setup(bot: commands.Bot) -> None:
     bot.add_cog(Moderation(bot))
