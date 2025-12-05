@@ -11,6 +11,9 @@ logger = logging.getLogger(__name__)
 
 class GuildLogs(BaseLogger):
     _initialized = False  # Class-level flag to prevent multiple initializations
+    _processed_events = {}  # Track processed events to prevent duplicates
+    _event_timeout = 5  # seconds to keep event in the set
+    _last_event_time = {}  # Track timestamps of last events
     
     def __init__(self, bot: commands.Bot):
         if GuildLogs._initialized:
@@ -316,68 +319,108 @@ class GuildLogs(BaseLogger):
             
             await self.log_to_channel(after.guild, embed)
     
+    async def _is_duplicate_event(self, event_type: str, channel_id: int) -> bool:
+        """Check if this event has already been processed recently."""
+        current_time = disnake.utils.utcnow().timestamp()
+        event_key = f"{event_type}:{channel_id}"
+        
+        # Clean up old entries
+        for key in list(self._processed_events.keys()):
+            if current_time - self._processed_events[key] > self._event_timeout:
+                del self._processed_events[key]
+        
+        # Check if this is a duplicate event
+        if event_key in self._processed_events:
+            return True
+            
+        # Track this event
+        self._processed_events[event_key] = current_time
+        return False
+
     @commands.Cog.listener()
     async def on_guild_channel_create(self, channel: disnake.abc.GuildChannel) -> None:
-        """Log when a channel is created."""
-        # Prevent duplicate processing
-        if hasattr(self, '_processing_event') and self._processing_event:
+        """Логирование создания канала"""
+        if getattr(self, '_processing_event', False) or await self._is_duplicate_event('create', channel.id):
             return
             
         self._processing_event = True
         try:
+            # Создаем улучшенный эмбед для отображения информации о создании канала
             embed = disnake.Embed(
                 title="📌 Создан канал",
-                color=LOG_COLORS['GREEN'],
+                color=disnake.Color.green(),
                 timestamp=disnake.utils.utcnow()
             )
             
-            # Add channel information
+            # Определяем тип канала
             channel_type = {
-                disnake.ChannelType.text: "💬 Текстовый",
-                disnake.ChannelType.voice: "🔊 Голосовой",
-                disnake.ChannelType.category: "📂 Категория",
-                disnake.ChannelType.news: "📢 Новостной",
-                disnake.ChannelType.stage_voice: "🎤 Голосовая сцена"
-            }.get(channel.type, f"❓ {channel.type.name}")
+                disnake.ChannelType.text: "Текстовый",
+                disnake.ChannelType.voice: "Голосовой",
+                disnake.ChannelType.category: "Категория",
+                disnake.ChannelType.news: "Новостной",
+                disnake.ChannelType.stage_voice: "Голосовая сцена"
+            }.get(channel.type, str(channel.type).replace('_', ' ').capitalize())
             
-            # Add channel details
+            # Добавляем информацию о канале
+            embed.add_field(name="Название", value=channel.mention, inline=True)
+            embed.add_field(name="Тип", value=channel_type, inline=True)
+            
+            if hasattr(channel, 'category') and channel.category:
+                embed.add_field(name="Категория", value=channel.category.name, inline=True)
+                
+            if hasattr(channel, 'user_limit'):
+                user_limit = f"{channel.user_limit} участников" if channel.user_limit > 0 else "Без ограничений"
+                embed.add_field(name="Лимит пользователей", value=user_limit, inline=True)
+                
+            if hasattr(channel, 'bitrate'):
+                embed.add_field(name="Битрейт", value=f"{channel.bitrate // 1000} kbps", inline=True)
+            
+            # Добавляем информацию о создателе, если доступна
+            if hasattr(channel, 'guild') and channel.guild.me.guild_permissions.view_audit_log:
+                async for entry in channel.guild.audit_logs(limit=1, action=disnake.AuditLogAction.channel_create):
+                    if entry.target.id == channel.id:
+                        creator = entry.user
+                        embed.add_field(name="Создал", value=f"{creator.mention} ({creator})", inline=True)
+                        break
+            
+            # Добавляем дополнительную информацию
             embed.add_field(
-                name="📝 Название",
-                value=f"{channel.mention} (`{channel.name}`)",
-                inline=True
+                name="Название",
+                value=f"{channel.mention} ({channel.name})",
+                inline=False
             )
             
             embed.add_field(
-                name="🔢 ID",
+                name="ID",
                 value=f"`{channel.id}`",
                 inline=True
             )
             
             embed.add_field(
-                name="📋 Тип",
+                name="Тип",
                 value=channel_type,
                 inline=True
             )
             
             if hasattr(channel, 'category') and channel.category:
                 embed.add_field(
-                    name="📂 Категория",
-                    value=f"{channel.category.mention} (`{channel.category.name}`)",
-                    inline=True
+                    name="Категория",
+                    value=f"{channel.category.mention} ({channel.category.name})",
+                    inline=False
                 )
             
-            # Find who created the channel
+            # Ищем, кто создал канал
             try:
                 async for entry in channel.guild.audit_logs(limit=5, action=disnake.AuditLogAction.channel_create):
                     if entry.target.id == channel.id:
                         embed.add_field(
-                            name="👤 Создал",
+                            name="Создал",
                             value=f"{entry.user.mention} (ID: {entry.user.id})",
                             inline=False
                         )
                         if entry.reason:
                             embed.add_field(
-                                name="📝 Причина",
+                                name="Причина",
                                 value=entry.reason,
                                 inline=False
                             )
@@ -385,24 +428,32 @@ class GuildLogs(BaseLogger):
             except Exception as e:
                 logger.error(f"Ошибка при получении аудит-логов: {e}")
             
+            # Отправляем эмбед в лог-канал
             await self.log_to_channel(channel.guild, embed)
+            
+        except Exception as e:
+            logger.error(f"Ошибка при логировании создания канала: {e}")
+            
         finally:
             self._processing_event = False
     
     @commands.Cog.listener()
     async def on_guild_channel_delete(self, channel: disnake.abc.GuildChannel) -> None:
         """Log when a channel is deleted."""
-        # Prevent duplicate processing
-        if hasattr(self, '_processing_event') and self._processing_event:
+        # Skip if this is a duplicate event or we're already processing
+        if getattr(self, '_processing_event', False) or await self._is_duplicate_event('delete', channel.id):
             return
             
         self._processing_event = True
         try:
+            # Create a more distinct embed for channel deletion
             embed = disnake.Embed(
-                title="🗑️ Удален канал",
-                color=LOG_COLORS['RED'],
+                title="🔻 УДАЛЕН КАНАЛ",
+                color=disnake.Color.red(),
                 timestamp=disnake.utils.utcnow()
             )
+            embed.set_thumbnail(url="https://i.imgur.com/8Km9tLL.png")  # Add a custom thumbnail
+            embed.set_footer(text="Логирование бота", icon_url=self.bot.user.display_avatar.url)
             
             # Add channel information
             channel_type = {
@@ -459,6 +510,8 @@ class GuildLogs(BaseLogger):
                 logger.error(f"Ошибка при получении аудит-логов: {e}")
             
             await self.log_to_channel(channel.guild, embed)
+        except Exception as e:
+            logger.error(f"Ошибка при обработке события создания/удаления канала: {e}")
         finally:
             self._processing_event = False
 

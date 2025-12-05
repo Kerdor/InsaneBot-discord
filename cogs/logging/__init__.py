@@ -39,8 +39,9 @@ class BaseLogger(commands.Cog):
         # Add fields from kwargs
         for key, value in kwargs.items():
             if value:  # Only add if value is not None or empty
+                # Use the key as-is without any transformation
                 embed.add_field(
-                    name=str(key).replace('_', ' ').title(),
+                    name=str(key),
                     value=value,
                     inline=key not in ['description', 'content']
                 )

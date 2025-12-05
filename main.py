@@ -60,20 +60,18 @@ def _load_extensions(bot_instance: commands.Bot) -> None:
 
 @bot.event
 async def on_ready():
-    # Print a visible success message to console
-    print("\n" + "=" * 60)
-    print(f"✅  Бот успешно запущен и готов к работе!")
-    print(f"🔹 Имя бота: {bot.user}")
-    print(f"🔹 ID бота: {bot.user.id if bot.user else 'Unknown'}")
-    print(f"🔹 Подключено к {len(bot.guilds)} серверам")
-    print("=" * 60 + "\n")
+    # Simple console output
+    print("\n" + "=" * 40)
+    print(f"Бот успешно запущен")
+    print(f"Имя: {bot.user}")
+    print(f"ID: {bot.user.id if bot.user else 'Unknown'}")
+    print(f"Серверов: {len(bot.guilds)}")
+    print("=" * 40 + "\n")
     
-    # Keep the original logging for log files
-    logger.info("=" * 50)
-    logger.info("Bot %s is ready to work!", bot.user)
+    # Log to file
+    logger.info("Bot %s is ready", bot.user)
     logger.info("Bot ID: %s", bot.user.id if bot.user else "Unknown")
-    logger.info("Connected to %s guild(s)", len(bot.guilds))
-    logger.info("=" * 50)
+    logger.info("Guilds: %s", len(bot.guilds))
 
 @bot.event
 async def on_connect():
