@@ -6,11 +6,7 @@ import disnake
 from disnake.ext import commands
 
 from . import BaseLogger
-from config import BotConfig
-from typing import Optional, Union
-import disnake
-from disnake.ext import commands
-import logging
+from config import BotConfig, LOG_COLORS
 
 logger = logging.getLogger(__name__)
 

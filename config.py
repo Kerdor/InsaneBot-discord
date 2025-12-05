@@ -16,6 +16,7 @@ class BotConfig:
     
     # Cogs to load
     COGS: Tuple[str, ...] = (
+        "cogs.owner",
         "cogs.moderation_cmd.one_used",
         "cogs.moderation_cmd.moderation",
         "cogs.user_cmd.get_roles",
@@ -26,9 +27,9 @@ class BotConfig:
     )
     
     # Channel IDs
-    CHAT_LOGS_CHANNEL: int = 1330604289957302350
-    GUILD_LOGS_CHANNEL: int = 1338651230565695558
-    MODERATION_LOGS_CHANNEL: int = 1330604583000473732
+    CHAT_LOGS_CHANNEL: int = 1446250206201905295
+    GUILD_LOGS_CHANNEL: int = 1446250230743044217
+    MODERATION_LOGS_CHANNEL: int = 1446250190205096068
     
     # Logging and channels configuration
     LOG_COLORS: Dict[str, int] = {
@@ -39,9 +40,9 @@ class BotConfig:
     }
     
     CHANNEL_LOGS: Dict[str, int] = {
-        "moderation_logs": 1330604583000473732,
-        "chat_logs": 1330604289957302350,
-        "guild_logs": 1338651230565695558,
+        "moderation_logs": 1446250190205096068,
+        "chat_logs": 1446250206201905295,
+        "guild_logs": 1446250230743044217,
     }
     
     CHANNELS: Dict[str, int] = {

@@ -4,14 +4,14 @@ Logging system for Insane Discord bot.
 This module provides a base logger class and common functionality
 for all log types (chat, guild, moderation).
 """
-
 import disnake
 from disnake.ext import commands
 from typing import Optional
 
-from config import BotConfig
+from config import BotConfig, LOG_COLORS
 
-class BaseLogger(commands.Cog):    
+class BaseLogger(commands.Cog):
+    """Base logger class for all logging functionality."""
     def __init__(self, bot: commands.Bot):
         self.bot = bot
         self.log_channel = None
@@ -19,7 +19,6 @@ class BaseLogger(commands.Cog):
     
     async def get_log_channel(self, guild: disnake.Guild) -> Optional[disnake.TextChannel]:
         """Get the log channel for this logger."""
-        color = BotConfig.LOG_COLORS.get(self.log_type.upper(), 0x000000)
         if not self.log_type or self.log_type not in BotConfig.CHANNEL_LOGS:
             return None
             
@@ -40,9 +39,11 @@ class BaseLogger(commands.Cog):
         # Add fields from kwargs
         for key, value in kwargs.items():
             if value:  # Only add if value is not None or empty
-                embed.add_field(name=key.replace('_', ' ').title(), 
-                              value=value, 
-                              inline=key not in ['description', 'content'])
+                embed.add_field(
+                    name=str(key).replace('_', ' ').title(),
+                    value=value,
+                    inline=key not in ['description', 'content']
+                )
         
         return embed
     
@@ -61,4 +62,6 @@ class BaseLogger(commands.Cog):
 
 def setup(bot: commands.Bot):
     """This will be called when the extension is loaded."""
-    pass  # This is a base class, so we don't add it as a cog
+    # This is intentionally empty to prevent duplicate loading
+    # Individual cogs are loaded separately in main.py
+    pass

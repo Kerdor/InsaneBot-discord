@@ -1,3 +1,4 @@
+import asyncio
 import logging
 from typing import Optional, List, Dict, Any, Union
 
@@ -5,7 +6,7 @@ import disnake
 from disnake.ext import commands
 
 from . import BaseLogger
-from config import BotConfig
+from config import BotConfig, LOG_COLORS
 
 logger = logging.getLogger(__name__)
 
@@ -24,6 +25,20 @@ class ChatLogs(BaseLogger):
         super().__init__(bot)
         self.log_type = "chat"
         self.log_channel_id = BotConfig.CHAT_LOGS_CHANNEL
+        self._message_cache = set()  # Track recently seen messages
+        self._last_message_time = {}  # Track last message time per user to prevent duplicates
+        self._is_processing = set()  # Track currently processing message IDs
+        
+        # Initialize processed_messages set on the bot instance if it doesn't exist
+        if not hasattr(bot, '_processed_messages'):
+            bot._processed_messages = set()
+            
+        # Check if this cog has already been initialized
+        if hasattr(bot, '_chat_logs_initialized'):
+            logger.warning("ChatLogs cog already initialized, skipping duplicate initialization")
+            return
+            
+        bot._chat_logs_initialized = True
         logger.info(f"Модуль ChatLogs инициализирован. Логи будут записываться в канал с ID: {self.log_channel_id}")
         
     async def debug_guild_channels(self, guild: disnake.Guild) -> None:
@@ -124,13 +139,96 @@ class ChatLogs(BaseLogger):
             logger.exception(f"Unexpected error in get_log_channel: {e}")
             return None
     
+        
+    def _get_message_key(self, message: disnake.Message) -> str:
+        """Generate a unique key for message tracking."""
+        return f"{message.guild.id}-{message.channel.id}-{message.id}"
+        
     @commands.Cog.listener()
     async def on_message(self, message: disnake.Message) -> None:
-        """Log new messages to the chat logs channel.
+        # Skip if this message is already being processed or from a bot
+        if message.id in self._is_processing or message.author.bot or message.webhook_id is not None:
+            return
+            
+        # Skip if not in a guild or message is empty
+        if not message.guild or not message.content.strip():
+            return
+            
+        # Create a unique key for this message
+        message_key = f"{message.guild.id}-{message.channel.id}-{message.id}-{message.author.id}"
         
-        Args:
-            message: The message that was sent
-        """
+        # Check if we've already processed this message
+        if message_key in self.bot._processed_messages:
+            return
+            
+        # Add to processing set
+        self._is_processing.add(message.id)
+        
+        try:
+            await self._process_message(message, message_key)
+        except Exception as e:
+            logger.error(f"Error processing message {message.id}: {e}")
+        finally:
+            # Clean up the processing flag
+            self._is_processing.discard(message.id)
+            
+            # Clean up old processing flags to prevent memory leaks
+            if len(self._is_processing) > 1000:
+                self._is_processing = set(list(self._is_processing)[-500:])
+    
+    async def _process_message(self, message: disnake.Message, message_key: str) -> None:
+        """Log new messages to the chat logs channel."""
+        # Mark this message as processed immediately to prevent duplicate processing
+        self.bot._processed_messages.add(message_key)
+        
+        # Clean up old cache entries (keep last 1000 messages to prevent memory issues)
+        if len(self.bot._processed_messages) > 1000:
+            # Convert to list and keep only the most recent 500 entries
+            self.bot._processed_messages = set(list(self.bot._processed_messages)[-500:])
+            
+        # Check for rapid duplicate messages (flood prevention)
+        user_key = f"{message.guild.id}-{message.author.id}"
+        current_time = disnake.utils.utcnow()
+        
+        if user_key in self._last_message_time:
+            time_since_last = (current_time - self._last_message_time[user_key]).total_seconds()
+            if time_since_last < 1.0:  # 1 second cooldown between logs for the same user
+                return
+                
+        # Update last message time for this user
+        self._last_message_time[user_key] = current_time
+        
+        # Clean up old last message times (keep last 1000 entries)
+        if len(self._last_message_time) > 1000:
+            # Keep only the most recent 500 entries
+            self._last_message_time = dict(list(self._last_message_time.items())[-500:])
+            
+        # Skip if this is a command
+        try:
+            ctx = await self.bot.get_context(message)
+            if ctx.valid or (ctx.prefix is not None and message.content.startswith(ctx.prefix)):
+                return
+        except Exception as e:
+            logger.error(f"Error checking command context: {e}")
+            return
+            
+        # Check for rapid duplicate messages (flood prevention)
+        user_key = f"{message.guild.id}-{message.author.id}"
+        current_time = disnake.utils.utcnow()
+        
+        if user_key in self._last_message_time:
+            time_since_last = (current_time - self._last_message_time[user_key]).total_seconds()
+            if time_since_last < 1.0:  # 1 second cooldown between logs for the same user
+                return
+                
+        # Update last message time for this user
+        self._last_message_time[user_key] = current_time
+        
+        # Clean up old last message times (keep last 1000 entries)
+        if len(self._last_message_time) > 1000:
+            # Keep only the most recent 500 entries
+            self._last_message_time = dict(list(self._last_message_time.items())[-500:])
+            
         try:
             # Log detailed message info to console
             logger.info(
@@ -142,16 +240,6 @@ class ChatLogs(BaseLogger):
                 message.content[:200] + ('...' if len(message.content) > 200 else '')
             )
             
-            # Ignore messages from bots and DMs
-            if message.author.bot or not message.guild:
-                return
-                
-            # Ignore command messages and empty messages
-            prefixes = [self.bot.command_prefix] if isinstance(self.bot.command_prefix, str) else self.bot.command_prefix
-            is_command = any(message.content.startswith(prefix) for prefix in prefixes) if prefixes else False
-            if is_command or not message.content.strip():
-                return
-            
             # Create message content preview (first 1000 chars)
             content = message.clean_content
             if len(content) > 1000:
@@ -161,7 +249,7 @@ class ChatLogs(BaseLogger):
             embed = disnake.Embed(
                 title="💬 Новое сообщение",
                 description=content or "*[Сообщение без текста]*",
-                color=BotConfig.LOG_COLORS['GREEN'],
+                color=LOG_COLORS['GREEN'],
                 timestamp=disnake.utils.utcnow()
             )
             
@@ -285,21 +373,80 @@ class ChatLogs(BaseLogger):
     
     @commands.Cog.listener()
     async def on_message_edit(self, before: disnake.Message, after: disnake.Message) -> None:
-        if before.author.bot or not before.guild or before.content == after.content:
+        # Ignore if message wasn't edited or is from a bot or not in a guild
+        if (before.author.bot or not before.guild or before.content == after.content or 
+            before.embeds != after.embeds or before.attachments != after.attachments):
             return
             
-        embed = self.create_embed(
+        # Get the log channel
+        log_channel = await self.get_log_channel(before.guild)
+        if not log_channel:
+            return
+            
+        # Create a more detailed embed for message edits
+        embed = disnake.Embed(
             title="✏️ Изменено сообщение",
             color=LOG_COLORS['ORANGE'],
-            author=f"{before.author} (ID: {before.author.id})",
-            author_icon=before.author.display_avatar.url,
-            channel=before.channel.mention,
-            message_link=f"[Перейти к сообщению]({after.jump_url})",
-            before=before.content[:500] + "..." if len(before.content) > 500 else before.content or "[Без текста]",
-            after=after.content[:500] + "..." if len(after.content) > 500 else after.content or "[Без текста]"
+            timestamp=disnake.utils.utcnow()
         )
         
-        await self.log_to_channel(before.guild, embed)
+        # Add author information
+        embed.set_author(
+            name=f"{before.author} (ID: {before.author.id})",
+            icon_url=before.author.display_avatar.url
+        )
+        
+        # Add message information
+        embed.add_field(name="Канал", value=f"{before.channel.mention} ({before.channel.name})", inline=True)
+        embed.add_field(name="ID сообщения", value=f"`{before.id}`", inline=True)
+        
+        # Add before and after content if they differ
+        if before.content != after.content:
+            before_content = before.content[:500] + ("..." if len(before.content) > 500 else "")
+            after_content = after.content[:500] + ("..." if len(after.content) > 500 else "")
+            
+            embed.add_field(
+                name="Было", 
+                value=before_content or "*[Без текста]*", 
+                inline=False
+            )
+            embed.add_field(
+                name="Стало", 
+                value=after_content or "*[Без текста]*", 
+                inline=False
+            )
+        
+        # Add jump link
+        embed.add_field(
+            name="Ссылка", 
+            value=f"[Перейти к сообщению]({after.jump_url})",
+            inline=False
+        )
+        
+        # Handle attachments if any were added/removed
+        if before.attachments != after.attachments:
+            if before.attachments and not after.attachments:
+                embed.add_field(
+                    name="Вложения",
+                    value="*Удалены все вложения*",
+                    inline=False
+                )
+            elif not before.attachments and after.attachments:
+                embed.add_field(
+                    name="Вложения",
+                    value="*Добавлены вложения*",
+                    inline=False
+                )
+        
+        # Note: Disabled audit log check as message_update action is not available in disnake
+        # Discord doesn't provide a direct way to see who edited a message through audit logs
+        
+        # Send the embed to the log channel
+        try:
+            await log_channel.send(embed=embed)
+            logger.debug(f"Зарегистрировано изменение сообщения {before.id} от {before.author} в {before.guild.name}")
+        except Exception as e:
+            logger.error(f"Ошибка при отправке лога о редактировании сообщения: {e}")
     
     @commands.Cog.listener()
     async def on_message_delete(self, message: disnake.Message) -> None:
@@ -310,26 +457,79 @@ class ChatLogs(BaseLogger):
         if not message.content.strip() or message.content.startswith(self.bot.command_prefix):
             return
             
-        embed = self.create_embed(
+        # Get the log channel first
+        log_channel = await self.get_log_channel(message.guild)
+        if not log_channel:
+            return
+            
+        # Create the embed with proper fields
+        embed = disnake.Embed(
             title="🗑️ Удалено сообщение",
             color=LOG_COLORS['RED'],
-            author=f"{message.author} (ID: {message.author.id})",
-            author_icon=message.author.display_avatar.url,
-            channel=message.channel.mention,
-            content=message.content[:1000] + "..." if len(message.content) > 1000 else message.content or "[Без текста]"
+            timestamp=disnake.utils.utcnow()
         )
         
+        # Add author information
+        embed.set_author(
+            name=f"{message.author} (ID: {message.author.id})",
+            icon_url=message.author.display_avatar.url
+        )
+        
+        # Add channel and message ID (inline)
+        embed.add_field(name="Канал", value=f"{message.channel.mention} ({message.channel.name})", inline=True)
+        embed.add_field(name="ID сообщения", value=f"`{message.id}`", inline=True)
+        
+        # Add message content
+        content = message.content[:1000] + ("..." if len(message.content) > 1000 else "") if message.content else "*[Сообщение без текста]*"
+        embed.add_field(name="Содержимое", value=content, inline=False)
+        
+        # Add attachments info if any
+        if message.attachments:
+            attachment_names = [f"• {a.filename}" for a in message.attachments[:5]]
+            if len(message.attachments) > 5:
+                attachment_names.append(f"...и еще {len(message.attachments) - 5}")
+            embed.add_field(
+                name=f"Вложения ({len(message.attachments)})",
+                value="\n".join(attachment_names),
+                inline=False
+            )
+        
         # Try to find who deleted the message
-        async for entry in message.guild.audit_logs(limit=5, action=disnake.AuditLogAction.message_delete):
-            if entry.target.id == message.author.id and entry.extra.channel.id == message.channel.id:
-                embed.add_field(
-                    name="Удалил",
-                    value=f"{entry.user.mention} (ID: {entry.user.id})",
-                    inline=True
-                )
-                break
-                
-        await self.log_to_channel(message.guild, embed)
+        deleted_by = None
+        try:
+            async for entry in message.guild.audit_logs(limit=5, action=disnake.AuditLogAction.message_delete):
+                if entry.target.id == message.author.id and entry.extra.channel.id == message.channel.id:
+                    deleted_by = f"{entry.user.mention} (ID: {entry.user.id})"
+                    break
+        except Exception as e:
+            logger.error(f"Ошибка при проверке аудит-логов: {e}")
+        
+        # Add who deleted the message if found
+        if deleted_by:
+            embed.add_field(name="Удалил", value=deleted_by, inline=False)
+        
+        # Add jump link if available
+        if hasattr(message, 'jump_url'):
+            embed.add_field(
+                name="Ссылка",
+                value=f"[Перейти к сообщению]({message.jump_url})",
+                inline=False
+            )
+        
+        # Send the embed to the log channel
+        try:
+            await log_channel.send(embed=embed)
+            logger.debug(f"Зарегистрировано удаление сообщения {message.id} от {message.author} в {message.guild.name}")
+        except Exception as e:
+            logger.error(f"Ошибка при отправке лога об удалении сообщения: {e}")
+            # Try to send a simple error message if possible
+            try:
+                if log_channel.permissions_for(message.guild.me).send_messages:
+                    await log_channel.send(
+                        f"❌ Не удалось отправить полный лог удаления сообщения: {str(e)[:100]}..."
+                    )
+            except Exception as e2:
+                logger.error(f"Не удалось отправить сообщение об ошибке: {e2}")
 
 def setup(bot: commands.Bot) -> None:
     try:

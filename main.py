@@ -1,5 +1,7 @@
 import logging
 import sys
+import gc
+import asyncio
 from typing import Iterable, Set
 
 import disnake
@@ -58,6 +60,15 @@ def _load_extensions(bot_instance: commands.Bot) -> None:
 
 @bot.event
 async def on_ready():
+    # Print a visible success message to console
+    print("\n" + "=" * 60)
+    print(f"✅  Бот успешно запущен и готов к работе!")
+    print(f"🔹 Имя бота: {bot.user}")
+    print(f"🔹 ID бота: {bot.user.id if bot.user else 'Unknown'}")
+    print(f"🔹 Подключено к {len(bot.guilds)} серверам")
+    print("=" * 60 + "\n")
+    
+    # Keep the original logging for log files
     logger.info("=" * 50)
     logger.info("Bot %s is ready to work!", bot.user)
     logger.info("Bot ID: %s", bot.user.id if bot.user else "Unknown")
@@ -138,6 +149,40 @@ async def reload(ctx: disnake.ApplicationCommandInteraction, extension: str):
         logger.exception("Unexpected error while reloading extension %s", qualified_extension)
         await ctx.send(f"Произошла непредвиденная ошибка при перезагрузке **{qualified_extension}**: {exc}", ephemeral=True)
 
+async def cleanup():
+    """Cleanup function to close all aiohttp sessions and cancel pending tasks."""
+    import aiohttp
+    import asyncio
+    
+    logger.info("Starting cleanup process...")
+    
+    # Cancel all running tasks
+    tasks = [t for t in asyncio.all_tasks() if t is not asyncio.current_task()]
+    if tasks:
+        logger.info(f"Cancelling {len(tasks)} pending tasks...")
+        for task in tasks:
+            task.cancel()
+            try:
+                await task
+            except asyncio.CancelledError:
+                pass
+            except Exception as e:
+                logger.warning(f"Error during task cancellation: {e}")
+    
+    # Close all aiohttp client sessions
+    for obj in gc.get_objects():
+        if isinstance(obj, aiohttp.ClientSession):
+            if not obj.closed:
+                try:
+                    await obj.close()
+                    logger.debug("Closed aiohttp ClientSession")
+                except Exception as e:
+                    logger.warning(f"Error closing aiohttp session: {e}")
+    
+    # Give some time for cleanup
+    await asyncio.sleep(0.5)
+    logger.info("Cleanup completed")
+
 if __name__ == "__main__":
     try:
         # Validate configuration
@@ -146,18 +191,47 @@ if __name__ == "__main__":
         # Load extensions
         _load_extensions(bot)
         
-        # Start the bot
+        # Start the bot with cleanup
         logger.info("Starting bot...")
-        bot.run(BotConfig.TOKEN)
         
+        try:
+            bot.loop.run_until_complete(bot.start(BotConfig.TOKEN))
+        except KeyboardInterrupt:
+            logger.info("Bot stopped by user")
+        except Exception as e:
+            logger.exception("An error occurred while running the bot:")
+        finally:
+            try:
+                # Run cleanup and close the bot
+                logger.info("Initiating bot shutdown...")
+                bot.loop.run_until_complete(cleanup())
+                bot.loop.run_until_complete(bot.close())
+                
+                # Cancel any remaining tasks
+                pending = asyncio.all_tasks(loop=bot.loop)
+                for task in pending:
+                    task.cancel()
+                    try:
+                        bot.loop.run_until_complete(task)
+                    except (asyncio.CancelledError, Exception) as e:
+                        pass
+                
+                # Run the event loop one last time to process pending tasks
+                bot.loop.run_until_complete(asyncio.sleep(0.1))
+                
+            except Exception as e:
+                logger.exception("Error during cleanup:")
+            finally:
+                # Close the event loop
+                if not bot.loop.is_closed():
+                    bot.loop.close()
+            
     except ValueError as e:
         logger.error("Configuration error: %s", str(e))
         sys.exit(1)
     except disnake.LoginFailure:
         logger.error("Failed to log in. Please check your bot token in config.py")
         sys.exit(1)
-    except KeyboardInterrupt:
-        logger.info("Bot stopped by user")
     except Exception as e:
-        logger.exception("An unexpected error occurred while running the bot:")
+        logger.exception("An unexpected error occurred during bot setup:")
         sys.exit(1)
