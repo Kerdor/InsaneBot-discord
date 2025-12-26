@@ -62,9 +62,14 @@ class OwnerCommands(commands.Cog):
             
     def cog_unload(self) -> None:
         """Clean up resources when the cog is unloaded."""
-        # Schedule async cleanup
+        # Schedule async cleanup using bot's loop
         if self._session and not self._session.closed:
-            asyncio.create_task(self._session.close())
+            try:
+                loop = self.bot.loop
+                if loop and not loop.is_closed():
+                    loop.create_task(self._session.close())
+            except Exception as e:
+                logger.warning(f"Error scheduling session close: {e}")
 
 def setup(bot: commands.Bot):
     bot.add_cog(OwnerCommands(bot))

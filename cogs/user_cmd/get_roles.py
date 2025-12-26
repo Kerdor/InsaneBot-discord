@@ -120,7 +120,7 @@ class SelectGames(disnake.ui.Select):
     def __init__(self) -> None:
         super().__init__(
             placeholder="Выберите игры",
-            options=list(config.GAME_ROLE_OPTIONS),
+            options=list(config.GAME_ROLE_OPTIONS) if config.GAME_ROLE_OPTIONS else [],
             custom_id="select_games",
             min_values=0,
             max_values=3,

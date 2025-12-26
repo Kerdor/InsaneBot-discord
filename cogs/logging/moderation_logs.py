@@ -1,5 +1,5 @@
 import logging
-from datetime import datetime, timedelta
+from datetime import timedelta
 from typing import Optional, Union
 
 import disnake
@@ -28,7 +28,7 @@ def format_duration(duration: timedelta) -> str:
             if period_value > 0:
                 if period_name.endswith('а'):
                     if period_value > 1:
-                        period_name = period_name[:-1] + 'и'  # Convert to plural
+                        period_name = period_name[:-1] + 'и'
                 parts.append(f"{period_value} {period_name}")
     
     return ', '.join(parts) if parts else "мгновенно"
@@ -41,7 +41,6 @@ class ModerationLogs(BaseLogger):
         logger.info(f"Модуль ModerationLogs инициализирован. Логи будут записываться в канал с ID: {self.log_channel_id}")
         
     async def get_log_channel(self, guild: disnake.Guild) -> Optional[disnake.TextChannel]:
-    
         if not self.log_channel_id:
             logger.error("ID канала для логов модерации не настроен")
             return None
@@ -52,7 +51,6 @@ class ModerationLogs(BaseLogger):
                 logger.error(f"Канал для логов модерации с ID {self.log_channel_id} не найден в гильдии {guild.id}")
                 return None
                 
-            # Check bot permissions
             perms = channel.permissions_for(guild.me)
             if not perms.send_messages:
                 logger.error(f"Отсутствует право 'send_messages' в канале для логов модерации {self.log_channel_id}")
@@ -79,19 +77,35 @@ class ModerationLogs(BaseLogger):
             reason = ban_entry.reason or "Не указана"
             
             moderator = None
-            async for entry in guild.audit_logs(limit=5, action=disnake.AuditLogAction.ban):
-                if entry.target.id == user.id:
-                    moderator = entry.user
-                    break
+            try:
+                async for entry in guild.audit_logs(limit=5, action=disnake.AuditLogAction.ban):
+                    if entry.target.id == user.id:
+                        moderator = entry.user
+                        break
+            except Exception as e:
+                logger.error(f"Ошибка при получении аудит-логов: {e}")
             
             embed = self.create_embed(
-                title="Пользователь забанен",
+                title="🔨 Пользователь забанен",
                 color=LOG_COLORS['RED'],
-                user=f"{user} (ID: {user.id})",
+                description=f"**{user.display_name if hasattr(user, 'display_name') else user.name}** был заблокирован на сервере",
+                user=f"{user.display_name if hasattr(user, 'display_name') else user.name}",
                 user_icon=user.display_avatar.url if hasattr(user, 'display_avatar') else None,
+                thumbnail=user.display_avatar.url if hasattr(user, 'display_avatar') else None,
                 moderator=f"{moderator.mention} (ID: {moderator.id})" if moderator else "Неизвестно",
-                reason=reason,
-                timestamp=disnake.utils.utcnow()
+                reason=reason
+            )
+            
+            embed.add_field(
+                name="🆔 ID пользователя",
+                value=f"`{user.id}`",
+                inline=True
+            )
+            
+            embed.add_field(
+                name="📅 Время",
+                value=disnake.utils.format_dt(disnake.utils.utcnow(), "R"),
+                inline=True
             )
             
             await self.log_to_channel(guild, embed)
@@ -103,17 +117,34 @@ class ModerationLogs(BaseLogger):
     async def on_member_unban(self, guild: disnake.Guild, user: disnake.User) -> None:
         try:
             moderator = None
-            async for entry in guild.audit_logs(limit=5, action=disnake.AuditLogAction.unban):
-                if entry.target.id == user.id:
-                    moderator = entry.user
-                    break
+            try:
+                async for entry in guild.audit_logs(limit=5, action=disnake.AuditLogAction.unban):
+                    if entry.target.id == user.id:
+                        moderator = entry.user
+                        break
+            except Exception as e:
+                logger.error(f"Ошибка при получении аудит-логов: {e}")
             
             embed = self.create_embed(
-                title="Пользователь разбанен",
+                title="✅ Пользователь разбанен",
                 color=LOG_COLORS['GREEN'],
-                user=f"{user} (ID: {user.id})",
+                description=f"**{user.name}** был разблокирован на сервере",
+                user=f"{user.name}",
                 user_icon=user.display_avatar.url if hasattr(user, 'display_avatar') else None,
+                thumbnail=user.display_avatar.url if hasattr(user, 'display_avatar') else None,
                 moderator=f"{moderator.mention} (ID: {moderator.id})" if moderator else "Неизвестно"
+            )
+            
+            embed.add_field(
+                name="🆔 ID пользователя",
+                value=f"`{user.id}`",
+                inline=True
+            )
+            
+            embed.add_field(
+                name="📅 Время",
+                value=disnake.utils.format_dt(disnake.utils.utcnow(), "R"),
+                inline=True
             )
             
             await self.log_to_channel(guild, embed)
@@ -133,12 +164,26 @@ class ModerationLogs(BaseLogger):
             async for entry in member.guild.audit_logs(limit=5, action=disnake.AuditLogAction.kick):
                 if entry.target.id == member.id:
                     embed = self.create_embed(
-                        title="Пользователь кикнут",
+                        title="👢 Пользователь кикнут",
                         color=LOG_COLORS['RED'],
-                        user=f"{member} (ID: {member.id})",
+                        description=f"**{member.display_name}** был исключен с сервера",
+                        user=f"{member.display_name}",
                         user_icon=member.display_avatar.url,
+                        thumbnail=member.display_avatar.url,
                         moderator=f"{entry.user.mention} (ID: {entry.user.id})",
                         reason=entry.reason or "Не указана"
+                    )
+                    
+                    embed.add_field(
+                        name="🆔 ID пользователя",
+                        value=f"`{member.id}`",
+                        inline=True
+                    )
+                    
+                    embed.add_field(
+                        name="📅 Время",
+                        value=disnake.utils.format_dt(disnake.utils.utcnow(), "R"),
+                        inline=True
                     )
                     
                     await self.log_to_channel(member.guild, embed)
@@ -151,45 +196,64 @@ class ModerationLogs(BaseLogger):
     async def on_member_update(self, before: disnake.Member, after: disnake.Member) -> None:
         if before.timed_out_until != after.timed_out_until:
             if after.timed_out_until and (not before.timed_out_until or after.timed_out_until > before.timed_out_until):
-                # Find who timed out the member
                 moderator = None
                 reason = "Не указана"
-                async for entry in after.guild.audit_logs(limit=5, action=disnake.AuditLogAction.member_update):
-                    if entry.target.id == after.id and hasattr(entry.after, 'timed_out_until'):
-                        moderator = entry.user
-                        reason = entry.reason or reason
-                        break
+                try:
+                    async for entry in after.guild.audit_logs(limit=5, action=disnake.AuditLogAction.member_update):
+                        if entry.target.id == after.id and hasattr(entry.after, 'timed_out_until'):
+                            moderator = entry.user
+                            reason = entry.reason or reason
+                            break
+                except Exception as e:
+                    logger.error(f"Ошибка при получении аудит-логов: {e}")
                 
                 duration = after.timed_out_until - disnake.utils.utcnow()
                 duration_str = format_duration(duration)
                 
                 embed = self.create_embed(
-                    title="⏱️ Пользователь в тайм-ауте",
+                    title="⏱️ Тайм-аут установлен",
                     color=LOG_COLORS['RED'],
-                    user=f"{after} (ID: {after.id})",
+                    description=f"**{after.display_name}** получил тайм-аут",
+                    user=f"{after.display_name}",
                     user_icon=after.display_avatar.url,
+                    thumbnail=after.display_avatar.url,
                     moderator=f"{moderator.mention} (ID: {moderator.id})" if moderator else "Неизвестно",
-                    duration=f"{duration_str} (до {disnake.utils.format_dt(after.timed_out_until, 'f')})",
+                    duration=f"**{duration_str}**\nДо: {disnake.utils.format_dt(after.timed_out_until, 'f')}",
                     reason=reason
+                )
+                
+                embed.add_field(
+                    name="🆔 ID пользователя",
+                    value=f"`{after.id}`",
+                    inline=True
                 )
                 
                 await self.log_to_channel(after.guild, embed)
             
-            # Member was untimed out
             elif before.timed_out_until and not after.timed_out_until:
-                # Find who removed the timeout
                 moderator = None
-                async for entry in after.guild.audit_logs(limit=5, action=disnake.AuditLogAction.member_update):
-                    if entry.target.id == after.id and hasattr(entry.before, 'timed_out_until') and not hasattr(entry.after, 'timed_out_until'):
-                        moderator = entry.user
-                        break
+                try:
+                    async for entry in after.guild.audit_logs(limit=5, action=disnake.AuditLogAction.member_update):
+                        if entry.target.id == after.id and hasattr(entry.before, 'timed_out_until') and not hasattr(entry.after, 'timed_out_until'):
+                            moderator = entry.user
+                            break
+                except Exception as e:
+                    logger.error(f"Ошибка при получении аудит-логов: {e}")
                 
                 embed = self.create_embed(
-                    title="🆗 Снят тайм-аут",
+                    title="✅ Тайм-аут снят",
                     color=LOG_COLORS['GREEN'],
-                    user=f"{after} (ID: {after.id})",
+                    description=f"С **{after.display_name}** снят тайм-аут",
+                    user=f"{after.display_name}",
                     user_icon=after.display_avatar.url,
+                    thumbnail=after.display_avatar.url,
                     moderator=f"{moderator.mention} (ID: {moderator.id})" if moderator else "Неизвестно"
+                )
+                
+                embed.add_field(
+                    name="🆔 ID пользователя",
+                    value=f"`{after.id}`",
+                    inline=True
                 )
                 
                 await self.log_to_channel(after.guild, embed)
@@ -200,37 +264,48 @@ class ModerationLogs(BaseLogger):
         if message.author.bot or not message.guild:
             return
             
-        # Check if this was a mod action
-        async for entry in message.guild.audit_logs(limit=5, action=disnake.AuditLogAction.message_delete):
-            # Check if the deleted message matches the audit log entry
-            if hasattr(entry.extra, 'channel') and entry.extra.channel.id == message.channel.id:
-                # This was a mod action
-                embed = self.create_embed(
-                    title="🗑️ Сообщение удалено модератором",
-                    color=LOG_COLORS['RED'],
-                    author=f"{message.author} (ID: {message.author.id})",
-                    author_icon=message.author.display_avatar.url,
-                    channel=message.channel.mention,
-                    moderator=f"{entry.user.mention} (ID: {entry.user.id})",
-                    content=message.content[:1000] + "..." if len(message.content) > 1000 else message.content or "[Без текста]"
-                )
-                
-                if entry.reason:
-                    embed.add_field(
-                        name="Причина",
-                        value=entry.reason,
-                        inline=False
+        try:
+            async for entry in message.guild.audit_logs(limit=5, action=disnake.AuditLogAction.message_delete):
+                if hasattr(entry.extra, 'channel') and entry.extra.channel.id == message.channel.id:
+                    content = message.content[:1000] + "..." if len(message.content) > 1000 else message.content or "[Без текста]"
+                    
+                    embed = self.create_embed(
+                        title="🗑️ Сообщение удалено модератором",
+                        color=LOG_COLORS['RED'],
+                        description=f"Модератор удалил сообщение от **{message.author.display_name}**",
+                        user=f"{message.author.display_name}",
+                        user_icon=message.author.display_avatar.url,
+                        channel=f"{message.channel.mention}",
+                        thumbnail=message.author.display_avatar.url,
+                        moderator=f"{entry.user.mention} (ID: {entry.user.id})",
+                        content=content
                     )
-                
-                await self.log_to_channel(message.guild, embed)
-                break
+                    
+                    embed.add_field(
+                        name="🆔 ID сообщения",
+                        value=f"`{message.id}`",
+                        inline=True
+                    )
+                    
+                    embed.add_field(
+                        name="📅 Время",
+                        value=disnake.utils.format_dt(disnake.utils.utcnow(), "R"),
+                        inline=True
+                    )
+                    
+                    if entry.reason:
+                        embed.add_field(
+                            name="📝 Причина",
+                            value=entry.reason,
+                            inline=False
+                        )
+                    
+                    await self.log_to_channel(message.guild, embed)
+                    break
+        except Exception as e:
+            logger.error(f"Ошибка при логировании удаления сообщения модератором: {e}")
 
 def setup(bot: commands.Bot) -> None:
-    """Add the cog to the bot.
-    
-    Args:
-        bot: The bot instance to add the cog to
-    """
     try:
         bot.add_cog(ModerationLogs(bot))
         logger.info("Модуль ModerationLogs успешно загружен")
