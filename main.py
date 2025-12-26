@@ -2,7 +2,7 @@ import logging
 import sys
 import gc
 import asyncio
-from typing import Iterable, Set
+from typing import Set
 
 import disnake
 from disnake.ext import commands

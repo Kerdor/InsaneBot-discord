@@ -2,7 +2,6 @@ import os
 import sys
 import asyncio
 import logging
-import subprocess
 import aiohttp
 import disnake
 from disnake.ext import commands
@@ -63,7 +62,9 @@ class OwnerCommands(commands.Cog):
             
     def cog_unload(self) -> None:
         """Clean up resources when the cog is unloaded."""
-        asyncio.create_task(self.close())
+        # Schedule async cleanup
+        if self._session and not self._session.closed:
+            asyncio.create_task(self._session.close())
 
 def setup(bot: commands.Bot):
     bot.add_cog(OwnerCommands(bot))

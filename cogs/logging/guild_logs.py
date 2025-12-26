@@ -362,28 +362,6 @@ class GuildLogs(BaseLogger):
             }.get(channel.type, str(channel.type).replace('_', ' ').capitalize())
             
             # Добавляем информацию о канале
-            embed.add_field(name="Название", value=channel.mention, inline=True)
-            embed.add_field(name="Тип", value=channel_type, inline=True)
-            
-            if hasattr(channel, 'category') and channel.category:
-                embed.add_field(name="Категория", value=channel.category.name, inline=True)
-                
-            if hasattr(channel, 'user_limit'):
-                user_limit = f"{channel.user_limit} участников" if channel.user_limit > 0 else "Без ограничений"
-                embed.add_field(name="Лимит пользователей", value=user_limit, inline=True)
-                
-            if hasattr(channel, 'bitrate'):
-                embed.add_field(name="Битрейт", value=f"{channel.bitrate // 1000} kbps", inline=True)
-            
-            # Добавляем информацию о создателе, если доступна
-            if hasattr(channel, 'guild') and channel.guild.me.guild_permissions.view_audit_log:
-                async for entry in channel.guild.audit_logs(limit=1, action=disnake.AuditLogAction.channel_create):
-                    if entry.target.id == channel.id:
-                        creator = entry.user
-                        embed.add_field(name="Создал", value=f"{creator.mention} ({creator})", inline=True)
-                        break
-            
-            # Добавляем дополнительную информацию
             embed.add_field(
                 name="Название",
                 value=f"{channel.mention} ({channel.name})",
@@ -408,6 +386,13 @@ class GuildLogs(BaseLogger):
                     value=f"{channel.category.mention} ({channel.category.name})",
                     inline=False
                 )
+                
+            if hasattr(channel, 'user_limit'):
+                user_limit = f"{channel.user_limit} участников" if channel.user_limit > 0 else "Без ограничений"
+                embed.add_field(name="Лимит пользователей", value=user_limit, inline=True)
+                
+            if hasattr(channel, 'bitrate'):
+                embed.add_field(name="Битрейт", value=f"{channel.bitrate // 1000} kbps", inline=True)
             
             # Ищем, кто создал канал
             try:

@@ -212,23 +212,6 @@ class ChatLogs(BaseLogger):
             logger.error(f"Error checking command context: {e}")
             return
             
-        # Check for rapid duplicate messages (flood prevention)
-        user_key = f"{message.guild.id}-{message.author.id}"
-        current_time = disnake.utils.utcnow()
-        
-        if user_key in self._last_message_time:
-            time_since_last = (current_time - self._last_message_time[user_key]).total_seconds()
-            if time_since_last < 1.0:  # 1 second cooldown between logs for the same user
-                return
-                
-        # Update last message time for this user
-        self._last_message_time[user_key] = current_time
-        
-        # Clean up old last message times (keep last 1000 entries)
-        if len(self._last_message_time) > 1000:
-            # Keep only the most recent 500 entries
-            self._last_message_time = dict(list(self._last_message_time.items())[-500:])
-            
         try:
             # Log detailed message info to console
             logger.info(

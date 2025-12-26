@@ -28,7 +28,22 @@ class BaseLogger(commands.Cog):
             
         return guild.get_channel(channel_id)
     
-    def create_embed(self, title: str, color: int, **kwargs) -> disnake.Embed:
+    def create_embed(
+        self, 
+        title: str, 
+        color: int, 
+        user: Optional[str] = None,
+        user_icon: Optional[str] = None,
+        author: Optional[str] = None,
+        author_icon: Optional[str] = None,
+        moderator: Optional[str] = None,
+        reason: Optional[str] = None,
+        duration: Optional[str] = None,
+        channel: Optional[str] = None,
+        content: Optional[str] = None,
+        description: Optional[str] = None,
+        **kwargs
+    ) -> disnake.Embed:
         """Create a base embed with common fields."""
         embed = disnake.Embed(
             title=title,
@@ -36,13 +51,37 @@ class BaseLogger(commands.Cog):
             timestamp=disnake.utils.utcnow()
         )
         
-        # Add fields from kwargs
+        # Set description if provided
+        if description:
+            embed.description = description
+        
+        # Set author (user or author parameter)
+        author_name = user or author
+        author_icon_url = user_icon or author_icon
+        if author_name:
+            embed.set_author(
+                name=author_name,
+                icon_url=author_icon_url
+            )
+        
+        # Add standard fields
+        if moderator:
+            embed.add_field(name="Модератор", value=moderator, inline=False)
+        if reason:
+            embed.add_field(name="Причина", value=reason, inline=False)
+        if duration:
+            embed.add_field(name="Длительность", value=duration, inline=False)
+        if channel:
+            embed.add_field(name="Канал", value=channel, inline=False)
+        if content:
+            embed.add_field(name="Содержимое", value=content[:1024], inline=False)
+        
+        # Add any additional fields from kwargs
         for key, value in kwargs.items():
-            if value:  # Only add if value is not None or empty
-                # Use the key as-is without any transformation
+            if value and key not in ['user', 'user_icon', 'author', 'author_icon', 'moderator', 'reason', 'duration', 'channel', 'content', 'description']:
                 embed.add_field(
-                    name=str(key),
-                    value=value,
+                    name=str(key).replace('_', ' ').title(),
+                    value=str(value)[:1024],
                     inline=key not in ['description', 'content']
                 )
         
