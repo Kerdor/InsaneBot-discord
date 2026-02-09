@@ -1,7 +1,13 @@
 disnake>=2.9.0
 aiohttp>=3.9.0
+python-dotenv>=1.0.0
 
+# Optional: for database operations
+# sqlite3 is built-in, so no need to add
 
+# Optional: for enhanced logging
+# logging is built-in, but you can add:
+# colorlog>=6.7.0
 
-
-
+# Optional: for async database operations
+# aiosqlite>=0.18.0

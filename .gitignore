@@ -160,7 +160,7 @@ cython_debug/
 #.idea/
 
 # Bot configuration with sensitive data
-config.py
+.env
 
 # Logs directory
 logs/
