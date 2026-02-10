@@ -80,31 +80,31 @@ class BaseLogger(commands.Cog):
                 icon_url=author_icon
             )
         
-        # Add standard fields with emojis
+        # Add standard fields without emojis
         if kwargs.get('moderator'):
             embed.add_field(
-                name="👤 Модератор",
+                name="Модератор",
                 value=kwargs['moderator'],
                 inline=True
             )
         
         if kwargs.get('reason'):
             embed.add_field(
-                name="📝 Причина",
+                name="Причина",
                 value=kwargs['reason'][:1024],
                 inline=False
             )
         
         if kwargs.get('duration'):
             embed.add_field(
-                name="⏱️ Длительность",
+                name="Длительность",
                 value=kwargs['duration'],
                 inline=True
             )
         
         if kwargs.get('channel'):
             embed.add_field(
-                name=" channel",
+                name="Канал",
                 value=kwargs['channel'],
                 inline=True
             )
@@ -114,7 +114,7 @@ class BaseLogger(commands.Cog):
             if len(content) > 1024:
                 content = content[:1021] + "..."
             embed.add_field(
-                name="💬 Содержимое",
+                name="Содержимое",
                 value=content or "*[Без текста]*",
                 inline=False
             )

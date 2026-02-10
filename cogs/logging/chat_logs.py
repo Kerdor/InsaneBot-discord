@@ -142,71 +142,104 @@ class ChatLogs(BaseLogger):
             if len(content) > 1000:
                 content = f"{content[:1000]}..."
             
-            # Create beautiful embed
-            embed = self.create_embed(
-                title="💬 Новое сообщение",
-                description=content or "*[Сообщение без текста]*",
+            # Create modern embed for message creation
+            embed = disnake.Embed(
+                title="Сообщение отправлено",
+                description=content or "*(Пустое сообщение)*",
                 color=LOG_COLORS['GREEN'],
-                user=f"{message.author.display_name}",
-                user_icon=message.author.display_avatar.url,
-                channel=f"{message.channel.mention}",
-                thumbnail=message.author.display_avatar.url
+                timestamp=message.created_at
             )
             
-            # Add additional info
+            # Author section
+            embed.set_author(
+                name=message.author.display_name,
+                icon_url=message.author.display_avatar.url
+            )
+            
+            # Footer with bot info
+            embed.set_footer(
+                text=f"{self.bot.user.name} • Логирование чата",
+                icon_url=self.bot.user.display_avatar.url if self.bot.user else None
+            )
+            
+            # Fields for metadata
             embed.add_field(
-                name="🆔 ID сообщения",
+                name="Автор",
+                value=f"{message.author.mention} (ID: {message.author.id})",
+                inline=True
+            )
+            
+            embed.add_field(
+                name="Канал",
+                value=f"{message.channel.mention} (ID: {message.channel.id})",
+                inline=True
+            )
+            
+            embed.add_field(
+                name="ID сообщения",
                 value=f"`{message.id}`",
                 inline=True
             )
             
-            embed.add_field(
-                name="📅 Время",
-                value=disnake.utils.format_dt(message.created_at, "R"),
-                inline=True
-            )
-            
-            embed.add_field(
-                name="🔗 Ссылка",
-                value=f"[Перейти к сообщению]({message.jump_url})",
-                inline=False
-            )
-            
             # Handle attachments
             if message.attachments:
-                attachment_links = []
+                attachment_list = []
                 for i, attachment in enumerate(message.attachments, 1):
+                    file_info = f"[{attachment.filename}]({attachment.url}) ({attachment.size} bytes)"
+                    if attachment.content_type:
+                        file_info += f" [{attachment.content_type}]"
                     if attachment.height:
+                        file_info += f" [{attachment.width}x{attachment.height} px]"
                         if i == 1:
                             embed.set_image(url=attachment.url)
-                        attachment_links.append(f"📎 [{attachment.filename}]({attachment.url})")
-                    else:
-                        attachment_links.append(f"📎 [{attachment.filename}]({attachment.url})")
+                    attachment_list.append(f"{i}. {file_info}")
                 
-                if attachment_links:
+                if attachment_list:
                     embed.add_field(
-                        name=f"📎 Вложения ({len(message.attachments)})",
-                        value="\n".join(attachment_links[:5]),
+                        name="Файлы",
+                        value="\n".join(attachment_list[:5]),
                         inline=False
                     )
             
             # Handle stickers
             if message.stickers:
-                sticker_links = [f"🎨 [{sticker.name}]({sticker.url})" for sticker in message.stickers]
+                sticker_list = [f"{sticker.name} (ID: {sticker.id})" for sticker in message.stickers]
                 embed.add_field(
-                    name=f"🎨 Стикеры ({len(message.stickers)})",
-                    value="\n".join(sticker_links),
+                    name="Стикеры",
+                    value="\n".join(sticker_list),
                     inline=False
                 )
             
+            # Handle message reference (replies)
+            if message.reference:
+                try:
+                    replied_message = await message.channel.fetch_message(message.reference.message_id)
+                    reply_author = replied_message.author
+                    reply_content = replied_message.content[:50] + ("..." if len(replied_message.content) > 50 else "") if replied_message.content else "*(Пустое сообщение)*"
+                    
+                    embed.add_field(
+                        name="Ответ на сообщение",
+                        value=f"{reply_author.mention}: {reply_content}\n[ID: {replied_message.id}]",
+                        inline=False
+                    )
+                except Exception as e:
+                    logger.debug(f"Could not fetch referenced message {message.reference.message_id}: {e}")
+            
             # Handle reactions
             if message.reactions:
-                reactions = [f"{str(r.emoji)} **{r.count}**" for r in message.reactions]
+                reaction_list = [f"{reaction.emoji} ({reaction.count} шт.)" for reaction in message.reactions]
                 embed.add_field(
-                    name="👍 Реакции",
-                    value=" ".join(reactions[:10]),
+                    name="Реакции",
+                    value=", ".join(reaction_list[:10]),
                     inline=False
                 )
+            
+            # Jump URL
+            embed.add_field(
+                name="Перейти к сообщению",
+                value=f"[Кликните для перехода]({message.jump_url})",
+                inline=False
+            )
             
             log_channel = await self.get_log_channel(message.guild)
             if not log_channel:
@@ -214,9 +247,9 @@ class ChatLogs(BaseLogger):
                 
             if isinstance(log_channel, disnake.ForumChannel):
                 thread = await log_channel.create_thread(
-                    name=f"Логи чата {disnake.utils.utcnow().strftime('%Y-%m-%d')}",
+                    name=f"Chat Logs {disnake.utils.utcnow().strftime('%Y-%m-%d')}",
                     embed=embed,
-                    content="📝 Логирование чата активировано"
+                    content="Логи чата"
                 )
             else:
                 await log_channel.send(embed=embed)
@@ -234,61 +267,74 @@ class ChatLogs(BaseLogger):
         if not log_channel:
             return
             
-        before_content = before.content[:500] + ("..." if len(before.content) > 500 else "") if before.content else "*[Без текста]*"
-        after_content = after.content[:500] + ("..." if len(after.content) > 500 else "") if after.content else "*[Без текста]*"
-        
-        embed = self.create_embed(
-            title="✏️ Сообщение изменено",
+        # Create embed for message edit
+        embed = disnake.Embed(
+            title="Сообщение отредактировано",
             color=LOG_COLORS['ORANGE'],
-            user=f"{before.author.display_name}",
-            user_icon=before.author.display_avatar.url,
-            channel=f"{before.channel.mention}",
-            thumbnail=before.author.display_avatar.url
+            timestamp=after.edited_at or disnake.utils.utcnow()
+        )
+        
+        embed.set_author(
+            name=before.author.display_name,
+            icon_url=before.author.display_avatar.url
+        )
+        
+        embed.set_footer(
+            text=f"{self.bot.user.name} • Логирование чата",
+            icon_url=self.bot.user.display_avatar.url if self.bot.user else None
         )
         
         embed.add_field(
-            name="🆔 ID сообщения",
+            name="Автор",
+            value=f"{before.author.mention} (ID: {before.author.id})",
+            inline=True
+        )
+        
+        embed.add_field(
+            name="Канал",
+            value=f"{before.channel.mention} (ID: {before.channel.id})",
+            inline=True
+        )
+        
+        embed.add_field(
+            name="ID сообщения",
             value=f"`{before.id}`",
             inline=True
         )
         
-        embed.add_field(
-            name="📅 Изменено",
-            value=disnake.utils.format_dt(after.edited_at or disnake.utils.utcnow(), "R"),
-            inline=True
-        )
+        # Show old and new content
+        old_content = before.content[:1024] if before.content else "*(Пустое сообщение)*"
+        new_content = after.content[:1024] if after.content else "*(Пустое сообщение)*"
         
-        embed.add_field(
-            name="📝 Было",
-            value=before_content,
-            inline=False
-        )
+        if old_content != new_content:
+            embed.add_field(
+                name="До",
+                value=old_content,
+                inline=False
+            )
+            
+            embed.add_field(
+                name="После",
+                value=new_content,
+                inline=False
+            )
         
-        embed.add_field(
-            name="🆕 Стало",
-            value=after_content,
-            inline=False
-        )
-        
-        embed.add_field(
-            name="🔗 Ссылка",
-            value=f"[Перейти к сообщению]({after.jump_url})",
-            inline=False
-        )
-        
+        # Handle attachments changes
         if before.attachments != after.attachments:
-            if before.attachments and not after.attachments:
-                embed.add_field(
-                    name="📎 Вложения",
-                    value="*Удалены все вложения*",
-                    inline=False
-                )
-            elif not before.attachments and after.attachments:
-                embed.add_field(
-                    name="📎 Вложения",
-                    value="*Добавлены вложения*",
-                    inline=False
-                )
+            before_attachments = len(before.attachments)
+            after_attachments = len(after.attachments)
+            
+            embed.add_field(
+                name="Вложения",
+                value=f"Изменено: {before_attachments} → {after_attachments} файлов",
+                inline=False
+            )
+        
+        embed.add_field(
+            name="Перейти к сообщению",
+            value=f"[Кликните для перехода]({after.jump_url})",
+            inline=False
+        )
         
         try:
             await log_channel.send(embed=embed)
@@ -307,67 +353,88 @@ class ChatLogs(BaseLogger):
         if not log_channel:
             return
             
-        content = message.content[:1000] + ("..." if len(message.content) > 1000 else "") if message.content else "*[Сообщение без текста]*"
-        
-        embed = self.create_embed(
-            title="🗑️ Сообщение удалено",
+        # Create embed for message deletion
+        embed = disnake.Embed(
+            title="Сообщение удалено",
             color=LOG_COLORS['RED'],
-            user=f"{message.author.display_name}",
-            user_icon=message.author.display_avatar.url,
-            channel=f"{message.channel.mention}",
-            thumbnail=message.author.display_avatar.url
+            timestamp=disnake.utils.utcnow()
+        )
+        
+        embed.set_author(
+            name=message.author.display_name,
+            icon_url=message.author.display_avatar.url
+        )
+        
+        embed.set_footer(
+            text=f"{self.bot.user.name} • Логирование чата",
+            icon_url=self.bot.user.display_avatar.url if self.bot.user else None
         )
         
         embed.add_field(
-            name="🆔 ID сообщения",
+            name="Автор",
+            value=f"{message.author.mention} (ID: {message.author.id})",
+            inline=True
+        )
+        
+        embed.add_field(
+            name="Канал",
+            value=f"{message.channel.mention} (ID: {message.channel.id})",
+            inline=True
+        )
+        
+        embed.add_field(
+            name="ID сообщения",
             value=f"`{message.id}`",
             inline=True
         )
         
+        # Show message content
+        content = message.content[:1024] if message.content else "*(Пустое сообщение)*"
         embed.add_field(
-            name="📅 Удалено",
-            value=disnake.utils.format_dt(disnake.utils.utcnow(), "R"),
-            inline=True
-        )
-        
-        embed.add_field(
-            name="💬 Содержимое",
+            name="Содержимое",
             value=content,
             inline=False
         )
         
+        # Handle attachments
         if message.attachments:
-            attachment_names = [f"📎 {a.filename}" for a in message.attachments[:5]]
-            if len(message.attachments) > 5:
-                attachment_names.append(f"...и еще {len(message.attachments) - 5}")
+            attachment_list = []
+            for i, attachment in enumerate(message.attachments, 1):
+                file_info = f"[{attachment.filename}]({attachment.url}) ({attachment.size} bytes)"
+                if attachment.content_type:
+                    file_info += f" [{attachment.content_type}]"
+                if attachment.height:
+                    file_info += f" [{attachment.width}x{attachment.height} px]"
+                attachment_list.append(f"{i}. {file_info}")
+            
             embed.add_field(
-                name=f"📎 Вложения ({len(message.attachments)})",
-                value="\n".join(attachment_names),
+                name="Вложения",
+                value="\n".join(attachment_list[:5]),
                 inline=False
             )
         
+        # Try to identify who deleted the message
         deleted_by = None
         try:
             async for entry in message.guild.audit_logs(limit=5, action=disnake.AuditLogAction.message_delete):
                 if entry.target.id == message.author.id and entry.extra.channel.id == message.channel.id:
-                    deleted_by = f"{entry.user.mention} (ID: {entry.user.id})"
+                    deleted_by = entry.user
                     break
         except Exception as e:
             logger.error(f"Ошибка при проверке аудит-логов: {e}")
         
         if deleted_by:
             embed.add_field(
-                name="👤 Удалил",
-                value=deleted_by,
+                name="Удалено пользователем",
+                value=f"{deleted_by.mention} (ID: {deleted_by.id})",
                 inline=False
             )
         
-        if hasattr(message, 'jump_url'):
-            embed.add_field(
-                name="🔗 Ссылка",
-                value=f"[Перейти к сообщению]({message.jump_url})",
-                inline=False
-            )
+        embed.add_field(
+            name="Перейти к сообщению",
+            value=f"[Кликните для перехода]({message.jump_url})",
+            inline=False
+        )
         
         try:
             await log_channel.send(embed=embed)

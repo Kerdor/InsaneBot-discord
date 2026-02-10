@@ -1,15 +1,16 @@
 import os
 from pathlib import Path
-
+import disnake
+from disnake import SelectOption
 
 class BotConfig:
     # === Основные настройки бота ===
     TOKEN = os.getenv('BOT_TOKEN')
-    PREFIX = os.getenv('BOT_PREFIX', '!')
+    PREFIX = os.getenv('BOT_PREFIX', '/')
     TEST_GUILDS = list(map(int, os.getenv('TEST_GUILDS', '').split(','))) if os.getenv('TEST_GUILDS') else []
 
     # === Пути к файлам ===
-    PROJECT_DIR = Path(__file__).parent
+    PROJECT_DIR = Path(__file__).resolve().parent
     ASSETS_DIR = PROJECT_DIR / "img"
     DATABASE_DIR = PROJECT_DIR / "databases"
     LOGS_DIR = PROJECT_DIR / "logs"
@@ -24,19 +25,22 @@ class BotConfig:
 
     # === Роли ===
     MODERATION_ROLES = {
-        "owner": 123456789012345678,  # Замените на реальные ID
-        "administrator": 123456789012345678,
-        "moderator": 123456789012345678,
+        "owner": 519209664748191759,
+        "administrator": 519209661535223808,
+        "moderator": 519209662181277726,
+        "helper": 519209663519129600,
     }
 
     GAME_ROLES = {
-        "cs2": 123456789012345678,
-        "dota2": 123456789012345678,
-        "minecraft": 123456789012345678,
+        "Dota 2": 1332487694252638320,
+        "CS 2": 1332487739932934165,
+        "PAYDAY 2": 1332487809600323624,
+        "Bellwright": 1334981997780795444,
+        "Stardew Valley": 1334984540862808205,
     }
 
     OTHER_ROLES = {
-        "Not verified": 123456789012345678,
+        "Not verified": 1334302190625361994,
     }
 
     @staticmethod
@@ -46,24 +50,26 @@ class BotConfig:
 
     # === Каналы ===
     CHANNELS = {
-        "create_voice": 123456789012345678,  # Канал для создания голосовых арен
+        "create_voice": 1336547276059050004,
     }
 
     ASSETS = {
-        "rules_image": "RULES.png",  # Изображение с правилами
+        "rules_image": ASSETS_DIR / "RULES.png",
     }
 
     GAME_ROLE_OPTIONS = [
-        disnake.SelectOption(label="Counter-Strike 2", value=str(GAME_ROLES["cs2"]), emoji="CS2"),
-        disnake.SelectOption(label="Dota 2", value=str(GAME_ROLES["dota2"]), emoji="DOTA2"),
-        disnake.SelectOption(label="Minecraft", value=str(GAME_ROLES["minecraft"]), emoji="MC"),
+        SelectOption(label="Dota 2", value=str(GAME_ROLES["Dota 2"])),
+        SelectOption(label="CS 2", value=str(GAME_ROLES["CS 2"])),
+        SelectOption(label="PAYDAY 2", value=str(GAME_ROLES["PAYDAY 2"])),
+        SelectOption(label="Bellwright", value=str(GAME_ROLES["Bellwright"])),
+        SelectOption(label="Stardew Valley", value=str(GAME_ROLES["Stardew Valley"])),
     ]
 
     # === Каналы логов ===
     CHANNEL_LOGS = {
-        "chat_logs": 123456789012345678,  # ID канала для логов чата
-        "guild_logs": 123456789012345678,  # ID канала для логов сервера
-        "moderation_logs": 123456789012345678,  # ID канала для логов модерации
+        "chat_logs": 1330604289957302350,
+        "guild_logs": 1338651230565695558,
+        "moderation_logs": 1330604583000473732,
     }
 
     CHAT_LOGS_CHANNEL = CHANNEL_LOGS["chat_logs"]
@@ -72,21 +78,22 @@ class BotConfig:
 
     # === Цвета для embed'ов ===
     LOG_COLORS = {
-        "GREEN": 0x57F287,  # Успешные действия
-        "RED": 0xED4245,    # Ошибки, удаления, баны
-        "BLUE": 0x5865F2,   # Информация, обновления
-        "ORANGE": 0xFEE75C, # Предупреждения, изменения
+        "GREEN": 0x00ff00,    # Успешные действия
+        "ORANGE": 0xffa500,  # Предупреждения, изменения
+        "RED": 0xff0000,     # Ошибки, удаления, баны
+        "BLUE": 0x3498db,    # Информация, обновления
     }
 
     # === Коги (расширения) ===
-    COGS = [
-        "cogs.owner",
+    COGS = (
+        "cogs.moderation_cmd.one_used",
+        "cogs.moderation_cmd.moderation",
         "cogs.user_cmd.get_roles",
         "cogs.user_cmd.create_voice",
         "cogs.logging.chat_logs",
         "cogs.logging.guild_logs",
-        "cogs.logging.moderation_logs",
-    ]
+        "cogs.logging.moderation_logs"
+    )
 
     @staticmethod
     def validate():
@@ -96,11 +103,11 @@ class BotConfig:
         
         if not BotConfig.COGS:
             raise ValueError("Список COGS пуст")
-        
+
         # Проверка существования директорий
         for directory in [BotConfig.ASSETS_DIR, BotConfig.DATABASE_DIR, BotConfig.LOGS_DIR]:
             if not directory.exists():
                 directory.mkdir(exist_ok=True)
 
-# Импорт требуется для использования GAME_ROLE_OPTIONS
-import disnake
+# Инициализация модуля
+BotConfig.validate()

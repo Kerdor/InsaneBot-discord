@@ -86,7 +86,7 @@ class ModerationLogs(BaseLogger):
                 logger.error(f"Ошибка при получении аудит-логов: {e}")
             
             embed = self.create_embed(
-                title="🔨 Пользователь забанен",
+                title="Пользователь забанен",
                 color=LOG_COLORS['RED'],
                 description=f"**{user.display_name if hasattr(user, 'display_name') else user.name}** был заблокирован на сервере",
                 user=f"{user.display_name if hasattr(user, 'display_name') else user.name}",
@@ -97,13 +97,13 @@ class ModerationLogs(BaseLogger):
             )
             
             embed.add_field(
-                name="🆔 ID пользователя",
+                name="ID пользователя",
                 value=f"`{user.id}`",
                 inline=True
             )
             
             embed.add_field(
-                name="📅 Время",
+                name="Время",
                 value=disnake.utils.format_dt(disnake.utils.utcnow(), "R"),
                 inline=True
             )
@@ -126,7 +126,7 @@ class ModerationLogs(BaseLogger):
                 logger.error(f"Ошибка при получении аудит-логов: {e}")
             
             embed = self.create_embed(
-                title="✅ Пользователь разбанен",
+                title="Пользователь разбанен",
                 color=LOG_COLORS['GREEN'],
                 description=f"**{user.name}** был разблокирован на сервере",
                 user=f"{user.name}",
@@ -136,13 +136,13 @@ class ModerationLogs(BaseLogger):
             )
             
             embed.add_field(
-                name="🆔 ID пользователя",
+                name="ID пользователя",
                 value=f"`{user.id}`",
                 inline=True
             )
             
             embed.add_field(
-                name="📅 Время",
+                name="Время",
                 value=disnake.utils.format_dt(disnake.utils.utcnow(), "R"),
                 inline=True
             )
@@ -164,7 +164,7 @@ class ModerationLogs(BaseLogger):
             async for entry in member.guild.audit_logs(limit=5, action=disnake.AuditLogAction.kick):
                 if entry.target.id == member.id:
                     embed = self.create_embed(
-                        title="👢 Пользователь кикнут",
+                        title="Пользователь кикнут",
                         color=LOG_COLORS['RED'],
                         description=f"**{member.display_name}** был исключен с сервера",
                         user=f"{member.display_name}",
@@ -175,13 +175,13 @@ class ModerationLogs(BaseLogger):
                     )
                     
                     embed.add_field(
-                        name="🆔 ID пользователя",
+                        name="ID пользователя",
                         value=f"`{member.id}`",
                         inline=True
                     )
                     
                     embed.add_field(
-                        name="📅 Время",
+                        name="Время",
                         value=disnake.utils.format_dt(disnake.utils.utcnow(), "R"),
                         inline=True
                     )
@@ -211,7 +211,7 @@ class ModerationLogs(BaseLogger):
                 duration_str = format_duration(duration)
                 
                 embed = self.create_embed(
-                    title="⏱️ Тайм-аут установлен",
+                    title="Тайм-аут установлен",
                     color=LOG_COLORS['RED'],
                     description=f"**{after.display_name}** получил тайм-аут",
                     user=f"{after.display_name}",
@@ -223,7 +223,7 @@ class ModerationLogs(BaseLogger):
                 )
                 
                 embed.add_field(
-                    name="🆔 ID пользователя",
+                    name="ID пользователя",
                     value=f"`{after.id}`",
                     inline=True
                 )
@@ -241,7 +241,7 @@ class ModerationLogs(BaseLogger):
                     logger.error(f"Ошибка при получении аудит-логов: {e}")
                 
                 embed = self.create_embed(
-                    title="✅ Тайм-аут снят",
+                    title="Тайм-аут снят",
                     color=LOG_COLORS['GREEN'],
                     description=f"С **{after.display_name}** снят тайм-аут",
                     user=f"{after.display_name}",
@@ -251,7 +251,7 @@ class ModerationLogs(BaseLogger):
                 )
                 
                 embed.add_field(
-                    name="🆔 ID пользователя",
+                    name="ID пользователя",
                     value=f"`{after.id}`",
                     inline=True
                 )
@@ -270,7 +270,7 @@ class ModerationLogs(BaseLogger):
                     content = message.content[:1000] + "..." if len(message.content) > 1000 else message.content or "[Без текста]"
                     
                     embed = self.create_embed(
-                        title="🗑️ Сообщение удалено модератором",
+                        title="Сообщение удалено модератором",
                         color=LOG_COLORS['RED'],
                         description=f"Модератор удалил сообщение от **{message.author.display_name}**",
                         user=f"{message.author.display_name}",
@@ -282,20 +282,20 @@ class ModerationLogs(BaseLogger):
                     )
                     
                     embed.add_field(
-                        name="🆔 ID сообщения",
+                        name="ID сообщения",
                         value=f"`{message.id}`",
                         inline=True
                     )
                     
                     embed.add_field(
-                        name="📅 Время",
+                        name="Время",
                         value=disnake.utils.format_dt(disnake.utils.utcnow(), "R"),
                         inline=True
                     )
                     
                     if entry.reason:
                         embed.add_field(
-                            name="📝 Причина",
+                            name="Причина",
                             value=entry.reason,
                             inline=False
                         )
