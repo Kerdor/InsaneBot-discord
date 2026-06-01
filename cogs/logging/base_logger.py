@@ -1,16 +1,14 @@
 """
-Logging system for Insane Discord bot.
+Base logging functionality for Insane Discord bot.
 
-This module provides a base logger class and common functionality
-for all log types (chat, guild, moderation).
+This module provides common logging utilities without creating 
+circular import dependencies.
 """
 import disnake
 from disnake.ext import commands
 from typing import Optional
 
-
-
-class BaseLogger(commands.Cog):
+class BaseLogger:
     """Base logger class for all logging functionality."""
     def __init__(self, bot: commands.Bot):
         self.bot = bot
@@ -19,10 +17,19 @@ class BaseLogger(commands.Cog):
     
     async def get_log_channel(self, guild: disnake.Guild) -> Optional[disnake.TextChannel]:
         """Get the log channel for this logger."""
-        if not self.log_type or self.log_type not in BotConfig.CHANNEL_LOGS:
+        if not self.log_type:
             return None
             
-        channel_id = BotConfig.CHANNEL_LOGS.get(f"{self.log_type}_logs")
+        from config import BotConfig
+        
+        channel_id = None
+        if self.log_type == "chat":
+            channel_id = BotConfig.CHAT_LOGS_CHANNEL
+        elif self.log_type == "guild":
+            channel_id = BotConfig.GUILD_LOGS_CHANNEL
+        elif self.log_type == "moderation":
+            channel_id = BotConfig.MODERATION_LOGS_CHANNEL
+            
         if not channel_id:
             return None
             
@@ -46,16 +53,7 @@ class BaseLogger(commands.Cog):
         image: Optional[str] = None,
         **kwargs
     ) -> disnake.Embed:
-        """Create a beautiful embed with common fields.
-        
-        Args:
-            title: Embed title
-            color: Embed color
-            description: Embed description
-            thumbnail: Thumbnail URL
-            image: Image URL
-            **kwargs: Additional fields (user, user_icon, moderator, reason, etc.)
-        """
+        """Create a beautiful embed with common fields."""
         embed = disnake.Embed(
             title=title,
             description=description,
@@ -156,9 +154,3 @@ class BaseLogger(commands.Cog):
             import logging
             logger = logging.getLogger(__name__)
             logger.error(f"Failed to send log to channel: {e}")
-
-def setup(bot: commands.Bot):
-    """This will be called when the extension is loaded."""
-    # This is intentionally empty to prevent duplicate loading
-    # Individual cogs are loaded separately in main.py
-    pass

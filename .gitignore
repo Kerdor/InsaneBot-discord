@@ -161,6 +161,9 @@ cython_debug/
 
 # Bot configuration with sensitive data
 .env
+.env.*
+*.env
+secrets.py
 
 # Logs directory
 logs/

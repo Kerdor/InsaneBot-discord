@@ -72,4 +72,7 @@ class ModerationCommands(commands.Cog):
                 logger.warning(f"Error scheduling session close: {e}")
 
 def setup(bot: commands.Bot):
-    bot.add_cog(ModerationCommands(bot))
+    if bot.get_cog("ModerationCommands") is None:
+        bot.add_cog(ModerationCommands(bot))
+    else:
+        print("Cog ModerationCommands already loaded")

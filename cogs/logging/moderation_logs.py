@@ -5,10 +5,11 @@ from typing import Optional, Union
 import disnake
 from disnake.ext import commands
 
-from . import BaseLogger
-from config import BotConfig, LOG_COLORS
+from .base_logger import BaseLogger
+from config import BotConfig
 
 logger = logging.getLogger(__name__)
+LOG_COLORS = BotConfig.LOG_COLORS
 
 def format_duration(duration: timedelta) -> str:
     """Format a timedelta into a human-readable string."""

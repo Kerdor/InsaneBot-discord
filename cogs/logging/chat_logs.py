@@ -4,15 +4,16 @@ from typing import Optional, Union
 import disnake
 from disnake.ext import commands
 
-from . import BaseLogger
-from config import BotConfig, LOG_COLORS
+from .base_logger import BaseLogger
+from config import BotConfig
 
 logger = logging.getLogger(__name__)
+LOG_COLORS = BotConfig.LOG_COLORS
 
 class ChatLogs(BaseLogger):
     def __init__(self, bot: commands.Bot):
-        super().__init__(bot)
         self.log_type = "chat"
+        super().__init__(bot)
         self.log_channel_id = BotConfig.CHAT_LOGS_CHANNEL
         self._message_cache = set()
         self._last_message_time = {}

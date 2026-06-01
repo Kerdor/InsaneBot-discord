@@ -5,9 +5,27 @@ from disnake import SelectOption
 
 class BotConfig:
     # === Основные настройки бота ===
-    TOKEN = os.getenv('BOT_TOKEN')
-    PREFIX = os.getenv('BOT_PREFIX', '/')
-    TEST_GUILDS = list(map(int, os.getenv('TEST_GUILDS', '').split(','))) if os.getenv('TEST_GUILDS') else []
+    # Загружаем переменные из secrets.py
+    try:
+        from secrets import BOT_TOKEN as _BOT_TOKEN, BOT_PREFIX as _BOT_PREFIX, TEST_GUILDS as _TEST_GUILDS
+        print("✓ Загружены секретные данные из secrets.py")
+    except ImportError:
+        print("\n=== ОШИБКА ===")
+        print("Файл secrets.py не найден!")
+        print("Создайте файл secrets.py с токеном бота")
+        print("===================\n")
+        exit(1)
+    
+    if not _BOT_TOKEN:
+        print("\n=== ОШИБКА ===")
+        print("BOT_TOKEN не задан в secrets.py!")
+        print("===================\n")
+        exit(1)
+    
+    # Присваиваем значения атрибутам класса
+    TOKEN = _BOT_TOKEN
+    PREFIX = _BOT_PREFIX
+    TEST_GUILDS = _TEST_GUILDS
 
     # === Пути к файлам ===
     PROJECT_DIR = Path(__file__).resolve().parent
@@ -47,7 +65,6 @@ class BotConfig:
     def iter_role_ids(role_dict: dict) -> iter:
         """Возвращает итератор по ID ролей."""
         return (role_id for role_id in role_dict.values() if isinstance(role_id, int))
-
     # === Каналы ===
     CHANNELS = {
         "create_voice": 1336547276059050004,
@@ -86,10 +103,7 @@ class BotConfig:
 
     # === Коги (расширения) ===
     COGS = (
-        "cogs.moderation_cmd.one_used",
-        "cogs.moderation_cmd.moderation",
-        "cogs.user_cmd.get_roles",
-        "cogs.user_cmd.create_voice",
+        "cogs.moderation_cmd",
         "cogs.logging.chat_logs",
         "cogs.logging.guild_logs",
         "cogs.logging.moderation_logs"
@@ -99,7 +113,10 @@ class BotConfig:
     def validate():
         """Проверяет корректность конфигурации."""
         if not BotConfig.TOKEN:
-            raise ValueError("BOT_TOKEN не задан в переменных окружения .env")
+            print("\n=== ОШИБКА ===")
+            print("BOT_TOKEN не задан в secrets.py!")
+            print("===================\n")
+            exit(1)
         
         if not BotConfig.COGS:
             raise ValueError("Список COGS пуст")

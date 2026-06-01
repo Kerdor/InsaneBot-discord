@@ -4,10 +4,11 @@ from typing import Optional
 import disnake
 from disnake.ext import commands
 
-from . import BaseLogger
-from config import BotConfig, LOG_COLORS
+from .base_logger import BaseLogger
+from config import BotConfig
 
 logger = logging.getLogger(__name__)
+LOG_COLORS = BotConfig.LOG_COLORS
 
 class GuildLogs(BaseLogger):
     _initialized = False
