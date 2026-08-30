@@ -217,14 +217,93 @@ class RoomControlView(disnake.ui.View):
         if not room:
             await interaction.response.send_message("Комната больше не найдена.", ephemeral=True)
             return
-        if not is_room_manager(interaction.guild.id, room["owner_id"], interaction.author.id):
-            await interaction.response.send_message(
-                "Вы можете сделать эту комнату основной только после разрешения владельца или совладельца.",
-                ephemeral=True,
-            )
+
+        if is_room_manager(interaction.guild.id, room["owner_id"], interaction.author.id):
+            set_main_room(interaction.guild.id, interaction.author.id, room["owner_id"])
+            await interaction.response.send_message("⭐ Эта комната теперь ваша основная.", ephemeral=True)
             return
-        set_main_room(interaction.guild.id, interaction.author.id, room["owner_id"])
-        await interaction.response.send_message("⭐ Эта комната теперь ваша основная.", ephemeral=True)
+
+        coowners = get_coowners(interaction.guild.id, room["owner_id"])
+        manager_mentions = [f"<@{room['owner_id']}>".strip()]
+        manager_mentions.extend(f"<@{user_id}>" for user_id in coowners)
+        control_channel = interaction.guild.get_channel(room["control_channel_id"] or 0)
+        if not isinstance(control_channel, disnake.TextChannel):
+            await interaction.response.send_message("Канал управления комнатой сейчас недоступен.", ephemeral=True)
+            return
+
+        requester_id = interaction.author.id
+        requester_mention = interaction.author.mention
+        owner_id = room["owner_id"]
+        guild_id = interaction.guild.id
+
+        approval_view = disnake.ui.View(timeout=300)
+        approve_button = disnake.ui.Button(label="✅ Разрешить", style=disnake.ButtonStyle.success)
+        deny_button = disnake.ui.Button(label="❌ Отклонить", style=disnake.ButtonStyle.danger)
+
+        async def approve_callback(approval_interaction: disnake.MessageInteraction) -> None:
+            current_room = get_room(guild_id, owner_id)
+            if not current_room:
+                await approval_interaction.response.edit_message(content="❌ Комната больше не существует.", view=None)
+                approval_view.stop()
+                return
+            if not is_room_manager(guild_id, owner_id, approval_interaction.author.id):
+                await approval_interaction.response.send_message("Только владелец или совладелец может подтвердить запрос.", ephemeral=True)
+                return
+            if not any(user.id == requester_id for user in interaction.guild.members):
+                await approval_interaction.response.edit_message(content="❌ Пользователь больше не находится на сервере.", view=None)
+                approval_view.stop()
+                return
+
+            set_main_room(guild_id, requester_id, owner_id)
+            approve_button.disabled = True
+            deny_button.disabled = True
+            await approval_interaction.response.edit_message(
+                content=f"✅ {requester_mention} получил разрешение сделать комнату **{current_room['name']}** основной.",
+                view=approval_view,
+            )
+            requester = interaction.guild.get_member(requester_id)
+            if requester:
+                try:
+                    await requester.send(f"⭐ Вам разрешили сделать комнату **{current_room['name']}** основной.")
+                except disnake.HTTPException:
+                    pass
+            approval_view.stop()
+
+        async def deny_callback(approval_interaction: disnake.MessageInteraction) -> None:
+            if not is_room_manager(guild_id, owner_id, approval_interaction.author.id):
+                await approval_interaction.response.send_message("Только владелец или совладелец может отклонить запрос.", ephemeral=True)
+                return
+
+            approve_button.disabled = True
+            deny_button.disabled = True
+            await approval_interaction.response.edit_message(
+                content=f"❌ Запрос {requester_mention} на основную комнату отклонён.",
+                view=approval_view,
+            )
+            requester = interaction.guild.get_member(requester_id)
+            if requester:
+                try:
+                    await requester.send("❌ Ваш запрос на основную комнату был отклонён.")
+                except disnake.HTTPException:
+                    pass
+            approval_view.stop()
+
+        approve_button.callback = approve_callback
+        deny_button.callback = deny_callback
+        approval_view.add_item(approve_button)
+        approval_view.add_item(deny_button)
+
+        await interaction.response.send_message(
+            f"⏳ Запрос на основную комнату отправлен. Ожидается разрешение владельца или совладельца.\n"
+            f"Запросил: {requester_mention}\n"
+            f"Разрешить могут: {' '.join(manager_mentions)}",
+            ephemeral=True,
+        )
+        await control_channel.send(
+            f"🔔 {requester_mention} просит разрешение сделать комнату **{room['name']}** основной.\n"
+            f"{' '.join(manager_mentions)}",
+            view=approval_view,
+        )
 
     @disnake.ui.button(label="ℹ️ Моя комната", style=disnake.ButtonStyle.secondary, custom_id="voice_room:info")
     async def info(self, button: disnake.ui.Button, interaction: disnake.MessageInteraction) -> None:
