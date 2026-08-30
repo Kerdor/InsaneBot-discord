@@ -43,7 +43,7 @@ def format_duration(duration: timedelta) -> str:
     return ", ".join(parts) if parts else "мгновенно"
 
 
-class ModerationLogs(BaseLogger, commands.Cog):
+class ModerationLogs(BaseLogger):
     def __init__(self, bot: commands.Bot) -> None:
         super().__init__(bot)
         self.log_type = "moderation"
@@ -51,7 +51,7 @@ class ModerationLogs(BaseLogger, commands.Cog):
         logger.info("ModerationLogs initialized for channel %s", self.log_channel_id)
 
     async def get_log_channel(self, guild: disnake.Guild) -> Optional[disnake.TextChannel]:
-        channel = await BaseLogger.get_log_channel(self, guild)
+        channel = await super().get_log_channel(guild)
         if not isinstance(channel, disnake.TextChannel):
             return None
         permissions = channel.permissions_for(guild.me)
@@ -75,24 +75,15 @@ class ModerationLogs(BaseLogger, commands.Cog):
         return None
 
     def _member_embed(self, title: str, color: int, user: Union[disnake.User, disnake.Member]) -> disnake.Embed:
-        embed = disnake.Embed(
-            title=title,
-            color=color,
-            timestamp=disnake.utils.utcnow(),
-        )
+        embed = disnake.Embed(title=title, color=color, timestamp=disnake.utils.utcnow())
         display_name = getattr(user, "display_name", user.name)
         embed.set_author(name=display_name, icon_url=user.display_avatar.url)
         return embed
 
     @commands.Cog.listener()
-    async def on_member_ban(
-        self,
-        guild: disnake.Guild,
-        user: Union[disnake.User, disnake.Member],
-    ) -> None:
+    async def on_member_ban(self, guild: disnake.Guild, user: Union[disnake.User, disnake.Member]) -> None:
         embed = self._member_embed("Пользователь забанен", LOG_COLORS["RED"], user)
         embed.add_field(name="Пользователь", value=f"<@{user.id}> (ID: {user.id})", inline=True)
-
         entry = await self._audit_entry(guild, disnake.AuditLogAction.ban, user.id)
         if entry:
             embed.add_field(name="Модератор", value=f"{entry.user.mention} (ID: {entry.user.id})", inline=True)
@@ -100,14 +91,12 @@ class ModerationLogs(BaseLogger, commands.Cog):
                 embed.add_field(name="Причина", value=entry.reason[:1024], inline=False)
         else:
             embed.add_field(name="Модератор", value="Неизвестно", inline=True)
-
         await self.log_to_channel(guild, embed)
 
     @commands.Cog.listener()
     async def on_member_unban(self, guild: disnake.Guild, user: disnake.User) -> None:
         embed = self._member_embed("Пользователь разбанен", LOG_COLORS["GREEN"], user)
         embed.add_field(name="Пользователь", value=f"<@{user.id}> (ID: {user.id})", inline=True)
-
         entry = await self._audit_entry(guild, disnake.AuditLogAction.unban, user.id)
         if entry:
             embed.add_field(name="Модератор", value=f"{entry.user.mention} (ID: {entry.user.id})", inline=True)
@@ -115,7 +104,6 @@ class ModerationLogs(BaseLogger, commands.Cog):
                 embed.add_field(name="Причина", value=entry.reason[:1024], inline=False)
         else:
             embed.add_field(name="Модератор", value="Неизвестно", inline=True)
-
         await self.log_to_channel(guild, embed)
 
     @commands.Cog.listener()
@@ -123,7 +111,6 @@ class ModerationLogs(BaseLogger, commands.Cog):
         entry = await self._audit_entry(member.guild, disnake.AuditLogAction.kick, member.id)
         if not entry:
             return
-
         embed = self._member_embed("Пользователь кикнут", LOG_COLORS["RED"], member)
         embed.add_field(name="Пользователь", value=f"<@{member.id}> (ID: {member.id})", inline=True)
         embed.add_field(name="Модератор", value=f"{entry.user.mention} (ID: {entry.user.id})", inline=True)
@@ -134,47 +121,29 @@ class ModerationLogs(BaseLogger, commands.Cog):
     async def on_member_update(self, before: disnake.Member, after: disnake.Member) -> None:
         if before.timed_out_until == after.timed_out_until:
             return
-
         if after.timed_out_until:
             embed = self._member_embed("Тайм-аут установлен", LOG_COLORS["RED"], after)
-            embed.add_field(
-                name="Длительность",
-                value=format_duration(after.timed_out_until - disnake.utils.utcnow()),
-                inline=True,
-            )
-            embed.add_field(
-                name="До",
-                value=disnake.utils.format_dt(after.timed_out_until, "f"),
-                inline=True,
-            )
+            embed.add_field(name="Длительность", value=format_duration(after.timed_out_until - disnake.utils.utcnow()), inline=True)
+            embed.add_field(name="До", value=disnake.utils.format_dt(after.timed_out_until, "f"), inline=True)
         else:
             embed = self._member_embed("Тайм-аут снят", LOG_COLORS["GREEN"], after)
-
         entry = await self._audit_entry(after.guild, disnake.AuditLogAction.member_update, after.id)
         if entry:
             embed.add_field(name="Модератор", value=f"{entry.user.mention} (ID: {entry.user.id})", inline=True)
             if entry.reason:
                 embed.add_field(name="Причина", value=entry.reason[:1024], inline=False)
-
         await self.log_to_channel(after.guild, embed)
 
     @commands.Cog.listener()
     async def on_message_delete(self, message: disnake.Message) -> None:
         if message.author.bot or not message.guild:
             return
-
-        entry = await self._audit_entry(
-            message.guild,
-            disnake.AuditLogAction.message_delete,
-            message.author.id,
-        )
+        entry = await self._audit_entry(message.guild, disnake.AuditLogAction.message_delete, message.author.id)
         if not entry:
             return
-
         extra_channel = getattr(entry.extra, "channel", None)
         if extra_channel is not None and extra_channel.id != message.channel.id:
             return
-
         content = message.content[:1000] + "..." if len(message.content) > 1000 else message.content
         embed = self._member_embed("Сообщение удалено модератором", LOG_COLORS["RED"], message.author)
         embed.add_field(name="Канал", value=message.channel.mention, inline=True)
@@ -183,7 +152,6 @@ class ModerationLogs(BaseLogger, commands.Cog):
         embed.add_field(name="Содержимое", value=content or "[Без текста]", inline=False)
         if entry.reason:
             embed.add_field(name="Причина", value=entry.reason[:1024], inline=False)
-
         await self.log_to_channel(message.guild, embed)
 
 
