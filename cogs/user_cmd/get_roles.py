@@ -1,7 +1,7 @@
 from __future__ import annotations
 
 import logging
-import secrets
+import random
 from typing import Iterable
 
 import disnake
@@ -10,6 +10,7 @@ from disnake.ext import commands
 from config import BotConfig
 
 logger = logging.getLogger(__name__)
+secure_random = random.SystemRandom()
 
 CODE_LENGTH = 6
 
@@ -70,7 +71,7 @@ class VerifyView(disnake.ui.View):
 
     @disnake.ui.button(label="Верификация", style=disnake.ButtonStyle.gray, custom_id="button_verify")
     async def button_verify(self, _: disnake.ui.Button, inter: disnake.Interaction) -> None:  # type: ignore[override]
-        code = secrets.randbelow(900_000) + 100_000
+        code = secure_random.randrange(100_000, 1_000_000)
         await inter.response.send_modal(VerifyModal(code))
 
 
