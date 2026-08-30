@@ -21,9 +21,10 @@ class Moderation(commands.Cog):
     def _is_staff(self, member: disnake.Member) -> bool:
         return any(role.id in BotConfig.MODERATION_ROLES.values() for role in member.roles)
 
-    async def _check_staff(self, inter: disnake.ApplicationCommandInteraction) -> bool:
+    async def _check_staff(self, inter: disnake.ApplicationCommandInteraction | disnake.MessageInteraction) -> bool:
         if not inter.guild or not isinstance(inter.author, disnake.Member) or not self._is_staff(inter.author):
-            await inter.response.send_message("Недостаточно прав.", ephemeral=True)
+            if not inter.response.is_done():
+                await inter.response.send_message("Недостаточно прав.", ephemeral=True)
             return False
         return True
 
@@ -35,6 +36,7 @@ class Moderation(commands.Cog):
         action: str,
         reason: str,
     ) -> None:
+        add_punishment(guild.id, user.id, moderator.id, action, reason)
         channel_id = BotConfig.get_logging_channel(guild.id, "moderation_logs")
         channel = guild.get_channel(channel_id) if channel_id else None
         if isinstance(channel, disnake.Thread):
@@ -48,11 +50,9 @@ class Moderation(commands.Cog):
     async def _ensure_panel(self, guild: disnake.Guild) -> None:
         channel_id = BotConfig.CHANNELS.get("moderation_panel")
         if not channel_id:
-            logger.warning("Канал moderation_panel не настроен для guild=%s", guild.id)
             return
         channel = guild.get_channel(channel_id)
         if not isinstance(channel, disnake.TextChannel):
-            logger.warning("Канал moderation_panel не найден для guild=%s: %s", guild.id, channel_id)
             return
         try:
             async for message in channel.history(limit=50):
@@ -63,19 +63,16 @@ class Moderation(commands.Cog):
                                 return
             await channel.send(
                 "🛡️ **Панель модерации**\n\n"
-                "Используйте кнопки ниже для быстрого доступа к основным функциям модерации.\n"
-                "Подробные действия доступны через slash-команды.",
+                "Выберите действие. Для наказаний бот запросит ID пользователя и причину.",
                 view=ModerationView(),
             )
-            logger.info("Панель модерации создана: guild=%s channel=%s", guild.id, channel.id)
         except (disnake.Forbidden, disnake.HTTPException):
-            logger.exception("Не удалось создать панель модерации: guild=%s channel=%s", guild.id, channel.id)
+            logger.exception("Не удалось создать панель модерации: guild=%s", guild.id)
 
     @commands.slash_command(name="warn", description="Выдать предупреждение пользователю")
     async def warn(self, inter: disnake.ApplicationCommandInteraction, member: disnake.Member, reason: str = "Не указана") -> None:
         if not await self._check_staff(inter):
             return
-        add_punishment(inter.guild.id, member.id, inter.author.id, "warn", reason)
         await self._log_action(inter.guild, member, inter.author, "warn", reason)
         await inter.response.send_message(f"⚠️ {member.mention} получил предупреждение.", ephemeral=True)
 
@@ -89,8 +86,19 @@ class Moderation(commands.Cog):
         await member.timeout(duration=timedelta(minutes=minutes), reason=reason)
         expires_at = (disnake.utils.utcnow() + timedelta(minutes=minutes)).isoformat()
         add_punishment(inter.guild.id, member.id, inter.author.id, "timeout", reason, expires_at)
-        await self._log_action(inter.guild, member, inter.author, "timeout", reason)
+        await self._log_action_only(inter.guild, member, inter.author, "timeout", reason)
         await inter.response.send_message(f"⏱️ {member.mention} получил timeout на {minutes} мин.", ephemeral=True)
+
+    async def _log_action_only(self, guild: disnake.Guild, user: disnake.Member | disnake.User, moderator: disnake.Member, action: str, reason: str) -> None:
+        channel_id = BotConfig.get_logging_channel(guild.id, "moderation_logs")
+        channel = guild.get_channel(channel_id) if channel_id else None
+        if isinstance(channel, disnake.Thread):
+            await channel.send(
+                f"🛡️ **{action.upper()}**\n"
+                f"Пользователь: {user.mention} (`{user.id}`)\n"
+                f"Модератор: {moderator.mention}\n"
+                f"Причина: {reason}"
+            )
 
     @commands.slash_command(name="kick", description="Кикнуть пользователя")
     async def kick(self, inter: disnake.ApplicationCommandInteraction, member: disnake.Member, reason: str = "Не указана") -> None:
@@ -140,27 +148,95 @@ class Moderation(commands.Cog):
             await self._ensure_panel(guild)
 
 
+class ModerationTargetModal(disnake.ui.Modal):
+    def __init__(self, action: str) -> None:
+        self.action = action
+        components = [
+            disnake.ui.TextInput(label="ID пользователя", custom_id="user_id", placeholder="Например: 123456789012345678", required=True),
+            disnake.ui.TextInput(label="Причина", custom_id="reason", placeholder="Причина наказания", required=False, max_length=500),
+        ]
+        if action == "timeout":
+            components.insert(1, disnake.ui.TextInput(label="Срок в минутах", custom_id="minutes", placeholder="Например: 60", required=True))
+        super().__init__(title=f"Модерация: {action}", components=components, custom_id=f"moderation:modal:{action}")
+
+    async def callback(self, inter: disnake.ModalInteraction) -> None:
+        if not inter.guild or not isinstance(inter.author, disnake.Member) or not any(role.id in BotConfig.MODERATION_ROLES.values() for role in inter.author.roles):
+            await inter.response.send_message("Недостаточно прав.", ephemeral=True)
+            return
+        try:
+            member = inter.guild.get_member(int(inter.text_values["user_id"]))
+            if member is None:
+                member = await inter.guild.fetch_member(int(inter.text_values["user_id"]))
+        except (ValueError, disnake.NotFound):
+            await inter.response.send_message("Пользователь не найден на сервере.", ephemeral=True)
+            return
+
+        reason = inter.text_values.get("reason", "Не указана") or "Не указана"
+        try:
+            if self.action == "warn":
+                await self._warn(inter, member, reason)
+            elif self.action == "timeout":
+                minutes = int(inter.text_values["minutes"])
+                if minutes < 1 or minutes > 40320:
+                    raise ValueError
+                await member.timeout(duration=timedelta(minutes=minutes), reason=reason)
+                expires_at = (disnake.utils.utcnow() + timedelta(minutes=minutes)).isoformat()
+                add_punishment(inter.guild.id, member.id, inter.author.id, "timeout", reason, expires_at)
+                await self._log(inter, member, "timeout", reason)
+                await inter.response.send_message(f"⏱️ {member.mention} получил timeout на {minutes} мин.", ephemeral=True)
+            elif self.action == "kick":
+                await member.kick(reason=reason)
+                await self._log(inter, member, "kick", reason)
+                await inter.response.send_message(f"👢 {member.mention} исключён.", ephemeral=True)
+            elif self.action == "ban":
+                await member.ban(reason=reason)
+                await self._log(inter, member, "ban", reason)
+                await inter.response.send_message(f"🔨 {member.mention} заблокирован.", ephemeral=True)
+        except ValueError:
+            await inter.response.send_message("Некорректный ID или срок timeout.", ephemeral=True)
+        except disnake.Forbidden:
+            await inter.response.send_message("У бота недостаточно Discord-прав для этого действия.", ephemeral=True)
+
+    async def _warn(self, inter: disnake.ModalInteraction, member: disnake.Member, reason: str) -> None:
+        await self._log(inter, member, "warn", reason)
+        await inter.response.send_message(f"⚠️ {member.mention} получил предупреждение.", ephemeral=True)
+
+    async def _log(self, inter: disnake.ModalInteraction, member: disnake.Member, action: str, reason: str) -> None:
+        add_punishment(inter.guild.id, member.id, inter.author.id, action, reason)
+        channel_id = BotConfig.get_logging_channel(inter.guild.id, "moderation_logs")
+        channel = inter.guild.get_channel(channel_id) if channel_id else None
+        if isinstance(channel, disnake.Thread):
+            await channel.send(
+                f"🛡️ **{action.upper()}**\n"
+                f"Пользователь: {member.mention} (`{member.id}`)\n"
+                f"Модератор: {inter.author.mention}\n"
+                f"Причина: {reason}"
+            )
+
+
 class ModerationView(disnake.ui.View):
     def __init__(self) -> None:
         super().__init__(timeout=None)
 
-    @disnake.ui.button(label="👤 Пользователь", style=disnake.ButtonStyle.secondary, custom_id="moderation:user")
+    @disnake.ui.button(label="⚠️ Warn", style=disnake.ButtonStyle.secondary, custom_id="moderation:user")
     async def user(self, button: disnake.ui.Button, interaction: disnake.MessageInteraction) -> None:
-        await interaction.response.send_message("Используйте `/history` для просмотра истории пользователя.", ephemeral=True)
+        await interaction.response.send_modal(ModerationTargetModal("warn"))
 
-    @disnake.ui.button(label="📋 Наказания", style=disnake.ButtonStyle.secondary, custom_id="moderation:punishments")
+    @disnake.ui.button(label="⏱️ Timeout", style=disnake.ButtonStyle.secondary, custom_id="moderation:punishments")
     async def punishments(self, button: disnake.ui.Button, interaction: disnake.MessageInteraction) -> None:
-        await interaction.response.send_message("Наказания доступны через `/warn`, `/timeout`, `/kick` и `/ban`.", ephemeral=True)
+        await interaction.response.send_modal(ModerationTargetModal("timeout"))
 
-    @disnake.ui.button(label="🎫 Тикеты", style=disnake.ButtonStyle.secondary, custom_id="moderation:tickets")
-    async def tickets(self, button: disnake.ui.Button, interaction: disnake.MessageInteraction) -> None:
-        channel_id = BotConfig.CHANNELS.get("tickets")
-        channel = interaction.guild.get_channel(channel_id) if interaction.guild and channel_id else None
-        await interaction.response.send_message(channel.mention if channel else "Канал тикетов не найден.", ephemeral=True)
+    @disnake.ui.button(label="👢 Kick", style=disnake.ButtonStyle.secondary, custom_id="moderation:kick")
+    async def kick(self, button: disnake.ui.Button, interaction: disnake.MessageInteraction) -> None:
+        await interaction.response.send_modal(ModerationTargetModal("kick"))
 
-    @disnake.ui.button(label="📊 Статистика", style=disnake.ButtonStyle.secondary, custom_id="moderation:stats")
-    async def stats(self, button: disnake.ui.Button, interaction: disnake.MessageInteraction) -> None:
-        await interaction.response.send_message("Статистика модерации будет расширена вместе с системой профилей.", ephemeral=True)
+    @disnake.ui.button(label="🔨 Ban", style=disnake.ButtonStyle.danger, custom_id="moderation:ban")
+    async def ban(self, button: disnake.ui.Button, interaction: disnake.MessageInteraction) -> None:
+        await interaction.response.send_modal(ModerationTargetModal("ban"))
+
+    @disnake.ui.button(label="📋 История", style=disnake.ButtonStyle.secondary, custom_id="moderation:history")
+    async def history(self, button: disnake.ui.Button, interaction: disnake.MessageInteraction) -> None:
+        await interaction.response.send_message("Используйте `/history @пользователь` для просмотра истории наказаний.", ephemeral=True)
 
 
 def setup(bot: commands.Bot) -> None:
