@@ -56,6 +56,7 @@ class AdminPanel(commands.Cog):
         self.bot = bot
         init_settings()
         bot.add_view(AdminPanelView(self))
+        bot.add_view(AdminShopView(self))
 
     @staticmethod
     def _is_admin(member: disnake.Member) -> bool:
@@ -94,24 +95,15 @@ class AdminPanel(commands.Cog):
             return
         await interaction.response.send_message(embed=self._settings_embed(interaction.guild.id, TICKET_INFO, "🎫 Тикеты"), view=AdminSettingsView(self, TICKET_INFO), ephemeral=True)
 
-    @staticmethod
-    def _settings_embed(guild_id: int, info: dict[str, str], title: str) -> disnake.Embed:
-        settings = get_all(guild_id)
-        lines = []
-        for key, description in info.items():
-            value = settings[key]
-            if key.endswith("enabled"):
-                value = "включено" if int(value) else "выключено"
-            elif key.endswith("role") and int(value):
-                value = f"<@&{value}>"
-            elif key.endswith("role"):
-                value = "config.py"
-            elif key.endswith("channel") and int(value):
-                value = f"<#{value}>"
-            elif key.endswith("channel"):
-                value = "config.py"
-            lines.append(f"**{description}:** `{value}`")
-        return disnake.Embed(title=title, description="\n".join(lines), color=disnake.Color.blurple())
+    async def show_shop(self, interaction: disnake.MessageInteraction) -> None:
+        if not await self._allowed(interaction):
+            return
+        from databases.shop import get_all_items
+        items = get_all_items(interaction.guild.id)
+        lines = [f"**#{item['id']}** — {item['name']} | {item['price']} 🪙 | {'включён' if item['enabled'] else 'выключен'}" for item in items]
+        description = "\n".join(lines) if lines else "Товаров пока нет."
+        embed = disnake.Embed(title="🛒 Управление магазином", description=description, color=disnake.Color.blurple())
+        await interaction.response.send_message(embed=embed, view=AdminShopView(self), ephemeral=True)
 
     async def show_logging(self, interaction: disnake.MessageInteraction) -> None:
         if not await self._allowed(interaction):
@@ -202,9 +194,47 @@ class AdminPanelView(disnake.ui.View):
     async def tickets(self, button, interaction):
         await self.cog.show_tickets(interaction)
 
+    @disnake.ui.button(label="🛒 Магазин", style=disnake.ButtonStyle.success, custom_id="admin:shop")
+    async def shop(self, button, interaction):
+        await self.cog.show_shop(interaction)
+
     @disnake.ui.button(label="📋 Логирование", style=disnake.ButtonStyle.secondary, custom_id="admin:logging")
     async def logging(self, button, interaction):
         await self.cog.show_logging(interaction)
+
+
+class AdminShopView(disnake.ui.View):
+    def __init__(self, cog):
+        super().__init__(timeout=None)
+        self.cog = cog
+
+    @disnake.ui.button(label="➕ Создать товар", style=disnake.ButtonStyle.success, custom_id="admin:shop:create")
+    async def create(self, button, interaction):
+        from cogs.shop import ShopItemModal
+        if not await self.cog._allowed(interaction):
+            return
+        await interaction.response.send_modal(ShopItemModal(self.cog.bot.get_cog("Shop"), mode="create"))
+
+    @disnake.ui.button(label="✏️ Изменить товар", style=disnake.ButtonStyle.primary, custom_id="admin:shop:edit")
+    async def edit(self, button, interaction):
+        from cogs.shop import ShopItemModal
+        if not await self.cog._allowed(interaction):
+            return
+        await interaction.response.send_modal(ShopItemModal(self.cog.bot.get_cog("Shop"), mode="edit"))
+
+    @disnake.ui.button(label="🔄 Вкл/выкл", style=disnake.ButtonStyle.secondary, custom_id="admin:shop:toggle")
+    async def toggle(self, button, interaction):
+        from cogs.shop import ShopToggleModal
+        if not await self.cog._allowed(interaction):
+            return
+        await interaction.response.send_modal(ShopToggleModal(self.cog.bot.get_cog("Shop")))
+
+    @disnake.ui.button(label="🗑️ Удалить", style=disnake.ButtonStyle.danger, custom_id="admin:shop:delete")
+    async def remove(self, button, interaction):
+        from cogs.shop import ShopDeleteModal
+        if not await self.cog._allowed(interaction):
+            return
+        await interaction.response.send_modal(ShopDeleteModal(self.cog.bot.get_cog("Shop")))
 
 
 class AdminSettingsView(disnake.ui.View):
