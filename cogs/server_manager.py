@@ -62,15 +62,31 @@ class ServerManager(commands.Cog):
             category_key = category_key_from_name(category.name)
             if category_key is None:
                 continue
+
             try:
-                await self._apply_category_permissions(category)
+                applied = await self._apply_category_permissions(category)
                 categories_fixed += 1
+                logger.info(
+                    "Синхронизирована категория %s (%s): применено прав=%s",
+                    category.name,
+                    category.id,
+                    applied,
+                )
+
                 for channel in category.channels:
                     try:
                         await apply_channel_overwrites(channel, category_key)
                         channels_fixed += 1
+                        logger.info(
+                            "Синхронизирован канал #%s (%s), категория=%s",
+                            channel.name,
+                            channel.id,
+                            category.name,
+                        )
                     except (disnake.Forbidden, disnake.HTTPException) as exc:
-                        logger.warning("Failed to sync channel %s: %s", channel.id, exc)
+                        logger.warning("Не удалось синхронизировать канал %s: %s", channel.id, exc)
+            except (disnake.Forbidden, disnake.HTTPException) as exc:
+                logger.warning("Не удалось синхронизировать категорию %s: %s", category.id, exc)
 
         managed_category_names = set(CATEGORY_NAMES.values())
         for channel in guild.channels:
@@ -79,9 +95,9 @@ class ServerManager(commands.Cog):
 
         await inter.followup.send(
             "✅ Синхронизация завершена.\n\n"
-            f"Категорий проверено: {categories_fixed}\n"
-            f"Каналов проверено: {channels_fixed}\n"
-            f"Каналов вне управляемых категорий: {unmanaged}\n\n"
+            f"Категорий проверено: **{categories_fixed}**\n"
+            f"Каналов проверено: **{channels_fixed}**\n"
+            f"Каналов вне управляемых категорий: **{unmanaged}**\n\n"
             "Новые ручные каналы внутри управляемой категории получают права автоматически.",
             ephemeral=True,
         )
@@ -147,10 +163,17 @@ class ServerManager(commands.Cog):
                 )
             await apply_channel_overwrites(channel, category_key)
         except (disnake.Forbidden, disnake.HTTPException) as exc:
-            logger.exception("Failed to create channel")
+            logger.exception("Не удалось создать канал")
             await inter.response.send_message(f"Не удалось создать канал: {exc}", ephemeral=True)
             return
 
+        logger.info(
+            "Создан управляемый канал #%s (%s), категория=%s, voice=%s",
+            channel.name,
+            channel.id,
+            target_category.name,
+            voice,
+        )
         await inter.response.send_message(
             f"✅ Создан канал {channel.mention} в категории **{target_category.name}**.\n"
             "Права применены автоматически.",
