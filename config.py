@@ -201,6 +201,31 @@ class BotConfig:
         BotConfig.SYSTEM_LOGS_CHANNEL = BotConfig.CHANNEL_LOGS["system_logs"]
 
     @staticmethod
+    def set_logging_channels(guild_id: int, forum_id: int, thread_ids: dict[str, int]) -> None:
+        data = _load_logging_channels()
+        data[str(guild_id)] = {
+            "forum_id": forum_id,
+            **thread_ids,
+        }
+        BotConfig.LOGGING_CHANNELS_FILE.write_text(
+            json.dumps(data, ensure_ascii=False, indent=2),
+            encoding="utf-8",
+        )
+
+        current_guild_id = BotConfig.TEST_GUILD_ID if BotConfig.ENVIRONMENT == "test" else BotConfig.MAIN_GUILD_ID
+        if guild_id == current_guild_id:
+            BotConfig.CHANNEL_LOGS = {
+                "chat_logs": thread_ids.get("chat_logs"),
+                "guild_logs": thread_ids.get("guild_logs"),
+                "moderation_logs": thread_ids.get("moderation_logs"),
+                "system_logs": thread_ids.get("system_logs"),
+            }
+            BotConfig.CHAT_LOGS_CHANNEL = BotConfig.CHANNEL_LOGS["chat_logs"]
+            BotConfig.GUILD_LOGS_CHANNEL = BotConfig.CHANNEL_LOGS["guild_logs"]
+            BotConfig.MODERATION_LOGS_CHANNEL = BotConfig.CHANNEL_LOGS["moderation_logs"]
+            BotConfig.SYSTEM_LOGS_CHANNEL = BotConfig.CHANNEL_LOGS["system_logs"]
+
+    @staticmethod
     def set_logging_channel(guild_id: int, log_type: str, channel_id: int) -> None:
         data = _load_logging_channels()
         guild_data = data.setdefault(str(guild_id), {})
