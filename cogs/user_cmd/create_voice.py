@@ -15,6 +15,7 @@ from databases.voice_rooms import (
     get_main_room,
     get_room,
     get_room_by_channel,
+    get_room_members,
     get_rooms_for_user,
     init_voice_rooms,
     is_room_manager,
@@ -206,7 +207,7 @@ class RoomControlView(disnake.ui.View):
             await interaction.response.send_modal(RoomModal(self.cog, "add_member", room["owner_id"]))
 
     @disnake.ui.button(label="➖ Убрать доступ", style=disnake.ButtonStyle.danger, custom_id="voice_room:remove_member")
-    async def remove_access(self, button: disnake.ui.Button, interaction: disnake.MessageInteraction) -> None:
+    async def remove_access(self, button: disnake.Button, interaction: disnake.MessageInteraction) -> None:
         room = await self._check_manager(interaction)
         if room:
             await interaction.response.send_modal(RoomModal(self.cog, "remove_member", room["owner_id"]))
@@ -249,7 +250,17 @@ class RoomControlView(disnake.ui.View):
             if not is_room_manager(guild_id, owner_id, approval_interaction.author.id):
                 await approval_interaction.response.send_message("Только владелец или совладелец может подтвердить запрос.", ephemeral=True)
                 return
-            if not any(user.id == requester_id for user in interaction.guild.members):
+            if guild_id not in [guild.id for guild in self.cog.bot.guilds]:
+                await approval_interaction.response.edit_message(content="❌ Сервер больше недоступен боту.", view=None)
+                approval_view.stop()
+                return
+            requester = interaction.guild.get_member(requester_id)
+            if requester is None:
+                try:
+                    requester = await interaction.guild.fetch_member(requester_id)
+                except disnake.HTTPException:
+                    requester = None
+            if requester is None:
                 await approval_interaction.response.edit_message(content="❌ Пользователь больше не находится на сервере.", view=None)
                 approval_view.stop()
                 return
@@ -261,12 +272,10 @@ class RoomControlView(disnake.ui.View):
                 content=f"✅ {requester_mention} получил разрешение сделать комнату **{current_room['name']}** основной.",
                 view=approval_view,
             )
-            requester = interaction.guild.get_member(requester_id)
-            if requester:
-                try:
-                    await requester.send(f"⭐ Вам разрешили сделать комнату **{current_room['name']}** основной.")
-                except disnake.HTTPException:
-                    pass
+            try:
+                await requester.send(f"⭐ Вам разрешили сделать комнату **{current_room['name']}** основной.")
+            except disnake.HTTPException:
+                pass
             approval_view.stop()
 
         async def deny_callback(approval_interaction: disnake.MessageInteraction) -> None:
@@ -352,6 +361,13 @@ class CreateVoice(commands.Cog):
                 reason="Voice room control access updated",
             )
 
+    async def _restore_room_permissions(self, guild: disnake.Guild, room) -> None:
+        for row in get_room_members(guild.id, room["owner_id"]):
+            member = guild.get_member(int(row["user_id"]))
+            if member is None:
+                continue
+            await self._apply_room_member_permissions(guild, room, member, bool(row["is_coowner"]))
+
     async def _create_room(self, member: disnake.Member, category: disnake.CategoryChannel, room=None):
         if room:
             name = room["name"]
@@ -412,10 +428,7 @@ class CreateVoice(commands.Cog):
             bool(room["friends_only"]) if room else False,
         )
         room = get_room(member.guild.id, owner_id)
-        for user_id in get_coowners(member.guild.id, owner_id):
-            coowner = member.guild.get_member(user_id)
-            if coowner:
-                await self._apply_room_member_permissions(member.guild, room, coowner, coowner=True)
+        await self._restore_room_permissions(member.guild, room)
 
         await control_channel.send(
             embed=disnake.Embed(
