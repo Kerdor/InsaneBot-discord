@@ -5,17 +5,18 @@ import logging
 import disnake
 from disnake.ext import commands
 
-from databases.economy import claim_daily, get_inventory, get_user, init_economy
+from databases.economy import buy_item, claim_daily, get_inventory, get_shop_items, get_user, init_economy, seed_shop_items
 
 logger = logging.getLogger(__name__)
 
 
 class Economy(commands.Cog):
-    """Basic persistent economy, daily rewards and private inventory."""
+    """Basic persistent economy, daily rewards, inventory and shop."""
 
     def __init__(self, bot: commands.Bot) -> None:
         self.bot = bot
         init_economy()
+        seed_shop_items()
 
     @commands.slash_command(name="balance", description="Показать баланс")
     async def balance(self, inter: disnake.ApplicationCommandInteraction, member: disnake.Member | None = None) -> None:
@@ -51,6 +52,32 @@ class Economy(commands.Cog):
         lines = [f"• `{row['item_id']}` × **{row['quantity']}**" for row in rows]
         embed = disnake.Embed(title="🎒 Инвентарь", description="\n".join(lines), color=disnake.Color.blurple())
         await inter.response.send_message(embed=embed, ephemeral=True)
+
+    @commands.slash_command(name="shop", description="Показать магазин")
+    async def shop(self, inter: disnake.ApplicationCommandInteraction) -> None:
+        rows = get_shop_items()
+        if not rows:
+            await inter.response.send_message("🛒 Магазин пуст.", ephemeral=True)
+            return
+        lines = [
+            f"`{row['item_id']}` — **{row['name']}** — **{row['price']}** монет\n{row['description']}"
+            for row in rows
+        ]
+        embed = disnake.Embed(title="🛒 Магазин", description="\n\n".join(lines), color=disnake.Color.green())
+        embed.set_footer(text="Для покупки: /buy <item_id> [количество]")
+        await inter.response.send_message(embed=embed, ephemeral=True)
+
+    @commands.slash_command(name="buy", description="Купить предмет в магазине")
+    async def buy(
+        self,
+        inter: disnake.ApplicationCommandInteraction,
+        item_id: str,
+        quantity: int = 1,
+    ) -> None:
+        success, message, row = buy_item(inter.guild.id, inter.author.id, item_id.strip().lower(), quantity)
+        if success:
+            message += f" Баланс: **{row['balance']}**."
+        await inter.response.send_message(message, ephemeral=True)
 
 
 def setup(bot: commands.Bot) -> None:
