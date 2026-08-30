@@ -1,7 +1,6 @@
 from __future__ import annotations
 
 import sqlite3
-from pathlib import Path
 
 from config import BotConfig
 
@@ -43,6 +42,16 @@ def init_voice_rooms() -> None:
                 FOREIGN KEY (guild_id, owner_id)
                     REFERENCES voice_rooms(guild_id, owner_id)
                     ON DELETE CASCADE
+            )
+            """
+        )
+        connection.execute(
+            """
+            CREATE TABLE IF NOT EXISTS voice_room_preferences (
+                guild_id INTEGER NOT NULL,
+                user_id INTEGER NOT NULL,
+                owner_id INTEGER NOT NULL,
+                PRIMARY KEY (guild_id, user_id)
             )
             """
         )
@@ -163,16 +172,6 @@ def set_main_room(guild_id: int, user_id: int, owner_id: int) -> None:
     with _connect() as connection:
         connection.execute(
             """
-            CREATE TABLE IF NOT EXISTS voice_room_preferences (
-                guild_id INTEGER NOT NULL,
-                user_id INTEGER NOT NULL,
-                owner_id INTEGER NOT NULL,
-                PRIMARY KEY (guild_id, user_id)
-            )
-            """
-        )
-        connection.execute(
-            """
             INSERT INTO voice_room_preferences (guild_id, user_id, owner_id)
             VALUES (?, ?, ?)
             ON CONFLICT(guild_id, user_id) DO UPDATE SET owner_id = excluded.owner_id
@@ -184,16 +183,6 @@ def set_main_room(guild_id: int, user_id: int, owner_id: int) -> None:
 
 def get_main_room(guild_id: int, user_id: int) -> sqlite3.Row | None:
     with _connect() as connection:
-        connection.execute(
-            """
-            CREATE TABLE IF NOT EXISTS voice_room_preferences (
-                guild_id INTEGER NOT NULL,
-                user_id INTEGER NOT NULL,
-                owner_id INTEGER NOT NULL,
-                PRIMARY KEY (guild_id, user_id)
-            )
-            """
-        )
         return connection.execute(
             """
             SELECT vr.*
