@@ -119,6 +119,8 @@ class BotConfig:
         "guild_logs": None,
         "moderation_logs": None,
         "system_logs": None,
+        "voice_logs": None,
+        "reaction_logs": None,
     }
 
     CHAT_LOGS_CHANNEL = None
@@ -194,6 +196,8 @@ class BotConfig:
             "guild_logs": channels.get("guild_logs"),
             "moderation_logs": channels.get("moderation_logs"),
             "system_logs": channels.get("system_logs"),
+            "voice_logs": channels.get("voice_logs"),
+            "reaction_logs": channels.get("reaction_logs"),
         }
         BotConfig.CHAT_LOGS_CHANNEL = BotConfig.CHANNEL_LOGS["chat_logs"]
         BotConfig.GUILD_LOGS_CHANNEL = BotConfig.CHANNEL_LOGS["guild_logs"]
@@ -219,6 +223,8 @@ class BotConfig:
                 "guild_logs": thread_ids.get("guild_logs"),
                 "moderation_logs": thread_ids.get("moderation_logs"),
                 "system_logs": thread_ids.get("system_logs"),
+                "voice_logs": thread_ids.get("voice_logs"),
+                "reaction_logs": thread_ids.get("reaction_logs"),
             }
             BotConfig.CHAT_LOGS_CHANNEL = BotConfig.CHANNEL_LOGS["chat_logs"]
             BotConfig.GUILD_LOGS_CHANNEL = BotConfig.CHANNEL_LOGS["guild_logs"]
@@ -244,7 +250,8 @@ class BotConfig:
                 "moderation_logs": "MODERATION_LOGS_CHANNEL",
                 "system_logs": "SYSTEM_LOGS_CHANNEL",
             }
-            setattr(BotConfig, attributes[log_type], channel_id)
+            if log_type in attributes:
+                setattr(BotConfig, attributes[log_type], channel_id)
 
     @staticmethod
     def get_logging_channel(guild_id: int | None, log_type: str) -> int | None:
