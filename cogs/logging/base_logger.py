@@ -22,9 +22,6 @@ class BaseLogger:
 
     async def get_log_channel(self, guild: disnake.Guild) -> Optional[disnake.abc.Messageable]:
         """Get the configured log channel for this guild."""
-        if not self.log_type:
-            return None
-
         from config import BotConfig
 
         channel_id = {
@@ -32,7 +29,6 @@ class BaseLogger:
             "guild": BotConfig.GUILD_LOGS_CHANNEL,
             "moderation": BotConfig.MODERATION_LOGS_CHANNEL,
         }.get(self.log_type)
-
         if not channel_id:
             return None
 
@@ -57,8 +53,10 @@ class BaseLogger:
         self._log_channels[guild.id] = channel
         return channel
 
+    def invalidate_log_channel(self, guild_id: int) -> None:
+        self._log_channels.pop(guild_id, None)
+
     def _get_footer(self) -> dict:
-        """Get footer for embed with bot info."""
         if self.bot.user:
             return {
                 "text": f"{self.bot.user.name} • Логирование",
@@ -75,7 +73,6 @@ class BaseLogger:
         image: Optional[str] = None,
         **kwargs,
     ) -> disnake.Embed:
-        """Create a common log embed."""
         embed = disnake.Embed(
             title=title,
             description=description,
@@ -94,7 +91,7 @@ class BaseLogger:
             embed.set_author(name=author_name, icon_url=author_icon)
 
         if kwargs.get("moderator"):
-            embed.add_field(name="Модератор", value=kwargs["moderator"], inline=True)
+            embed.add_field(name="Модератор", value=str(kwargs["moderator"]), inline=True)
         if kwargs.get("reason"):
             embed.add_field(name="Причина", value=str(kwargs["reason"])[:1024], inline=False)
         if kwargs.get("duration"):
@@ -126,12 +123,8 @@ class BaseLogger:
         embed.set_footer(**self._get_footer())
         return embed
 
-    async def log_to_channel(
-        self,
-        guild: disnake.Guild,
-        embed: disnake.Embed,
-    ) -> None:
-        """Send the log embed to the appropriate channel."""
+    async def log_to_channel(self, guild: disnake.Guild, embed: disnake.Embed) -> None:
+        """Send an embed and invalidate stale channel cache on failure."""
         log_channel = await self.get_log_channel(guild)
         if not log_channel:
             return
@@ -139,6 +132,9 @@ class BaseLogger:
         try:
             await log_channel.send(embed=embed)
         except disnake.Forbidden:
+            self.invalidate_log_channel(guild.id)
             logger.error("No permission to send logs in guild %s", guild.id)
         except disnake.HTTPException as exc:
+            if getattr(exc, "status", None) in {403, 404}:
+                self.invalidate_log_channel(guild.id)
             logger.error("Failed to send log in guild %s: %s", guild.id, exc)
