@@ -26,16 +26,50 @@ def get_items(guild_id: int) -> list[sqlite3.Row]:
         return connection.execute("SELECT * FROM shop_items WHERE guild_id = ? AND enabled = 1 ORDER BY id", (guild_id,)).fetchall()
 
 
-def get_item(guild_id: int, item_id: int) -> sqlite3.Row | None:
+def get_all_items(guild_id: int) -> list[sqlite3.Row]:
     with _connect() as connection:
-        return connection.execute("SELECT * FROM shop_items WHERE guild_id = ? AND id = ? AND enabled = 1", (guild_id, item_id)).fetchone()
+        return connection.execute("SELECT * FROM shop_items WHERE guild_id = ? ORDER BY id", (guild_id,)).fetchall()
+
+
+def get_item(guild_id: int, item_id: int, include_disabled: bool = False) -> sqlite3.Row | None:
+    query = "SELECT * FROM shop_items WHERE guild_id = ? AND id = ?"
+    params = [guild_id, item_id]
+    if not include_disabled:
+        query += " AND enabled = 1"
+    with _connect() as connection:
+        return connection.execute(query, params).fetchone()
 
 
 def create_item(guild_id: int, name: str, description: str, price: int, role_id: int | None = None) -> int:
+    if price < 0:
+        raise ValueError("price must be non-negative")
     with _connect() as connection:
         cursor = connection.execute("INSERT INTO shop_items (guild_id, name, description, price, role_id) VALUES (?, ?, ?, ?, ?)", (guild_id, name, description, price, role_id))
         connection.commit()
         return int(cursor.lastrowid)
+
+
+def update_item(guild_id: int, item_id: int, name: str, description: str, price: int, role_id: int | None) -> bool:
+    if price < 0:
+        raise ValueError("price must be non-negative")
+    with _connect() as connection:
+        cursor = connection.execute("UPDATE shop_items SET name = ?, description = ?, price = ?, role_id = ? WHERE guild_id = ? AND id = ?", (name, description, price, role_id, guild_id, item_id))
+        connection.commit()
+        return cursor.rowcount > 0
+
+
+def set_item_enabled(guild_id: int, item_id: int, enabled: bool) -> bool:
+    with _connect() as connection:
+        cursor = connection.execute("UPDATE shop_items SET enabled = ? WHERE guild_id = ? AND id = ?", (int(enabled), guild_id, item_id))
+        connection.commit()
+        return cursor.rowcount > 0
+
+
+def delete_item(guild_id: int, item_id: int) -> bool:
+    with _connect() as connection:
+        cursor = connection.execute("DELETE FROM shop_items WHERE guild_id = ? AND id = ?", (guild_id, item_id))
+        connection.commit()
+        return cursor.rowcount > 0
 
 
 def purchase_item(guild_id: int, user_id: int, item_id: int) -> tuple[bool, str, sqlite3.Row | None]:
