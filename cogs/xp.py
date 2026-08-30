@@ -8,6 +8,7 @@ from datetime import datetime, timezone
 import disnake
 from disnake.ext import commands
 
+from databases.voice_stats import get_session
 from databases.xp import add_message_xp, add_voice_xp, get_ranking, get_user, init_xp, set_level
 
 logger = logging.getLogger(__name__)
@@ -38,7 +39,7 @@ class XP(commands.Cog):
     def _now() -> datetime:
         return datetime.now(timezone.utc)
 
-    async def _apply_level(self, guild: disnake.Guild, user_id: int, row: disnake.utils.MISSING | object) -> bool:
+    async def _apply_level(self, guild: disnake.Guild, user_id: int, row: object) -> bool:
         xp = int(row["xp"])
         old_level = int(row["level"])
         new_level = self._level_for_xp(xp)
@@ -53,6 +54,24 @@ class XP(commands.Cog):
                 pass
         logger.info("[XP] %s reached level %s in guild %s", user_id, new_level, guild.id)
         return True
+
+    @commands.Cog.listener()
+    async def on_ready(self) -> None:
+        """Restore voice XP timers from the persistent voice session database."""
+        now = self._now()
+        for guild in self.bot.guilds:
+            for channel in guild.voice_channels:
+                if not self._counted_voice(channel, guild):
+                    continue
+                for member in channel.members:
+                    if member.bot:
+                        continue
+                    session = get_session(guild.id, member.id)
+                    if session:
+                        self._voice_started[(guild.id, member.id)] = datetime.fromisoformat(session["joined_at"])
+                    else:
+                        self._voice_started[(guild.id, member.id)] = now
+        logger.info("[XP] Active voice sessions recovered")
 
     @commands.Cog.listener()
     async def on_message(self, message: disnake.Message) -> None:
