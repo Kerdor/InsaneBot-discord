@@ -15,11 +15,15 @@ intents = disnake.Intents.default()
 intents.members = True
 intents.message_content = True
 
+command_sync_flags = commands.CommandSyncFlags.default()
+command_sync_flags.sync_commands_debug = True
+
 bot = commands.Bot(
     command_prefix=BotConfig.PREFIX,
     help_command=None,
     intents=intents,
     test_guilds=BotConfig.TEST_GUILDS,
+    command_sync_flags=command_sync_flags,
 )
 
 
@@ -83,6 +87,18 @@ async def on_ready() -> None:
             print(f"  [{label}] НЕ НАЙДЕН (ID: {guild_id})")
 
     print(f"Фактически подключённых серверов: {len(bot.guilds)}")
+
+    if BotConfig.ENVIRONMENT == "test" and BotConfig.TEST_GUILD_ID:
+        try:
+            commands_in_guild = await bot.fetch_guild_commands(BotConfig.TEST_GUILD_ID)
+            command_names = sorted(command.name for command in commands_in_guild)
+            print(
+                "Slash-команды TEST: "
+                + (", ".join(command_names) if command_names else "НЕТ")
+            )
+        except (disnake.Forbidden, disnake.HTTPException) as exc:
+            logger.error("Не удалось получить slash-команды TEST: %s", exc)
+
     print("=" * 50 + "\n")
 
 
