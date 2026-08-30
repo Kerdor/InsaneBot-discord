@@ -1,13 +1,13 @@
 from __future__ import annotations
 
 import logging
-import random
-from typing import Iterable, List, Optional, Set
+import secrets
+from typing import Iterable
 
 import disnake
 from disnake.ext import commands
 
-import config
+from config import BotConfig
 
 logger = logging.getLogger(__name__)
 
@@ -15,7 +15,7 @@ CODE_LENGTH = 6
 
 
 def _iter_game_role_ids() -> Iterable[int]:
-    return config.iter_role_ids(config.GAME_ROLES)
+    return BotConfig.iter_role_ids(BotConfig.GAME_ROLES)
 
 
 class VerifyModal(disnake.ui.Modal):
@@ -33,7 +33,6 @@ class VerifyModal(disnake.ui.Modal):
 
     async def callback(self, inter: disnake.ModalInteraction) -> None:  # type: ignore[override]
         submitted = inter.text_values.get("code", "").strip()
-
         try:
             submitted_code = int(submitted)
         except ValueError:
@@ -48,7 +47,7 @@ class VerifyModal(disnake.ui.Modal):
             await inter.response.send_message("Эта команда доступна только на сервере.", ephemeral=True)
             return
 
-        role_id = config.OTHER_ROLES.get("Not verified")
+        role_id = BotConfig.OTHER_ROLES.get("Not verified")
         role = inter.guild.get_role(role_id) if role_id else None
         if role:
             try:
@@ -71,7 +70,7 @@ class VerifyView(disnake.ui.View):
 
     @disnake.ui.button(label="Верификация", style=disnake.ButtonStyle.gray, custom_id="button_verify")
     async def button_verify(self, _: disnake.ui.Button, inter: disnake.Interaction) -> None:  # type: ignore[override]
-        code = random.randint(10 ** (CODE_LENGTH - 1), 10**CODE_LENGTH - 1)
+        code = secrets.randbelow(900_000) + 100_000
         await inter.response.send_modal(VerifyModal(code))
 
 
@@ -80,18 +79,17 @@ class Verify(commands.Cog):
         self.bot = bot
 
     async def cog_load(self) -> None:
-        """Вызывается после загрузки cog, когда event loop уже запущен."""
         self.bot.add_view(VerifyView())
 
     @commands.slash_command(name="verify", description="Отправить сообщение с кнопкой верификации")
     @commands.has_any_role(
-        config.MODERATION_ROLES["owner"],
-        config.MODERATION_ROLES["administrator"],
-        config.MODERATION_ROLES["moderator"],
+        BotConfig.MODERATION_ROLES["owner"],
+        BotConfig.MODERATION_ROLES["administrator"],
+        BotConfig.MODERATION_ROLES["moderator"],
     )
     async def verify(self, inter: disnake.ApplicationCommandInteraction) -> None:
         try:
-            rules_path = config.ensure_asset(config.ASSETS["rules_image"])
+            rules_path = BotConfig.ensure_asset(BotConfig.ASSETS["rules_image"])
             file = disnake.File(rules_path, filename=rules_path.name)
             embed = disnake.Embed(color=0x2F3136)
             embed.set_image(url=f"attachment://{rules_path.name}")
@@ -105,7 +103,7 @@ class Verify(commands.Cog):
 
     @commands.Cog.listener()
     async def on_member_join(self, member: disnake.Member) -> None:
-        role_id = config.OTHER_ROLES.get("Not verified")
+        role_id = BotConfig.OTHER_ROLES.get("Not verified")
         role = member.guild.get_role(role_id) if role_id else None
         if role:
             try:
@@ -120,29 +118,27 @@ class SelectGames(disnake.ui.Select):
     def __init__(self) -> None:
         super().__init__(
             placeholder="Выберите игры",
-            options=list(config.GAME_ROLE_OPTIONS) if config.GAME_ROLE_OPTIONS else [],
+            options=list(BotConfig.GAME_ROLE_OPTIONS),
             custom_id="select_games",
             min_values=0,
             max_values=3,
         )
 
-    async def callback(self, interaction: disnake.MessageInteraction) -> None:  
+    async def callback(self, interaction: disnake.MessageInteraction) -> None:
         await interaction.response.defer(ephemeral=True)
-
         if not interaction.guild:
             await interaction.followup.send("Эта команда доступна только на сервере.", ephemeral=True)
             return
 
         try:
-            chosen_roles: Set[int] = {int(value) for value in interaction.values}
+            chosen_roles = {int(value) for value in interaction.values}
         except ValueError:
             await interaction.followup.send("Произошла ошибка при обработке выбора ролей.", ephemeral=True)
             return
 
-        all_roles: Set[int] = set(_iter_game_role_ids())
-
-        roles_to_remove: List[disnake.Role] = []
-        roles_to_add: List[disnake.Role] = []
+        all_roles = set(_iter_game_role_ids())
+        roles_to_remove: list[disnake.Role] = []
+        roles_to_add: list[disnake.Role] = []
 
         for role_id in all_roles:
             role = interaction.guild.get_role(role_id)
@@ -152,9 +148,8 @@ class SelectGames(disnake.ui.Select):
             if role_id in chosen_roles:
                 if role not in interaction.author.roles:
                     roles_to_add.append(role)
-            else:
-                if role in interaction.author.roles:
-                    roles_to_remove.append(role)
+            elif role in interaction.author.roles:
+                roles_to_remove.append(role)
 
         if roles_to_remove:
             try:
@@ -191,26 +186,26 @@ class GameRoles(commands.Cog):
     def __init__(self, bot: commands.Bot) -> None:
         self.bot = bot
 
-    async def cog_load(self) -> None:  
+    async def cog_load(self) -> None:
         self.bot.add_view(GameRoleView())
 
     @commands.slash_command(name="games", description="Отправить селектор игровых ролей")
     @commands.has_any_role(
-        config.MODERATION_ROLES["owner"],
-        config.MODERATION_ROLES["administrator"],
-        config.MODERATION_ROLES["moderator"],
+        BotConfig.MODERATION_ROLES["owner"],
+        BotConfig.MODERATION_ROLES["administrator"],
+        BotConfig.MODERATION_ROLES["moderator"],
     )
     async def games(self, inter: disnake.ApplicationCommandInteraction) -> None:
-        if not config.GAME_ROLE_OPTIONS:
+        if not BotConfig.GAME_ROLE_OPTIONS:
             await inter.response.send_message("Игровые роли не настроены.", ephemeral=True)
             return
 
-        view = GameRoleView()
         try:
-            await inter.response.send_message("Выберите свою игру", view=view, ephemeral=False)
+            await inter.response.send_message("Выберите свою игру", view=GameRoleView(), ephemeral=False)
         except disnake.HTTPException as e:
             logger.exception("Failed to send games selector: %s", e)
-            await inter.response.send_message("Произошла ошибка при отправке селектора ролей.", ephemeral=True)
+            if not inter.response.is_done():
+                await inter.response.send_message("Произошла ошибка при отправке селектора ролей.", ephemeral=True)
 
 
 def setup(bot: commands.Bot) -> None:
