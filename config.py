@@ -138,6 +138,7 @@ class BotConfig:
         "cogs.logging.guild_logs",
         "cogs.logging.moderation_logs",
         "cogs.logging.setup_logs",
+        "cogs.logging.voice_stats",
     )
 
     @staticmethod
