@@ -26,6 +26,8 @@ bot = commands.Bot(
     command_sync_flags=command_sync_flags,
 )
 
+_test_commands_synced = False
+
 
 def _load_extensions(bot_instance: commands.Bot) -> None:
     failed_extensions: list[str] = []
@@ -79,7 +81,11 @@ def _load_extensions(bot_instance: commands.Bot) -> None:
     print("[STARTUP] Все расширения успешно загружены")
     print("[STARTUP] Application commands в памяти:")
     for command in sorted(bot_instance.application_commands, key=lambda item: item.name):
-        print(f"  - {command.name} ({type(command).__name__})")
+        guild_ids = getattr(command, "guild_ids", None)
+        print(
+            f"  - {command.name} ({type(command).__name__})"
+            f" | guild_ids={guild_ids}"
+        )
 
 
 def _deployment_guilds() -> list[tuple[int, str]]:
@@ -91,6 +97,50 @@ def _deployment_guilds() -> list[tuple[int, str]]:
         guilds.append((BotConfig.TEST_GUILD_ID, "TEST"))
 
     return guilds
+
+
+async def _sync_test_commands() -> None:
+    global _test_commands_synced
+
+    if _test_commands_synced:
+        print("[SYNC] Явная синхронизация TEST уже выполнена в этом процессе")
+        return
+
+    guild_id = BotConfig.TEST_GUILD_ID
+    if BotConfig.ENVIRONMENT != "test" or not guild_id:
+        print("[SYNC] Явная синхронизация TEST пропущена: ENVIRONMENT не test")
+        return
+
+    print(f"[SYNC] Начинаем явную синхронизацию TEST: guild_id={guild_id}")
+
+    commands_to_sync = list(bot.application_commands)
+    print(f"[SYNC] Команд в памяти перед overwrite: {len(commands_to_sync)}")
+    for command in sorted(commands_to_sync, key=lambda item: item.name):
+        print(f"[SYNC]   -> {command.name} | guild_ids={getattr(command, 'guild_ids', None)}")
+
+    try:
+        registered = await bot.bulk_overwrite_guild_commands(
+            guild_id,
+            commands_to_sync,
+        )
+        _test_commands_synced = True
+
+        print(f"[SYNC] Discord вернул зарегистрированных команд: {len(registered)}")
+        for command in sorted(registered, key=lambda item: item.name):
+            print(
+                f"[SYNC]   <- {command.name} | guild_id={command.guild_id} | id={command.id}"
+            )
+
+        commands_in_guild = await bot.fetch_guild_commands(guild_id)
+        command_names = sorted(command.name for command in commands_in_guild)
+        print(
+            "[SYNC] После overwrite команды TEST: "
+            + (", ".join(command_names) if command_names else "НЕТ")
+        )
+    except Exception as exc:
+        logger.exception("Не удалось явно синхронизировать команды TEST")
+        print(f"[SYNC] КРИТИЧЕСКАЯ ОШИБКА синхронизации TEST: {type(exc).__name__}: {exc}")
+        raise
 
 
 @bot.event
@@ -115,23 +165,7 @@ async def on_ready() -> None:
 
     print(f"Фактически подключённых серверов: {len(bot.guilds)}")
 
-    if BotConfig.ENVIRONMENT == "test" and BotConfig.TEST_GUILD_ID:
-        try:
-            print(f"[SYNC] Проверяем команды TEST-сервера: {BotConfig.TEST_GUILD_ID}")
-            commands_in_guild = await bot.fetch_guild_commands(BotConfig.TEST_GUILD_ID)
-            command_names = sorted(command.name for command in commands_in_guild)
-            print(
-                "[SYNC] Slash-команды TEST на стороне Discord: "
-                + (", ".join(command_names) if command_names else "НЕТ")
-            )
-            for command in sorted(commands_in_guild, key=lambda item: item.name):
-                print(
-                    f"[SYNC]   {command.name} | guild_id={command.guild_id} | "
-                    f"id={command.id}"
-                )
-        except (disnake.Forbidden, disnake.HTTPException) as exc:
-            logger.error("Не удалось получить slash-команды TEST: %s", exc)
-            print(f"[SYNC] ОШИБКА получения команд TEST: {exc}")
+    await _sync_test_commands()
 
     print("=" * 50 + "\n")
 
