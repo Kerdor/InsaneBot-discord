@@ -134,6 +134,7 @@ class BotConfig:
         "cogs.server_manager",
         "cogs.verification",
         "cogs.user_cmd.create_voice",
+        "cogs.tickets",
         "cogs.logging.chat_logs",
         "cogs.logging.guild_logs",
         "cogs.logging.moderation_logs",
