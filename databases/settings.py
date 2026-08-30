@@ -26,6 +26,11 @@ DEFAULTS = {
     "moderation_administrator_role": 0,
     "moderation_moderator_role": 0,
     "moderation_helper_role": 0,
+    "tickets_enabled": 1,
+    "tickets_create_channel": 0,
+    "tickets_channel": 0,
+    "tickets_support_role": 0,
+    "tickets_transcript_enabled": 1,
 }
 
 
