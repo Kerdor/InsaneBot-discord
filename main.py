@@ -30,29 +30,56 @@ bot = commands.Bot(
 def _load_extensions(bot_instance: commands.Bot) -> None:
     failed_extensions: list[str] = []
 
+    print("\n[STARTUP] Загрузка расширений...")
+
     for extension in dict.fromkeys(BotConfig.COGS):
+        print(f"[COG] Загружаем: {extension}")
         try:
             bot_instance.load_extension(extension)
             logger.info("Успешно загружено расширение: %s", extension)
+
+            loaded_cog_names = sorted(bot_instance.cogs.keys())
+            print(f"[COG] OK: {extension}")
+            print(f"[COG] Загруженные cogs: {', '.join(loaded_cog_names) if loaded_cog_names else 'НЕТ'}")
+
+            local_commands = []
+            for command in bot_instance.application_commands:
+                guild_ids = getattr(command, "guild_ids", None)
+                if guild_ids and BotConfig.TEST_GUILD_ID in guild_ids:
+                    local_commands.append(command.name)
+            print(
+                "[COG] Локальные команды TEST после загрузки: "
+                + (", ".join(sorted(set(local_commands))) if local_commands else "НЕТ")
+            )
         except commands.ExtensionAlreadyLoaded:
             logger.warning("Расширение уже загружено: %s", extension)
+            print(f"[COG] УЖЕ ЗАГРУЖЕНО: {extension}")
         except commands.ExtensionNotFound:
             logger.error("Расширение не найдено: %s", extension)
+            print(f"[COG] ОШИБКА: расширение не найдено: {extension}")
             failed_extensions.append(extension)
         except commands.NoEntryPointError:
             logger.error("У расширения отсутствует функция setup: %s", extension)
+            print(f"[COG] ОШИБКА: нет setup(): {extension}")
             failed_extensions.append(extension)
         except commands.ExtensionFailed as exc:
             logger.exception("Не удалось загрузить расширение %s: %s", extension, exc)
+            print(f"[COG] ОШИБКА: {extension}: {exc}")
             failed_extensions.append(extension)
         except Exception as exc:
             logger.exception("Непредвиденная ошибка при загрузке расширения %s: %s", extension, exc)
+            print(f"[COG] НЕПРЕДВИДЕННАЯ ОШИБКА: {extension}: {exc}")
             failed_extensions.append(extension)
 
     if failed_extensions:
         raise RuntimeError(
             "Не удалось загрузить расширения: " + ", ".join(sorted(failed_extensions))
         )
+
+    print("[STARTUP] Все расширения успешно загружены")
+    print("[STARTUP] Application commands в памяти:")
+    for command in sorted(bot_instance.application_commands, key=lambda item: item.name):
+        print(f"  - {command.name} ({type(command).__name__})")
 
 
 def _deployment_guilds() -> list[tuple[int, str]]:
@@ -90,14 +117,21 @@ async def on_ready() -> None:
 
     if BotConfig.ENVIRONMENT == "test" and BotConfig.TEST_GUILD_ID:
         try:
+            print(f"[SYNC] Проверяем команды TEST-сервера: {BotConfig.TEST_GUILD_ID}")
             commands_in_guild = await bot.fetch_guild_commands(BotConfig.TEST_GUILD_ID)
             command_names = sorted(command.name for command in commands_in_guild)
             print(
-                "Slash-команды TEST: "
+                "[SYNC] Slash-команды TEST на стороне Discord: "
                 + (", ".join(command_names) if command_names else "НЕТ")
             )
+            for command in sorted(commands_in_guild, key=lambda item: item.name):
+                print(
+                    f"[SYNC]   {command.name} | guild_id={command.guild_id} | "
+                    f"id={command.id}"
+                )
         except (disnake.Forbidden, disnake.HTTPException) as exc:
             logger.error("Не удалось получить slash-команды TEST: %s", exc)
+            print(f"[SYNC] ОШИБКА получения команд TEST: {exc}")
 
     print("=" * 50 + "\n")
 
@@ -105,22 +139,26 @@ async def on_ready() -> None:
 @bot.event
 async def on_connect() -> None:
     logger.info("Bot connected to Discord")
+    print("[GATEWAY] Подключение к Discord установлено")
 
 
 @bot.event
 async def on_disconnect() -> None:
     logger.warning("Bot disconnected from Discord")
+    print("[GATEWAY] Соединение с Discord закрыто")
 
 
 @bot.event
 async def on_error(event: str, *args, **kwargs) -> None:
     logger.error("Error in event %s", event, exc_info=True)
+    print(f"[EVENT] Ошибка события: {event}")
 
 
 @bot.slash_command(description="Загрузить cog")
 @commands.is_owner()
 async def load(ctx: disnake.ApplicationCommandInteraction, extension: str) -> None:
     qualified_extension = extension if extension.startswith("cogs.") else f"cogs.{extension}"
+    print(f"[CMD] /load вызван: {qualified_extension}")
     try:
         bot.load_extension(qualified_extension)
         await ctx.send(f"Ког **{qualified_extension}** успешно загружен.", ephemeral=True)
@@ -142,6 +180,7 @@ async def load(ctx: disnake.ApplicationCommandInteraction, extension: str) -> No
 @commands.is_owner()
 async def unload(ctx: disnake.ApplicationCommandInteraction, extension: str) -> None:
     qualified_extension = extension if extension.startswith("cogs.") else f"cogs.{extension}"
+    print(f"[CMD] /unload вызван: {qualified_extension}")
     try:
         bot.unload_extension(qualified_extension)
         await ctx.send(f"Ког **{qualified_extension}** успешно выгружен.", ephemeral=True)
@@ -156,6 +195,7 @@ async def unload(ctx: disnake.ApplicationCommandInteraction, extension: str) -> 
 @commands.is_owner()
 async def reload(ctx: disnake.ApplicationCommandInteraction, extension: str) -> None:
     qualified_extension = extension if extension.startswith("cogs.") else f"cogs.{extension}"
+    print(f"[CMD] /reload вызван: {qualified_extension}")
     try:
         bot.reload_extension(qualified_extension)
         await ctx.send(f"Ког **{qualified_extension}** успешно перезагружен.", ephemeral=True)
@@ -173,8 +213,14 @@ async def reload(ctx: disnake.ApplicationCommandInteraction, extension: str) -> 
 
 async def main() -> None:
     BotConfig.validate()
+    print(f"[CONFIG] ENVIRONMENT={BotConfig.ENVIRONMENT}")
+    print(f"[CONFIG] MAIN_GUILD_ID={BotConfig.MAIN_GUILD_ID}")
+    print(f"[CONFIG] TEST_GUILD_ID={BotConfig.TEST_GUILD_ID}")
+    print(f"[CONFIG] TEST_GUILDS={BotConfig.TEST_GUILDS}")
+    print(f"[CONFIG] COGS={list(BotConfig.COGS)}")
     _load_extensions(bot)
     logger.info("Starting bot...")
+    print("[STARTUP] Запуск Discord-клиента...")
     try:
         await bot.start(BotConfig.TOKEN)
     finally:
@@ -187,12 +233,16 @@ if __name__ == "__main__":
         asyncio.run(main())
     except KeyboardInterrupt:
         logger.info("Bot stopped by user")
+        print("[SHUTDOWN] Бот остановлен пользователем")
     except (ValueError, RuntimeError) as exc:
         logger.error("Configuration/startup error: %s", exc)
+        print(f"[SHUTDOWN] Ошибка запуска: {exc}")
         sys.exit(1)
     except disnake.LoginFailure:
         logger.error("Failed to log in. Please check BOT_TOKEN in .env")
+        print("[SHUTDOWN] Неверный BOT_TOKEN")
         sys.exit(1)
     except Exception:
         logger.exception("An unexpected error occurred while running the bot")
+        print("[SHUTDOWN] Критическая ошибка")
         sys.exit(1)
