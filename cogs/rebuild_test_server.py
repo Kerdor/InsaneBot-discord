@@ -3,7 +3,6 @@ from __future__ import annotations
 import asyncio
 import json
 import logging
-from pathlib import Path
 
 import disnake
 from disnake.ext import commands
@@ -12,24 +11,13 @@ from config import BotConfig
 
 logger = logging.getLogger(__name__)
 
-REBUILD_CHANNEL_MARKER = "InsaneBot"
-REBUILD_ROLE_NAMES = (
-    "Owner",
-    "Administrator",
-    "Moderator",
-    "Helper",
-    "Not verified",
-    "Dota 2",
-    "CS 2",
-)
-
 
 class RebuildConfirmView(disnake.ui.View):
     def __init__(self, cog: "RebuildTestServer") -> None:
         super().__init__(timeout=30)
         self.cog = cog
 
-    @disnake.ui.button(label="Перестроить", style=disnake.ButtonStyle.danger, custom_id="rebuild_confirm")
+    @disnake.ui.button(label="Перестроить сервер", style=disnake.ButtonStyle.danger, custom_id="rebuild_confirm")
     async def confirm(self, _: disnake.ui.Button, interaction: disnake.MessageInteraction) -> None:
         if not interaction.guild or interaction.guild.id != BotConfig.TEST_GUILD_ID:
             await interaction.response.send_message("Команда доступна только на тестовом сервере.", ephemeral=True)
@@ -42,7 +30,7 @@ class RebuildConfirmView(disnake.ui.View):
         except Exception:
             logger.exception("Failed to rebuild test guild %s", interaction.guild.id)
             await interaction.followup.send(
-                "Перестройка завершилась с ошибкой. Подробности смотри в логах бота.",
+                "❌ Перестройка завершилась с ошибкой. Подробности смотри в консоли бота.",
                 ephemeral=True,
             )
         finally:
@@ -67,7 +55,7 @@ class RebuildTestServer(commands.Cog):
                 await channel.delete(reason="InsaneBot test server rebuild")
                 deleted += 1
             except (disnake.Forbidden, disnake.HTTPException) as exc:
-                logger.warning("Failed to delete channel %s (%s): %s", channel.id, channel.name, exc)
+                logger.warning("Не удалось удалить канал %s (%s): %s", channel.id, channel.name, exc)
         return deleted
 
     @staticmethod
@@ -77,22 +65,22 @@ class RebuildTestServer(commands.Cog):
             if role.is_default() or role.managed:
                 continue
             if role >= guild.me.top_role:
-                logger.warning("Skipping role above bot: %s (%s)", role.name, role.id)
+                logger.warning("Пропускаем роль выше роли бота: %s (%s)", role.name, role.id)
                 continue
             try:
                 await role.delete(reason="InsaneBot test server rebuild")
                 deleted += 1
             except (disnake.Forbidden, disnake.HTTPException) as exc:
-                logger.warning("Failed to delete role %s (%s): %s", role.id, role.name, exc)
+                logger.warning("Не удалось удалить роль %s (%s): %s", role.name, role.id, exc)
         return deleted
 
     @staticmethod
     async def _create_roles(guild: disnake.Guild) -> dict[str, int]:
         role_specs = [
-            ("Owner", disnake.Permissions(administrator=True), 0xF1C40F, True, False),
-            ("Administrator", disnake.Permissions(administrator=True), 0xE74C3C, True, True),
+            ("👑 Владелец", disnake.Permissions(administrator=True), 0xF1C40F, True, False),
+            ("🛡️ Администратор", disnake.Permissions(administrator=True), 0xE74C3C, True, True),
             (
-                "Moderator",
+                "🔨 Модератор",
                 disnake.Permissions(
                     kick_members=True,
                     ban_members=True,
@@ -109,20 +97,19 @@ class RebuildTestServer(commands.Cog):
                 True,
             ),
             (
-                "Helper",
+                "🤝 Помощник",
                 disnake.Permissions(
                     manage_messages=True,
                     mute_members=True,
                     move_members=True,
-                    view_audit_log=False,
                 ),
                 0x2ECC71,
                 False,
                 True,
             ),
-            ("Not verified", disnake.Permissions.none(), 0x7F8C8D, False, False),
-            ("Dota 2", disnake.Permissions.none(), 0x5865F2, False, True),
-            ("CS 2", disnake.Permissions.none(), 0x57F287, False, True),
+            ("🔐 Не верифицирован", disnake.Permissions.none(), 0x7F8C8D, False, False),
+            ("🎮 Dota 2", disnake.Permissions.none(), 0x5865F2, False, True),
+            ("🎯 CS 2", disnake.Permissions.none(), 0x57F287, False, True),
         ]
 
         created: dict[str, int] = {}
@@ -136,42 +123,39 @@ class RebuildTestServer(commands.Cog):
                 reason="InsaneBot test server rebuild",
             )
             created[name] = role.id
+            logger.info("Создана роль: %s (%s)", name, role.id)
         return created
 
     @staticmethod
     async def _create_structure(guild: disnake.Guild, roles: dict[str, int]) -> dict[str, int]:
         everyone = guild.default_role
-        not_verified = guild.get_role(roles["Not verified"])
-        helper = guild.get_role(roles["Helper"])
-        moderator = guild.get_role(roles["Moderator"])
-        administrator = guild.get_role(roles["Administrator"])
+        not_verified = guild.get_role(roles["🔐 Не верифицирован"])
+        helper = guild.get_role(roles["🤝 Помощник"])
+        moderator = guild.get_role(roles["🔨 Модератор"])
+        administrator = guild.get_role(roles["🛡️ Администратор"])
 
-        info = await guild.create_category("INFORMATION", reason="InsaneBot test server rebuild")
-        community = await guild.create_category("COMMUNITY", reason="InsaneBot test server rebuild")
-        games = await guild.create_category("GAMES", reason="InsaneBot test server rebuild")
-        support = await guild.create_category("SUPPORT", reason="InsaneBot test server rebuild")
+        info = await guild.create_category("📌・ИНФОРМАЦИЯ", reason="InsaneBot test server rebuild")
+        community = await guild.create_category("💬・СООБЩЕСТВО", reason="InsaneBot test server rebuild")
+        games = await guild.create_category("🎮・ИГРЫ", reason="InsaneBot test server rebuild")
+        support = await guild.create_category("🛠️・ПОДДЕРЖКА", reason="InsaneBot test server rebuild")
         logs = await guild.create_category(
-            "LOGS",
+            "🔒・ЛОГИ",
             overwrites={everyone: disnake.PermissionOverwrite(view_channel=False)},
             reason="InsaneBot test server rebuild",
         )
 
         channels: dict[str, int] = {}
 
-        rules = await guild.create_text_channel("rules", category=info, reason="InsaneBot test server rebuild")
-        announcements = await guild.create_text_channel(
-            "announcements", category=info, reason="InsaneBot test server rebuild"
-        )
-        general = await guild.create_text_channel("general", category=info, reason="InsaneBot test server rebuild")
+        rules = await guild.create_text_channel("📜・правила", category=info, reason="InsaneBot test server rebuild")
+        announcements = await guild.create_text_channel("📢・объявления", category=info, reason="InsaneBot test server rebuild")
+        general = await guild.create_text_channel("💬・общение", category=info, reason="InsaneBot test server rebuild")
 
-        chat = await guild.create_text_channel("chat", category=community, reason="InsaneBot test server rebuild")
-        media = await guild.create_text_channel("media", category=community, reason="InsaneBot test server rebuild")
-        bot_commands = await guild.create_text_channel(
-            "bot-commands", category=community, reason="InsaneBot test server rebuild"
-        )
+        chat = await guild.create_text_channel("💭・чат", category=community, reason="InsaneBot test server rebuild")
+        media = await guild.create_text_channel("🖼️・медиа", category=community, reason="InsaneBot test server rebuild")
+        bot_commands = await guild.create_text_channel("🤖・команды", category=community, reason="InsaneBot test server rebuild")
 
         game_roles = await guild.create_text_channel(
-            "game-roles",
+            "🎮・выбор-игр",
             category=games,
             overwrites={
                 not_verified: disnake.PermissionOverwrite(view_channel=False)
@@ -180,48 +164,21 @@ class RebuildTestServer(commands.Cog):
             },
             reason="InsaneBot test server rebuild",
         )
-        create_voice = await guild.create_voice_channel(
-            "Create Voice",
-            category=games,
-            reason="InsaneBot test server rebuild",
-        )
+        create_voice = await guild.create_voice_channel("🔊・создать-комнату", category=games, reason="InsaneBot test server rebuild")
 
-        help_channel = await guild.create_text_channel(
-            "help", category=support, reason="InsaneBot test server rebuild"
-        )
-        reports = await guild.create_text_channel(
-            "reports", category=support, reason="InsaneBot test server rebuild"
-        )
+        help_channel = await guild.create_text_channel("❓・помощь", category=support, reason="InsaneBot test server rebuild")
+        reports = await guild.create_text_channel("🚨・жалобы", category=support, reason="InsaneBot test server rebuild")
 
-        chat_logs = await guild.create_text_channel(
-            "chat-logs",
-            category=logs,
-            overwrites={
-                everyone: disnake.PermissionOverwrite(view_channel=False),
-                helper: disnake.PermissionOverwrite(view_channel=True)
-                if helper
-                else disnake.PermissionOverwrite(),
-                moderator: disnake.PermissionOverwrite(view_channel=True)
-                if moderator
-                else disnake.PermissionOverwrite(),
-                administrator: disnake.PermissionOverwrite(view_channel=True)
-                if administrator
-                else disnake.PermissionOverwrite(),
-            },
-            reason="InsaneBot test server rebuild",
-        )
-        guild_logs = await guild.create_text_channel(
-            "guild-logs",
-            category=logs,
-            overwrites={everyone: disnake.PermissionOverwrite(view_channel=False)},
-            reason="InsaneBot test server rebuild",
-        )
-        moderation_logs = await guild.create_text_channel(
-            "moderation-logs",
-            category=logs,
-            overwrites={everyone: disnake.PermissionOverwrite(view_channel=False)},
-            reason="InsaneBot test server rebuild",
-        )
+        log_overwrites = {
+            everyone: disnake.PermissionOverwrite(view_channel=False),
+            helper: disnake.PermissionOverwrite(view_channel=True) if helper else disnake.PermissionOverwrite(),
+            moderator: disnake.PermissionOverwrite(view_channel=True) if moderator else disnake.PermissionOverwrite(),
+            administrator: disnake.PermissionOverwrite(view_channel=True) if administrator else disnake.PermissionOverwrite(),
+        }
+
+        chat_logs = await guild.create_text_channel("💬・чат-логи", category=logs, overwrites=log_overwrites, reason="InsaneBot test server rebuild")
+        guild_logs = await guild.create_text_channel("🖥️・сервер-логи", category=logs, overwrites=log_overwrites, reason="InsaneBot test server rebuild")
+        moderation_logs = await guild.create_text_channel("🛡️・модерация", category=logs, overwrites=log_overwrites, reason="InsaneBot test server rebuild")
 
         channels.update(
             {
@@ -241,11 +198,10 @@ class RebuildTestServer(commands.Cog):
             }
         )
 
-        if guild.system_channel is None:
-            try:
-                await guild.edit(system_channel=general, reason="InsaneBot test server rebuild")
-            except (disnake.Forbidden, disnake.HTTPException):
-                logger.warning("Failed to set system channel")
+        try:
+            await guild.edit(system_channel=general, reason="InsaneBot test server rebuild")
+        except (disnake.Forbidden, disnake.HTTPException):
+            logger.warning("Не удалось установить канал системных сообщений")
 
         return channels
 
@@ -253,27 +209,23 @@ class RebuildTestServer(commands.Cog):
     def _write_server_map(role_ids: dict[str, int], channel_ids: dict[str, int]) -> None:
         path = BotConfig.PROJECT_DIR / ".server_map.json"
         path.write_text(
-            json.dumps(
-                {"roles": role_ids, "channels": channel_ids},
-                ensure_ascii=False,
-                indent=2,
-            ),
+            json.dumps({"roles": role_ids, "channels": channel_ids}, ensure_ascii=False, indent=2),
             encoding="utf-8",
         )
 
     @staticmethod
     def _apply_runtime_config(role_ids: dict[str, int], channel_ids: dict[str, int]) -> None:
         BotConfig.MODERATION_ROLES = {
-            "owner": role_ids["Owner"],
-            "administrator": role_ids["Administrator"],
-            "moderator": role_ids["Moderator"],
-            "helper": role_ids["Helper"],
+            "owner": role_ids["👑 Владелец"],
+            "administrator": role_ids["🛡️ Администратор"],
+            "moderator": role_ids["🔨 Модератор"],
+            "helper": role_ids["🤝 Помощник"],
         }
         BotConfig.GAME_ROLES = {
-            "Dota 2": role_ids["Dota 2"],
-            "CS 2": role_ids["CS 2"],
+            "Dota 2": role_ids["🎮 Dota 2"],
+            "CS 2": role_ids["🎯 CS 2"],
         }
-        BotConfig.OTHER_ROLES = {"Not verified": role_ids["Not verified"]}
+        BotConfig.OTHER_ROLES = {"Не верифицирован": role_ids["🔐 Не верифицирован"]}
         BotConfig.CHANNELS = {"create_voice": channel_ids["create_voice"]}
         BotConfig.CHANNEL_LOGS = {
             "chat_logs": channel_ids["chat_logs"],
@@ -284,57 +236,36 @@ class RebuildTestServer(commands.Cog):
         BotConfig.GUILD_LOGS_CHANNEL = channel_ids["guild_logs"]
         BotConfig.MODERATION_LOGS_CHANNEL = channel_ids["moderation_logs"]
         BotConfig.GAME_ROLE_OPTIONS = [
-            disnake.SelectOption(label="Dota 2", value=str(role_ids["Dota 2"])),
-            disnake.SelectOption(label="CS 2", value=str(role_ids["CS 2"])),
+            disnake.SelectOption(label="Dota 2", value=str(role_ids["🎮 Dota 2"])),
+            disnake.SelectOption(label="CS 2", value=str(role_ids["🎯 CS 2"])),
         ]
 
     async def rebuild(self, guild: disnake.Guild) -> str:
         async with self._rebuild_lock:
             if BotConfig.ENVIRONMENT != "test" or guild.id != BotConfig.TEST_GUILD_ID:
-                raise RuntimeError("Rebuild разрешён только для тестового сервера.")
-
+                raise RuntimeError("Перестройка разрешена только для тестового сервера.")
             if guild.me is None:
                 raise RuntimeError("Не удалось определить участника бота на тестовом сервере.")
 
+            logger.info("=== НАЧАЛО ПЕРЕСТРОЙКИ %s (%s) ===", guild.name, guild.id)
             deleted_channels = await self._delete_channels(guild)
+            logger.info("Удалено каналов: %s", deleted_channels)
             deleted_roles = await self._delete_roles(guild)
+            logger.info("Удалено ролей: %s", deleted_roles)
             role_ids = await self._create_roles(guild)
             channel_ids = await self._create_structure(guild, role_ids)
             self._write_server_map(role_ids, channel_ids)
             self._apply_runtime_config(role_ids, channel_ids)
+            logger.info("=== ПЕРЕСТРОЙКА ЗАВЕРШЕНА ===")
 
             return (
-                "✅ Тестовый сервер перестроен.\n\n"
-                f"Удалено каналов: {deleted_channels}\n"
-                f"Удалено ролей: {deleted_roles}\n"
-                f"Создано ролей: {len(role_ids)}\n"
-                f"Создано каналов: {len(channel_ids)}\n\n"
-                "Игровые роли: Dota 2, CS 2.\n"
-                "Новые ID сохранены в `.server_map.json`."
+                "✅ **Тестовый сервер перестроен**\n\n"
+                f"Удалено каналов: **{deleted_channels}**\n"
+                f"Удалено ролей: **{deleted_roles}**\n"
+                f"Создано ролей: **{len(role_ids)}**\n"
+                f"Создано каналов: **{len(channel_ids)}**\n\n"
+                "🎮 Игры: Dota 2, CS 2"
             )
-
-    @commands.slash_command(
-        name="rebuild_test_server",
-        description="Полностью пересоздать структуру тестового сервера",
-        guild_ids=[BotConfig.TEST_GUILD_ID] if BotConfig.TEST_GUILD_ID else [],
-    )
-    @commands.is_owner()
-    async def rebuild_test_server(self, inter: disnake.ApplicationCommandInteraction) -> None:
-        if BotConfig.ENVIRONMENT != "test" or not inter.guild or inter.guild.id != BotConfig.TEST_GUILD_ID:
-            await inter.response.send_message(
-                "Эта команда доступна только на тестовом сервере при ENVIRONMENT=test.",
-                ephemeral=True,
-            )
-            return
-
-        await inter.response.send_message(
-            "⚠️ **ВНИМАНИЕ**\n\n"
-            "Будут удалены все обычные каналы и роли, которые бот сможет удалить, "
-            "после чего будет создана новая структура.\n\n"
-            "Проверь, что это действительно тестовый сервер.",
-            view=RebuildConfirmView(self),
-            ephemeral=True,
-        )
 
 
 def setup(bot: commands.Bot) -> None:
