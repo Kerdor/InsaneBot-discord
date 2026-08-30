@@ -12,8 +12,8 @@ from disnake.ext import commands
 logger = logging.getLogger(__name__)
 
 
-class BaseLogger:
-    """Base logger class for all logging functionality."""
+class BaseLogger(commands.Cog):
+    """Base cog for all logging extensions."""
 
     def __init__(self, bot: commands.Bot) -> None:
         self.bot = bot
