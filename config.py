@@ -40,6 +40,16 @@ def _load_server_map() -> dict:
         return {}
 
 
+def _load_logging_channels() -> dict:
+    path = PROJECT_DIR / ".logging_channels.json"
+    if not path.exists():
+        return {}
+    try:
+        return json.loads(path.read_text(encoding="utf-8"))
+    except (OSError, json.JSONDecodeError):
+        return {}
+
+
 class BotConfig:
     PROJECT_DIR = PROJECT_DIR
     TOKEN = _required_env("BOT_TOKEN")
@@ -64,6 +74,7 @@ class BotConfig:
     ASSETS_DIR = PROJECT_DIR / "img"
     DATABASE_DIR = PROJECT_DIR / "databases"
     LOGS_DIR = PROJECT_DIR / "logs"
+    LOGGING_CHANNELS_FILE = PROJECT_DIR / ".logging_channels.json"
 
     @staticmethod
     def ensure_asset(filename: str | Path) -> Path:
@@ -104,16 +115,16 @@ class BotConfig:
     ]
 
     CHANNEL_LOGS = {
-        "chat_logs": 1330604289957302350,
-        "guild_logs": 1338651230565695558,
-        "moderation_logs": 1330604583000473732,
+        "chat_logs": None,
+        "guild_logs": None,
+        "moderation_logs": None,
         "system_logs": None,
     }
 
-    CHAT_LOGS_CHANNEL = CHANNEL_LOGS["chat_logs"]
-    GUILD_LOGS_CHANNEL = CHANNEL_LOGS["guild_logs"]
-    MODERATION_LOGS_CHANNEL = CHANNEL_LOGS["moderation_logs"]
-    SYSTEM_LOGS_CHANNEL = CHANNEL_LOGS["system_logs"]
+    CHAT_LOGS_CHANNEL = None
+    GUILD_LOGS_CHANNEL = None
+    MODERATION_LOGS_CHANNEL = None
+    SYSTEM_LOGS_CHANNEL = None
 
     LOG_COLORS = {
         "GREEN": 0x00FF00,
@@ -132,6 +143,7 @@ class BotConfig:
         "cogs.logging.chat_logs",
         "cogs.logging.guild_logs",
         "cogs.logging.moderation_logs",
+        "cogs.logging.setup_logs",
     )
 
     @staticmethod
@@ -166,20 +178,58 @@ class BotConfig:
         }
         BotConfig.OTHER_ROLES = {"Not verified": int(roles["Not verified"])}
         BotConfig.CHANNELS = {"create_voice": int(channels["create_voice"])}
+        BotConfig.GAME_ROLE_OPTIONS = [
+            SelectOption(label="Dota 2", value=str(BotConfig.GAME_ROLES["Dota 2"])),
+            SelectOption(label="CS 2", value=str(BotConfig.GAME_ROLES["CS 2"])),
+        ]
+
+    @staticmethod
+    def load_logging_channels() -> None:
+        data = _load_logging_channels()
+        guild_id = str(BotConfig.TEST_GUILD_ID if BotConfig.ENVIRONMENT == "test" else BotConfig.MAIN_GUILD_ID)
+        channels = data.get(guild_id, {})
+
         BotConfig.CHANNEL_LOGS = {
-            "chat_logs": int(channels["chat_logs"]),
-            "guild_logs": int(channels["guild_logs"]),
-            "moderation_logs": int(channels["moderation_logs"]),
-            "system_logs": int(channels["system_logs"]),
+            "chat_logs": channels.get("chat_logs"),
+            "guild_logs": channels.get("guild_logs"),
+            "moderation_logs": channels.get("moderation_logs"),
+            "system_logs": channels.get("system_logs"),
         }
         BotConfig.CHAT_LOGS_CHANNEL = BotConfig.CHANNEL_LOGS["chat_logs"]
         BotConfig.GUILD_LOGS_CHANNEL = BotConfig.CHANNEL_LOGS["guild_logs"]
         BotConfig.MODERATION_LOGS_CHANNEL = BotConfig.CHANNEL_LOGS["moderation_logs"]
         BotConfig.SYSTEM_LOGS_CHANNEL = BotConfig.CHANNEL_LOGS["system_logs"]
-        BotConfig.GAME_ROLE_OPTIONS = [
-            SelectOption(label="Dota 2", value=str(BotConfig.GAME_ROLES["Dota 2"])),
-            SelectOption(label="CS 2", value=str(BotConfig.GAME_ROLES["CS 2"])),
-        ]
+
+    @staticmethod
+    def set_logging_channel(guild_id: int, log_type: str, channel_id: int) -> None:
+        data = _load_logging_channels()
+        guild_data = data.setdefault(str(guild_id), {})
+        guild_data[log_type] = channel_id
+        BotConfig.LOGGING_CHANNELS_FILE.write_text(
+            json.dumps(data, ensure_ascii=False, indent=2),
+            encoding="utf-8",
+        )
+
+        if guild_id == (BotConfig.TEST_GUILD_ID if BotConfig.ENVIRONMENT == "test" else BotConfig.MAIN_GUILD_ID):
+            BotConfig.CHANNEL_LOGS[log_type] = channel_id
+            setattr(BotConfig, log_type.upper())
+            attributes = {
+                "chat_logs": "CHAT_LOGS_CHANNEL",
+                "guild_logs": "GUILD_LOGS_CHANNEL",
+                "moderation_logs": "MODERATION_LOGS_CHANNEL",
+                "system_logs": "SYSTEM_LOGS_CHANNEL",
+            }
+            setattr(BotConfig, attributes[log_type], channel_id)
+
+    @staticmethod
+    def get_logging_channel(guild_id: int | None, log_type: str) -> int | None:
+        data = _load_logging_channels()
+        if guild_id is not None:
+            channel_id = data.get(str(guild_id), {}).get(log_type)
+            if channel_id:
+                return int(channel_id)
+
+        return BotConfig.CHANNEL_LOGS.get(log_type)
 
     @staticmethod
     def validate() -> None:
@@ -192,4 +242,5 @@ class BotConfig:
 
 
 BotConfig.load_server_map()
+BotConfig.load_logging_channels()
 BotConfig.validate()
