@@ -106,11 +106,13 @@ class BotConfig:
         "chat_logs": 1330604289957302350,
         "guild_logs": 1338651230565695558,
         "moderation_logs": 1330604583000473732,
+        "system_logs": None,
     }
 
     CHAT_LOGS_CHANNEL = CHANNEL_LOGS["chat_logs"]
     GUILD_LOGS_CHANNEL = CHANNEL_LOGS["guild_logs"]
     MODERATION_LOGS_CHANNEL = CHANNEL_LOGS["moderation_logs"]
+    SYSTEM_LOGS_CHANNEL = CHANNEL_LOGS["system_logs"]
 
     LOG_COLORS = {
         "GREEN": 0x00FF00,
@@ -145,7 +147,7 @@ class BotConfig:
             "Not verified", "Dota 2", "CS 2",
         }
         required_channels = {
-            "create_voice", "chat_logs", "guild_logs", "moderation_logs",
+            "create_voice", "chat_logs", "guild_logs", "moderation_logs", "system_logs",
         }
 
         if not required_roles.issubset(roles) or not required_channels.issubset(channels):
@@ -167,10 +169,12 @@ class BotConfig:
             "chat_logs": int(channels["chat_logs"]),
             "guild_logs": int(channels["guild_logs"]),
             "moderation_logs": int(channels["moderation_logs"]),
+            "system_logs": int(channels["system_logs"]),
         }
         BotConfig.CHAT_LOGS_CHANNEL = BotConfig.CHANNEL_LOGS["chat_logs"]
         BotConfig.GUILD_LOGS_CHANNEL = BotConfig.CHANNEL_LOGS["guild_logs"]
         BotConfig.MODERATION_LOGS_CHANNEL = BotConfig.CHANNEL_LOGS["moderation_logs"]
+        BotConfig.SYSTEM_LOGS_CHANNEL = BotConfig.CHANNEL_LOGS["system_logs"]
         BotConfig.GAME_ROLE_OPTIONS = [
             SelectOption(label="Dota 2", value=str(BotConfig.GAME_ROLES["Dota 2"])),
             SelectOption(label="CS 2", value=str(BotConfig.GAME_ROLES["CS 2"])),
