@@ -84,6 +84,19 @@ def get_rooms_for_user(guild_id: int, user_id: int) -> list[sqlite3.Row]:
         ).fetchall()
 
 
+def get_room_members(guild_id: int, owner_id: int) -> list[sqlite3.Row]:
+    with _connect() as connection:
+        return connection.execute(
+            """
+            SELECT user_id, is_coowner
+            FROM voice_room_members
+            WHERE guild_id = ? AND owner_id = ?
+            ORDER BY is_coowner DESC, user_id
+            """,
+            (guild_id, owner_id),
+        ).fetchall()
+
+
 def get_room_by_channel(guild_id: int, channel_id: int) -> sqlite3.Row | None:
     with _connect() as connection:
         return connection.execute(
