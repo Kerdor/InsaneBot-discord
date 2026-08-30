@@ -92,10 +92,7 @@ class BotConfig:
         "helper": 519209663519129600,
     }
 
-    GAME_ROLES = {
-        "Dota 2": 1332487694252638320,
-        "CS 2": 1332487739932934165,
-    }
+    MEMBER_ROLE_ID = None
 
     OTHER_ROLES = {
         "Not verified": 1334302190625361994,
@@ -106,13 +103,11 @@ class BotConfig:
         return (role_id for role_id in role_dict.values() if isinstance(role_id, int))
 
     CHANNELS = {"create_voice": 1336547276059050004}
+    LOGGING_FORUM_ID = None
 
     ASSETS = {"rules_image": ASSETS_DIR / "RULES.png"}
 
-    GAME_ROLE_OPTIONS = [
-        SelectOption(label="Dota 2", value=str(GAME_ROLES["Dota 2"])),
-        SelectOption(label="CS 2", value=str(GAME_ROLES["CS 2"])),
-    ]
+    GAME_ROLE_OPTIONS = []
 
     CHANNEL_LOGS = {
         "chat_logs": None,
@@ -158,11 +153,26 @@ class BotConfig:
         channels = data.get("channels", {})
 
         required_roles = {
-            "Owner", "Administrator", "Moderator", "Helper",
-            "Not verified", "Dota 2", "CS 2",
+            "Owner",
+            "Administrator",
+            "Moderator",
+            "Helper",
+            "Member",
+            "Not verified",
         }
         required_channels = {
-            "create_voice", "chat_logs", "guild_logs", "moderation_logs", "system_logs",
+            "create_voice",
+            "verification",
+            "create_ticket",
+            "tickets",
+            "game_panel",
+            "moderation_panel",
+            "chat_logs",
+            "guild_logs",
+            "moderation_logs",
+            "system_logs",
+            "voice_logs",
+            "logs",
         }
 
         if not required_roles.issubset(roles) or not required_channels.issubset(channels):
@@ -174,16 +184,20 @@ class BotConfig:
             "moderator": int(roles["Moderator"]),
             "helper": int(roles["Helper"]),
         }
-        BotConfig.GAME_ROLES = {
-            "Dota 2": int(roles["Dota 2"]),
-            "CS 2": int(roles["CS 2"]),
-        }
+        BotConfig.MEMBER_ROLE_ID = int(roles["Member"])
         BotConfig.OTHER_ROLES = {"Not verified": int(roles["Not verified"])}
-        BotConfig.CHANNELS = {"create_voice": int(channels["create_voice"])}
-        BotConfig.GAME_ROLE_OPTIONS = [
-            SelectOption(label="Dota 2", value=str(BotConfig.GAME_ROLES["Dota 2"])),
-            SelectOption(label="CS 2", value=str(BotConfig.GAME_ROLES["CS 2"])),
-        ]
+        BotConfig.CHANNELS = {
+            key: int(channels[key])
+            for key in (
+                "create_voice",
+                "verification",
+                "create_ticket",
+                "tickets",
+                "game_panel",
+                "moderation_panel",
+            )
+        }
+        BotConfig.LOGGING_FORUM_ID = int(channels["logs"])
 
     @staticmethod
     def load_logging_channels() -> None:
@@ -203,6 +217,7 @@ class BotConfig:
         BotConfig.GUILD_LOGS_CHANNEL = BotConfig.CHANNEL_LOGS["guild_logs"]
         BotConfig.MODERATION_LOGS_CHANNEL = BotConfig.CHANNEL_LOGS["moderation_logs"]
         BotConfig.SYSTEM_LOGS_CHANNEL = BotConfig.CHANNEL_LOGS["system_logs"]
+        BotConfig.LOGGING_FORUM_ID = channels.get("forum_id")
 
     @staticmethod
     def set_logging_channels(guild_id: int, forum_id: int, thread_ids: dict[str, int]) -> None:
@@ -218,6 +233,7 @@ class BotConfig:
 
         current_guild_id = BotConfig.TEST_GUILD_ID if BotConfig.ENVIRONMENT == "test" else BotConfig.MAIN_GUILD_ID
         if guild_id == current_guild_id:
+            BotConfig.LOGGING_FORUM_ID = forum_id
             BotConfig.CHANNEL_LOGS = {
                 "chat_logs": thread_ids.get("chat_logs"),
                 "guild_logs": thread_ids.get("guild_logs"),
