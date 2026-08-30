@@ -5,9 +5,9 @@ from datetime import datetime, timezone
 from pathlib import Path
 
 from config import BotConfig
+from databases.settings import get_bool, get_int
 
 DB_PATH = Path(BotConfig.DATABASE_DIR) / "economy.db"
-DAILY_REWARD = 100
 
 
 def _connect() -> sqlite3.Connection:
@@ -69,8 +69,18 @@ def claim_daily(guild_id: int, user_id: int) -> tuple[bool, sqlite3.Row, int]:
         remaining = max(0, 86400 - int((now - claimed_at).total_seconds()))
         if remaining > 0:
             return False, row, remaining
+    reward = get_int(guild_id, "economy_daily_reward")
     with _connect() as connection:
-        connection.execute("UPDATE economy SET balance = balance + ?, daily_claimed_at = ? WHERE guild_id = ? AND user_id = ?", (DAILY_REWARD, now.isoformat(), guild_id, user_id))
+        connection.execute("UPDATE economy SET balance = balance + ?, daily_claimed_at = ? WHERE guild_id = ? AND user_id = ?", (reward, now.isoformat(), guild_id, user_id))
         connection.commit()
         row = connection.execute("SELECT * FROM economy WHERE guild_id = ? AND user_id = ?", (guild_id, user_id)).fetchone()
     return True, row, 0
+
+
+def reward_message(guild_id: int, user_id: int) -> sqlite3.Row | None:
+    if not get_bool(guild_id, "economy_enabled"):
+        return None
+    reward = get_int(guild_id, "economy_message_reward")
+    if reward <= 0:
+        return get_user(guild_id, user_id)
+    return add_balance(guild_id, user_id, reward)
