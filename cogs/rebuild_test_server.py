@@ -46,7 +46,7 @@ class RebuildConfirmView(disnake.ui.View):
         except Exception:
             logger.exception("[REBUILD] Не удалось перестроить тестовый сервер %s", interaction.guild.id)
             await interaction.followup.send(
-                "❌ Перестройка завершилась с ошибкой. Подробности смотри в консоли бота.",
+                "❌ Перестройка завершилась с ошибкой. Подробности смотри в консоли бота и канале системных логов.",
                 ephemeral=True,
             )
         finally:
@@ -161,28 +161,21 @@ class RebuildTestServer(commands.Cog):
     @staticmethod
     async def _create_structure(guild: disnake.Guild, roles: dict[str, int]) -> dict[str, int]:
         logger.info("[REBUILD] Этап 4/4: создание категорий, каналов и прав")
-        info = await guild.create_category(CATEGORY_NAMES["information"], reason="InsaneBot test server rebuild")
-        community = await guild.create_category(CATEGORY_NAMES["community"], reason="InsaneBot test server rebuild")
-        games = await guild.create_category(CATEGORY_NAMES["games"], reason="InsaneBot test server rebuild")
-        support = await guild.create_category(CATEGORY_NAMES["support"], reason="InsaneBot test server rebuild")
-        logs = await guild.create_category(CATEGORY_NAMES["logs"], reason="InsaneBot test server rebuild")
+        categories = {}
+        for key in ("information", "community", "games", "support", "logs"):
+            category = await guild.create_category(
+                CATEGORY_NAMES[key],
+                reason="InsaneBot test server rebuild",
+            )
+            categories[key] = category
+            logger.info("[REBUILD] Создана категория: %s [%s] (%s)", category.name, key, category.id)
 
-        categories = {
-            "information": info,
-            "community": community,
-            "games": games,
-            "support": support,
-            "logs": logs,
-        }
-
-        for key, category in categories.items():
-            logger.info("[REBUILD] Настраиваем права категории: %s [%s]", category.name, key)
             desired = build_category_overwrites(guild, key)
             for target, overwrite in desired.items():
                 await category.set_permissions(target, overwrite=overwrite, reason="InsaneBot structure rebuild")
+            logger.info("[REBUILD] Права категории настроены: %s", category.name)
 
         channels: dict[str, int] = {}
-
         channel_specs = (
             ("rules", "information", False),
             ("announcements", "information", False),
@@ -197,16 +190,12 @@ class RebuildTestServer(commands.Cog):
             ("chat_logs", "logs", False),
             ("guild_logs", "logs", False),
             ("moderation_logs", "logs", False),
+            ("system_logs", "logs", False),
         )
 
         for key, category_key, voice in channel_specs:
             category = categories[category_key]
-            logger.info(
-                "[REBUILD] Создаём канал: %s [%s] в категории %s",
-                CHANNEL_NAMES[key],
-                key,
-                category.name,
-            )
+            logger.info("[REBUILD] Создаём канал: %s [%s] в %s", CHANNEL_NAMES[key], key, category.name)
             if voice:
                 channel = await guild.create_voice_channel(
                     CHANNEL_NAMES[key], category=category, reason="InsaneBot test server rebuild"
@@ -216,6 +205,7 @@ class RebuildTestServer(commands.Cog):
                     CHANNEL_NAMES[key], category=category, reason="InsaneBot test server rebuild"
                 )
             channels[key] = channel.id
+            logger.info("[REBUILD] Создан канал: %s (%s)", channel.name, channel.id)
 
         general = guild.get_channel(channels["general"])
         if isinstance(general, disnake.TextChannel):
@@ -255,10 +245,12 @@ class RebuildTestServer(commands.Cog):
             "chat_logs": channel_ids["chat_logs"],
             "guild_logs": channel_ids["guild_logs"],
             "moderation_logs": channel_ids["moderation_logs"],
+            "system_logs": channel_ids["system_logs"],
         }
         BotConfig.CHAT_LOGS_CHANNEL = channel_ids["chat_logs"]
         BotConfig.GUILD_LOGS_CHANNEL = channel_ids["guild_logs"]
         BotConfig.MODERATION_LOGS_CHANNEL = channel_ids["moderation_logs"]
+        BotConfig.SYSTEM_LOGS_CHANNEL = channel_ids["system_logs"]
         BotConfig.GAME_ROLE_OPTIONS = [
             disnake.SelectOption(label="Dota 2", value=str(role_ids["Dota 2"])),
             disnake.SelectOption(label="CS 2", value=str(role_ids["CS 2"])),
