@@ -34,7 +34,7 @@ def _load_extensions(bot_instance: commands.Bot) -> None:
 
     print("\n[STARTUP] Загрузка расширений...")
 
-    for extension in dict.fromkeys(BotConfig.COGS):
+    for extension in dict.fromkeys((*BotConfig.COGS, "cogs.admin_panel")):
         print(f"[COG] Загружаем: {extension}")
         try:
             bot_instance.load_extension(extension)
@@ -262,7 +262,7 @@ async def main() -> None:
     print(f"[CONFIG] MAIN_GUILD_ID={BotConfig.MAIN_GUILD_ID}")
     print(f"[CONFIG] TEST_GUILD_ID={BotConfig.TEST_GUILD_ID}")
     print(f"[CONFIG] TEST_GUILDS={BotConfig.TEST_GUILDS}")
-    print(f"[CONFIG] COGS={list(BotConfig.COGS)}")
+    print(f"[CONFIG] COGS={list(dict.fromkeys((*BotConfig.COGS, 'cogs.admin_panel')))}")
     _load_extensions(bot)
     logger.info("Starting bot...")
     print("[STARTUP] Запуск Discord-клиента...")
