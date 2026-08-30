@@ -21,7 +21,7 @@ class BaseLogger(commands.Cog):
         self._log_channels: dict[int, disnake.abc.Messageable] = {}
 
     async def get_log_channel(self, guild: disnake.Guild) -> Optional[disnake.abc.Messageable]:
-        """Get the configured log channel for this guild."""
+        """Get the configured log thread for this guild."""
         from config import BotConfig
 
         channel_id = BotConfig.get_logging_channel(guild.id, self.log_type)
@@ -45,7 +45,7 @@ class BaseLogger(commands.Cog):
         if channel_guild is not None and channel_guild.id != guild.id:
             return None
 
-        if not isinstance(channel, disnake.abc.Messageable):
+        if not isinstance(channel, (disnake.TextChannel, disnake.Thread)):
             return None
 
         self._log_channels[guild.id] = channel
@@ -122,10 +122,18 @@ class BaseLogger(commands.Cog):
         return embed
 
     async def log_to_channel(self, guild: disnake.Guild, embed: disnake.Embed) -> None:
-        """Send an embed and invalidate stale channel cache on failure."""
+        """Send an embed to the configured log thread."""
         log_channel = await self.get_log_channel(guild)
         if not log_channel:
             return
+
+        if isinstance(log_channel, disnake.Thread) and log_channel.archived:
+            try:
+                await log_channel.edit(archived=False)
+            except (disnake.Forbidden, disnake.HTTPException):
+                self.invalidate_log_channel(guild.id)
+                logger.error("Unable to unarchive log thread in guild %s", guild.id)
+                return
 
         try:
             await log_channel.send(embed=embed)
