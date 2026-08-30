@@ -41,6 +41,17 @@ def init_economy() -> None:
             )
             """
         )
+        connection.execute(
+            """
+            CREATE TABLE IF NOT EXISTS shop_items (
+                item_id TEXT PRIMARY KEY,
+                name TEXT NOT NULL,
+                description TEXT NOT NULL,
+                price INTEGER NOT NULL,
+                active INTEGER NOT NULL DEFAULT 1
+            )
+            """
+        )
         connection.commit()
 
 
@@ -127,3 +138,60 @@ def add_item(guild_id: int, user_id: int, item_id: str, quantity: int = 1) -> No
             (guild_id, user_id, item_id, quantity),
         )
         connection.commit()
+
+
+def get_shop_items() -> list[sqlite3.Row]:
+    with _connect() as connection:
+        return connection.execute(
+            "SELECT * FROM shop_items WHERE active = 1 ORDER BY price, item_id"
+        ).fetchall()
+
+
+def get_shop_item(item_id: str) -> sqlite3.Row | None:
+    with _connect() as connection:
+        return connection.execute(
+            "SELECT * FROM shop_items WHERE item_id = ? AND active = 1",
+            (item_id,),
+        ).fetchone()
+
+
+def seed_shop_items() -> None:
+    items = (
+        ("lucky_charm", "🍀 Талисман удачи", "Обычный талисман удачи.", 250),
+        ("energy_drink", "⚡ Энергетик", "Восстанавливающий предмет.", 400),
+        ("mystery_box", "📦 Таинственная коробка", "Случайный предмет из будущей системы наград.", 1000),
+    )
+    with _connect() as connection:
+        connection.executemany(
+            "INSERT OR IGNORE INTO shop_items (item_id, name, description, price) VALUES (?, ?, ?, ?)",
+            items,
+        )
+        connection.commit()
+
+
+def buy_item(guild_id: int, user_id: int, item_id: str, quantity: int = 1) -> tuple[bool, str, sqlite3.Row]:
+    if quantity < 1:
+        return False, "Количество должно быть положительным.", get_user(guild_id, user_id)
+    item = get_shop_item(item_id)
+    row = get_user(guild_id, user_id)
+    if item is None:
+        return False, "Товар не найден.", row
+    total_price = int(item["price"]) * quantity
+    if int(row["balance"]) < total_price:
+        return False, f"Недостаточно монет. Нужно **{total_price}**, а у тебя **{row['balance']}**.", row
+    with _connect() as connection:
+        connection.execute(
+            "UPDATE economy SET balance = balance - ? WHERE guild_id = ? AND user_id = ? AND balance >= ?",
+            (total_price, guild_id, user_id, total_price),
+        )
+        connection.execute(
+            "INSERT INTO inventory (guild_id, user_id, item_id, quantity) VALUES (?, ?, ?, ?) "
+            "ON CONFLICT(guild_id, user_id, item_id) DO UPDATE SET quantity = quantity + excluded.quantity",
+            (guild_id, user_id, item_id, quantity),
+        )
+        connection.commit()
+        row = connection.execute(
+            "SELECT * FROM economy WHERE guild_id = ? AND user_id = ?",
+            (guild_id, user_id),
+        ).fetchone()
+    return True, f"Покупка успешна: **{item['name']}** × **{quantity}** за **{total_price}** монет.", row
