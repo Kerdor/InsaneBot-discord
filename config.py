@@ -141,7 +141,6 @@ class BotConfig:
         "cogs.logging.moderation_logs",
         "cogs.logging.setup_logs",
         "cogs.logging.voice_stats",
-        "cogs.logging.reaction_logs",
         "cogs.logging.system_logs",
     )
 
