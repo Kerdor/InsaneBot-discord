@@ -79,6 +79,17 @@ def get_session(guild_id: int, user_id: int) -> sqlite3.Row | None:
         ).fetchone()
 
 
+def get_sessions(guild_id: int) -> list[sqlite3.Row]:
+    with _connect() as connection:
+        return connection.execute(
+            """
+            SELECT * FROM voice_sessions
+            WHERE guild_id = ?
+            """,
+            (guild_id,),
+        ).fetchall()
+
+
 def finish_session(guild_id: int, user_id: int, left_at: datetime) -> tuple[int, int] | None:
     with _connect() as connection:
         row = connection.execute(
