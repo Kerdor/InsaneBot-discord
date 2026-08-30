@@ -80,6 +80,10 @@ class ChatLogs(BaseLogger):
 
     @commands.Cog.listener()
     async def on_message(self, message: disnake.Message) -> None:
+        print(
+            f"[CHATLOG] on_message: guild={message.guild.id if message.guild else None}, "
+            f"channel={message.channel.id}, author={message.author} ({message.author.id})"
+        )
         logger.info(
             "[CHATLOG] Получено сообщение: guild=%s, channel=%s, author=%s (%s)",
             message.guild.id if message.guild else None,
@@ -103,6 +107,7 @@ class ChatLogs(BaseLogger):
 
         self._processing.add(message.id)
         try:
+            print(f"[CHATLOG] Обрабатываем сообщение {message.id}")
             embed = self._base_embed("Сообщение отправлено", LOG_COLORS["GREEN"], message)
             embed.description = self._truncate(message.clean_content or "*(Пустое сообщение)*", 4000)
             self._add_attachments(embed, message)
@@ -112,8 +117,10 @@ class ChatLogs(BaseLogger):
             embed.add_field(name="Перейти к сообщению", value=f"[Открыть сообщение]({message.jump_url})", inline=False)
             await self.log_to_channel(message.guild, embed)
             self._recent_messages.append(message.id)
+            print(f"[CHATLOG] Сообщение {message.id} отправлено в лог")
         except (disnake.Forbidden, disnake.HTTPException):
             logger.exception("Failed to log created message %s", message.id)
+            print(f"[CHATLOG] Ошибка отправки сообщения {message.id}")
         finally:
             self._processing.discard(message.id)
 
