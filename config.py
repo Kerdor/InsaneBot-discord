@@ -1,28 +1,21 @@
-import os
 from pathlib import Path
+
 import disnake
 from disnake import SelectOption
 
+
 class BotConfig:
     # === Основные настройки бота ===
-    # Загружаем переменные из secrets.py
     try:
         from secrets import BOT_TOKEN as _BOT_TOKEN, BOT_PREFIX as _BOT_PREFIX, TEST_GUILDS as _TEST_GUILDS
-        print("✓ Загружены секретные данные из secrets.py")
-    except ImportError:
-        print("\n=== ОШИБКА ===")
-        print("Файл secrets.py не найден!")
-        print("Создайте файл secrets.py с токеном бота")
-        print("===================\n")
-        exit(1)
-    
+    except ImportError as exc:
+        raise RuntimeError(
+            "Файл secrets.py не найден. Создайте его с BOT_TOKEN, BOT_PREFIX и TEST_GUILDS."
+        ) from exc
+
     if not _BOT_TOKEN:
-        print("\n=== ОШИБКА ===")
-        print("BOT_TOKEN не задан в secrets.py!")
-        print("===================\n")
-        exit(1)
-    
-    # Присваиваем значения атрибутам класса
+        raise RuntimeError("BOT_TOKEN не задан в secrets.py")
+
     TOKEN = _BOT_TOKEN
     PREFIX = _BOT_PREFIX
     TEST_GUILDS = _TEST_GUILDS
@@ -34,9 +27,11 @@ class BotConfig:
     LOGS_DIR = PROJECT_DIR / "logs"
 
     @staticmethod
-    def ensure_asset(filename: str) -> Path:
-        """Проверяет существование файла в папке assets и возвращает путь."""
-        file_path = BotConfig.ASSETS_DIR / filename
+    def ensure_asset(filename: str | Path) -> Path:
+        """Проверяет существование файла в папке img и возвращает путь."""
+        file_path = Path(filename)
+        if not file_path.is_absolute():
+            file_path = BotConfig.ASSETS_DIR / file_path
         if not file_path.exists():
             raise FileNotFoundError(f"Asset file not found: {file_path}")
         return file_path
@@ -65,6 +60,7 @@ class BotConfig:
     def iter_role_ids(role_dict: dict) -> iter:
         """Возвращает итератор по ID ролей."""
         return (role_id for role_id in role_dict.values() if isinstance(role_id, int))
+
     # === Каналы ===
     CHANNELS = {
         "create_voice": 1336547276059050004,
@@ -95,36 +91,39 @@ class BotConfig:
 
     # === Цвета для embed'ов ===
     LOG_COLORS = {
-        "GREEN": 0x00ff00,    # Успешные действия
-        "ORANGE": 0xffa500,  # Предупреждения, изменения
-        "RED": 0xff0000,     # Ошибки, удаления, баны
-        "BLUE": 0x3498db,    # Информация, обновления
+        "GREEN": 0x00FF00,
+        "ORANGE": 0xFFA500,
+        "RED": 0xFF0000,
+        "BLUE": 0x3498DB,
     }
 
     # === Коги (расширения) ===
+    # Загружаются все реально используемые модули. Раньше user_cmd и owner
+    # находились в репозитории, но вообще не загружались.
     COGS = (
-        "cogs.moderation_cmd",
+        "cogs.owner",
+        "cogs.user_cmd.create_voice",
+        "cogs.user_cmd.get_roles",
         "cogs.logging.chat_logs",
         "cogs.logging.guild_logs",
-        "cogs.logging.moderation_logs"
+        "cogs.logging.moderation_logs",
     )
 
     @staticmethod
     def validate():
         """Проверяет корректность конфигурации."""
         if not BotConfig.TOKEN:
-            print("\n=== ОШИБКА ===")
-            print("BOT_TOKEN не задан в secrets.py!")
-            print("===================\n")
-            exit(1)
-        
+            raise ValueError("BOT_TOKEN не задан в secrets.py")
+
         if not BotConfig.COGS:
             raise ValueError("Список COGS пуст")
 
-        # Проверка существования директорий
-        for directory in [BotConfig.ASSETS_DIR, BotConfig.DATABASE_DIR, BotConfig.LOGS_DIR]:
-            if not directory.exists():
-                directory.mkdir(exist_ok=True)
+        for directory in (
+            BotConfig.ASSETS_DIR,
+            BotConfig.DATABASE_DIR,
+            BotConfig.LOGS_DIR,
+        ):
+            directory.mkdir(parents=True, exist_ok=True)
 
-# Инициализация модуля
+
 BotConfig.validate()
