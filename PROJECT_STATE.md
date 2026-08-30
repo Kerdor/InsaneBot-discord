@@ -313,6 +313,23 @@ Panel may contain:
 
 Panel actions must respect the moderator's permissions.
 
+### Moderation implementation state
+
+Completed:
+- persistent SQLite punishment history
+- `/warn`
+- `/timeout`
+- `/kick`
+- `/ban`
+- `/unban`
+- `/history`
+- persistent moderation panel
+- panel buttons for warn, timeout, kick and ban
+- ephemeral modal input for target user ID, reason and timeout duration
+- moderation action logging
+- staff-role permission checks
+- panel recovery/creation after restart
+
 ## Logging
 
 Logs live inside the moderation area.
@@ -394,6 +411,10 @@ Known completed repository changes before this document:
 - ticket categories
 - ticket moderation notifications
 - ticket transcripts and persistent close metadata
+- moderation database
+- moderation slash commands
+- persistent moderation panel
+- functional moderation panel actions with ephemeral modals
 
 ## Immediate next work
 
@@ -401,14 +422,13 @@ Continue from the current repository state.
 
 Priority order:
 
-1. Verify ticket system locally and fix runtime issues found in testing.
-2. Build/finish moderation panel and persistent moderation actions.
-3. Finish/verify logging coverage and structure restoration.
-4. Implement XP/levels using existing chat and voice activity.
-5. Implement economy, daily rewards and inventory.
-6. Implement profiles and profile cards.
-7. Implement friends and social actions.
-8. Implement romantic relationships.
-9. Then achievements/quests/mini-games/PvP/collections/cosmetics.
+1. Verify ticket and moderation systems locally and fix runtime issues found in testing.
+2. Finish/verify logging coverage and structure restoration.
+3. Implement XP/levels using existing chat and voice activity.
+4. Implement economy, daily rewards and inventory.
+5. Implement profiles and profile cards.
+6. Implement friends and social actions.
+7. Implement romantic relationships.
+8. Then achievements/quests/mini-games/PvP/collections/cosmetics.
 
 Do not redo already agreed product decisions. Continue implementation from the actual repository state.
