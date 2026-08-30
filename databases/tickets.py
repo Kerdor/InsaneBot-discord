@@ -25,11 +25,18 @@ def init_tickets() -> None:
                 author_id INTEGER NOT NULL,
                 thread_id INTEGER NOT NULL UNIQUE,
                 status TEXT NOT NULL DEFAULT 'open',
+                category TEXT NOT NULL DEFAULT 'Другое',
                 created_at TEXT NOT NULL,
-                closed_at TEXT
+                closed_at TEXT,
+                closed_by INTEGER
             )
             """
         )
+        columns = {row[1] for row in connection.execute("PRAGMA table_info(tickets)").fetchall()}
+        if "category" not in columns:
+            connection.execute("ALTER TABLE tickets ADD COLUMN category TEXT NOT NULL DEFAULT 'Другое'")
+        if "closed_by" not in columns:
+            connection.execute("ALTER TABLE tickets ADD COLUMN closed_by INTEGER")
         connection.execute(
             "CREATE INDEX IF NOT EXISTS idx_tickets_guild_author_status "
             "ON tickets(guild_id, author_id, status)"
@@ -37,12 +44,14 @@ def init_tickets() -> None:
         connection.commit()
 
 
-def create_ticket(guild_id: int, author_id: int, thread_id: int) -> int:
+def create_ticket(guild_id: int, author_id: int, thread_id: int, category: str = "Другое") -> int:
     created_at = datetime.now(timezone.utc).isoformat()
     with _connect() as connection:
         cursor = connection.execute(
-            "INSERT INTO tickets (guild_id, author_id, thread_id, status, created_at) VALUES (?, ?, ?, 'open', ?)",
-            (guild_id, author_id, thread_id, created_at),
+            "INSERT INTO tickets "
+            "(guild_id, author_id, thread_id, status, category, created_at) "
+            "VALUES (?, ?, ?, 'open', ?, ?)",
+            (guild_id, author_id, thread_id, category, created_at),
         )
         connection.commit()
         return int(cursor.lastrowid)
@@ -65,13 +74,13 @@ def get_ticket_by_thread(guild_id: int, thread_id: int) -> sqlite3.Row | None:
         ).fetchone()
 
 
-def close_ticket(guild_id: int, thread_id: int) -> bool:
+def close_ticket(guild_id: int, thread_id: int, closed_by: int | None = None) -> bool:
     closed_at = datetime.now(timezone.utc).isoformat()
     with _connect() as connection:
         cursor = connection.execute(
-            "UPDATE tickets SET status = 'closed', closed_at = ? "
+            "UPDATE tickets SET status = 'closed', closed_at = ?, closed_by = ? "
             "WHERE guild_id = ? AND thread_id = ? AND status = 'open'",
-            (closed_at, guild_id, thread_id),
+            (closed_at, closed_by, guild_id, thread_id),
         )
         connection.commit()
         return cursor.rowcount > 0
