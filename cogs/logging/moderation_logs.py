@@ -119,12 +119,12 @@ class ModerationLogs(BaseLogger):
 
     @commands.Cog.listener()
     async def on_member_update(self, before: disnake.Member, after: disnake.Member) -> None:
-        if before.timed_out_until == after.timed_out_until:
+        if before.current_timeout == after.current_timeout:
             return
-        if after.timed_out_until:
+        if after.current_timeout:
             embed = self._member_embed("Тайм-аут установлен", LOG_COLORS["RED"], after)
-            embed.add_field(name="Длительность", value=format_duration(after.timed_out_until - disnake.utils.utcnow()), inline=True)
-            embed.add_field(name="До", value=disnake.utils.format_dt(after.timed_out_until, "f"), inline=True)
+            embed.add_field(name="Длительность", value=format_duration(after.current_timeout - disnake.utils.utcnow()), inline=True)
+            embed.add_field(name="До", value=disnake.utils.format_dt(after.current_timeout, "f"), inline=True)
         else:
             embed = self._member_embed("Тайм-аут снят", LOG_COLORS["GREEN"], after)
         entry = await self._audit_entry(after.guild, disnake.AuditLogAction.member_update, after.id)
