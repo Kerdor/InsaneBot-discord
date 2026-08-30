@@ -62,6 +62,7 @@ class VoiceStats(BaseLogger):
         member: disnake.Member,
         channel: disnake.VoiceChannel | None,
         duration: int | None = None,
+        details: list[tuple[str, str]] | None = None,
     ) -> None:
         embed = self.create_embed(
             title,
@@ -72,6 +73,8 @@ class VoiceStats(BaseLogger):
         )
         if duration is not None:
             embed.add_field(name="Длительность", value=self._format_duration(duration), inline=True)
+        for name, value in details or []:
+            embed.add_field(name=name, value=value, inline=True)
         try:
             await self.log_to_channel(guild, embed)
         except (disnake.Forbidden, disnake.HTTPException):
@@ -96,6 +99,29 @@ class VoiceStats(BaseLogger):
     async def _move_session(self, member: disnake.Member, before: disnake.VoiceChannel, after: disnake.VoiceChannel) -> None:
         await self._finish(member, before)
         await self._start(member, after)
+        await self._log_event(
+            member.guild,
+            "↔️ Переход между голосовыми каналами",
+            member,
+            after,
+            details=[("Из канала", before.mention)],
+        )
+
+    @staticmethod
+    def _voice_status_changes(before: disnake.VoiceState, after: disnake.VoiceState) -> list[tuple[str, str]]:
+        changes: list[tuple[str, str]] = []
+        flags = (
+            ("Микрофон", before.self_mute, after.self_mute, "Сам выключил", "Сам включил"),
+            ("Наушники", before.self_deaf, after.self_deaf, "Сам выключил звук", "Сам включил звук"),
+            ("Микрофон сервером", before.mute, after.mute, "Модератор выключил", "Модератор включил"),
+            ("Наушники сервером", before.deaf, after.deaf, "Сервер выключил звук", "Сервер включил звук"),
+            ("Камера", before.self_video, after.self_video, "Выключена", "Включена"),
+            ("Стрим", before.self_stream, after.self_stream, "Остановлен", "Запущен"),
+        )
+        for name, old, new, off_text, on_text in flags:
+            if old != new:
+                changes.append((name, on_text if new else off_text))
+        return changes
 
     @commands.Cog.listener()
     async def on_ready(self) -> None:
@@ -145,14 +171,21 @@ class VoiceStats(BaseLogger):
 
         if before_counted and not after_counted:
             await self._finish(member, before_channel)
-            return
-
-        if not before_counted and after_counted:
+        elif not before_counted and after_counted:
             await self._start(member, after_channel)
-            return
-
-        if before_counted and after_counted and before_channel.id != after_channel.id:
+        elif before_counted and after_counted and before_channel.id != after_channel.id:
             await self._move_session(member, before_channel, after_channel)
+
+        if before_channel is not None and after_channel is not None:
+            changes = self._voice_status_changes(before, after)
+            if changes:
+                await self._log_event(
+                    member.guild,
+                    "🎙️ Состояние голосового подключения изменено",
+                    member,
+                    after_channel,
+                    details=changes,
+                )
 
     @commands.slash_command(name="voice", description="Показать голосовую статистику")
     async def voice(self, inter: disnake.ApplicationCommandInteraction, member: disnake.Member | None = None) -> None:
