@@ -1,7 +1,9 @@
 from __future__ import annotations
 
+import gzip
 import json
 import logging
+import os
 import tempfile
 from pathlib import Path
 
@@ -17,10 +19,7 @@ def _permissions(perms: disnake.Permissions) -> list[str]:
 
 def _overwrite_data(overwrite: disnake.PermissionOverwrite) -> dict[str, list[str]]:
     allow, deny = overwrite.pair()
-    return {
-        "allow": _permissions(allow),
-        "deny": _permissions(deny),
-    }
+    return {"allow": _permissions(allow), "deny": _permissions(deny)}
 
 
 def _role_data(role: disnake.Role) -> dict:
@@ -128,7 +127,6 @@ def _member_data(member: disnake.Member) -> dict:
 
 def build_dump(guild: disnake.Guild) -> dict:
     channels = sorted(guild.channels, key=lambda channel: (channel.position, channel.id))
-
     categories = [channel for channel in channels if isinstance(channel, disnake.CategoryChannel)]
     non_categories = [channel for channel in channels if not isinstance(channel, disnake.CategoryChannel)]
 
@@ -186,10 +184,7 @@ def build_dump(guild: disnake.Guild) -> dict:
 
 
 def _write_json(data: dict, path: Path) -> None:
-    path.write_text(
-        json.dumps(data, ensure_ascii=False, indent=2),
-        encoding="utf-8",
-    )
+    path.write_text(json.dumps(data, ensure_ascii=False, indent=2), encoding="utf-8")
 
 
 class OwnerDump(commands.Cog):
@@ -203,29 +198,40 @@ class OwnerDump(commands.Cog):
     @commands.is_owner()
     async def dump_server(self, inter: disnake.ApplicationCommandInteraction) -> None:
         if not inter.guild:
-            await inter.response.send_message(
-                "Команда доступна только на сервере.",
-                ephemeral=True,
-            )
+            await inter.response.send_message("Команда доступна только на сервере.", ephemeral=True)
             return
 
         await inter.response.defer(ephemeral=True)
+        json_path: Path | None = None
+        gzip_path: Path | None = None
 
         try:
             data = build_dump(inter.guild)
             fd, temp_name = tempfile.mkstemp(prefix="insane_server_", suffix=".json")
-            Path(temp_name).unlink(missing_ok=True)
-            path = Path(temp_name)
-            _write_json(data, path)
+            os.close(fd)
+            json_path = Path(temp_name)
+            _write_json(data, json_path)
 
+            path = json_path
+            filename = f"{inter.guild.name}_server_dump.json"
             size = path.stat().st_size
-            file = disnake.File(path, filename=f"{inter.guild.name}_server_dump.json")
+
+            # Compress large dumps so a populated server is still exportable.
+            if size > 8 * 1024 * 1024:
+                gzip_path = json_path.with_suffix(".json.gz")
+                with json_path.open("rb") as source, gzip.open(gzip_path, "wb", compresslevel=6) as target:
+                    target.writelines(source)
+                path = gzip_path
+                filename += ".gz"
+                size = path.stat().st_size
+
+            file = disnake.File(path, filename=filename)
             await inter.followup.send(
                 content=(
                     f"Готово. Экспортировано: {len(data['roles'])} ролей, "
                     f"{len(data['categories'])} категорий, {len(data['channels'])} каналов, "
                     f"{len(data['members'])} участников, {len(data['emojis'])} эмодзи и "
-                    f"{len(data['stickers'])} стикеров. Размер: {size:,} байт."
+                    f"{len(data['stickers'])} стикеров. Размер файла: {size:,} байт."
                 ),
                 file=file,
                 ephemeral=True,
@@ -233,22 +239,19 @@ class OwnerDump(commands.Cog):
         except disnake.HTTPException:
             logger.exception("Failed to send server dump")
             await inter.followup.send(
-                "Не удалось отправить дамп сервера. Возможно, файл слишком большой.",
+                "Не удалось отправить дамп сервера. Возможно, файл слишком большой для Discord.",
                 ephemeral=True,
             )
         except Exception:
             logger.exception("Failed to build server dump")
-            await inter.followup.send(
-                "Произошла ошибка при создании дампа сервера.",
-                ephemeral=True,
-            )
+            await inter.followup.send("Произошла ошибка при создании дампа сервера.", ephemeral=True)
         finally:
-            try:
-                path.unlink(missing_ok=True)
-            except UnboundLocalError:
-                pass
-            except OSError:
-                logger.warning("Failed to remove temporary server dump")
+            for path in (json_path, gzip_path):
+                if path:
+                    try:
+                        path.unlink(missing_ok=True)
+                    except OSError:
+                        logger.warning("Failed to remove temporary server dump: %s", path)
 
 
 def setup(bot: commands.Bot) -> None:
