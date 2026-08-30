@@ -6,7 +6,7 @@ import disnake
 from disnake.ext import commands
 
 from config import BotConfig
-from logs import setup_logging
+from logs import get_discord_log_handler, setup_logging
 
 setup_logging()
 logger = logging.getLogger(__name__)
@@ -150,6 +150,7 @@ async def _sync_test_commands() -> None:
 
 @bot.event
 async def on_ready() -> None:
+    get_discord_log_handler().set_bot(bot)
     logger.info("Bot %s is ready", bot.user)
     logger.info("Bot ID: %s", bot.user.id if bot.user else "Unknown")
     logger.info("Guilds: %s", len(bot.guilds))
@@ -172,11 +173,13 @@ async def on_ready() -> None:
 
     await _sync_test_commands()
 
+    logger.info("[STARTUP] Discord system logging активирован")
     print("=" * 50 + "\n")
 
 
 @bot.event
 async def on_connect() -> None:
+    get_discord_log_handler().set_bot(bot)
     logger.info("Bot connected to Discord")
     print("[GATEWAY] Подключение к Discord установлено")
 
@@ -198,6 +201,7 @@ async def on_error(event: str, *args, **kwargs) -> None:
 async def load(ctx: disnake.ApplicationCommandInteraction, extension: str) -> None:
     qualified_extension = extension if extension.startswith("cogs.") else f"cogs.{extension}"
     print(f"[CMD] /load вызван: {qualified_extension}")
+    logger.info("[CMD] /load: user=%s (%s), guild=%s, extension=%s", ctx.author, ctx.author.id, ctx.guild.id if ctx.guild else None, qualified_extension)
     try:
         bot.load_extension(qualified_extension)
         await ctx.send(f"Ког **{qualified_extension}** успешно загружен.", ephemeral=True)
@@ -220,6 +224,7 @@ async def load(ctx: disnake.ApplicationCommandInteraction, extension: str) -> No
 async def unload(ctx: disnake.ApplicationCommandInteraction, extension: str) -> None:
     qualified_extension = extension if extension.startswith("cogs.") else f"cogs.{extension}"
     print(f"[CMD] /unload вызван: {qualified_extension}")
+    logger.info("[CMD] /unload: user=%s (%s), guild=%s, extension=%s", ctx.author, ctx.author.id, ctx.guild.id if ctx.guild else None, qualified_extension)
     try:
         bot.unload_extension(qualified_extension)
         await ctx.send(f"Ког **{qualified_extension}** успешно выгружен.", ephemeral=True)
@@ -235,6 +240,7 @@ async def unload(ctx: disnake.ApplicationCommandInteraction, extension: str) -> 
 async def reload(ctx: disnake.ApplicationCommandInteraction, extension: str) -> None:
     qualified_extension = extension if extension.startswith("cogs.") else f"cogs.{extension}"
     print(f"[CMD] /reload вызван: {qualified_extension}")
+    logger.info("[CMD] /reload: user=%s (%s), guild=%s, extension=%s", ctx.author, ctx.author.id, ctx.guild.id if ctx.guild else None, qualified_extension)
     try:
         bot.reload_extension(qualified_extension)
         await ctx.send(f"Ког **{qualified_extension}** успешно перезагружен.", ephemeral=True)
