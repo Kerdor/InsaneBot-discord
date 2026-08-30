@@ -195,20 +195,20 @@ def get_main_room(guild_id: int, user_id: int) -> sqlite3.Row | None:
         ).fetchone()
 
 
-def add_coowner(guild_id: int, owner_id: int, user_id: int) -> None:
+def add_member(guild_id: int, owner_id: int, user_id: int, coowner: bool = False) -> None:
     with _connect() as connection:
         connection.execute(
             """
             INSERT INTO voice_room_members (guild_id, owner_id, user_id, is_coowner)
-            VALUES (?, ?, ?, 1)
-            ON CONFLICT(guild_id, owner_id, user_id) DO UPDATE SET is_coowner = 1
+            VALUES (?, ?, ?, ?)
+            ON CONFLICT(guild_id, owner_id, user_id) DO UPDATE SET is_coowner = excluded.is_coowner
             """,
-            (guild_id, owner_id, user_id),
+            (guild_id, owner_id, user_id, int(coowner)),
         )
         connection.commit()
 
 
-def remove_coowner(guild_id: int, owner_id: int, user_id: int) -> None:
+def remove_member(guild_id: int, owner_id: int, user_id: int) -> None:
     with _connect() as connection:
         connection.execute(
             """
@@ -218,6 +218,14 @@ def remove_coowner(guild_id: int, owner_id: int, user_id: int) -> None:
             (guild_id, owner_id, user_id),
         )
         connection.commit()
+
+
+def add_coowner(guild_id: int, owner_id: int, user_id: int) -> None:
+    add_member(guild_id, owner_id, user_id, coowner=True)
+
+
+def remove_coowner(guild_id: int, owner_id: int, user_id: int) -> None:
+    remove_member(guild_id, owner_id, user_id)
 
 
 def get_coowners(guild_id: int, owner_id: int) -> list[int]:
@@ -245,20 +253,3 @@ def is_room_manager(guild_id: int, owner_id: int, user_id: int) -> bool:
             (guild_id, owner_id, user_id),
         ).fetchone()
         return row is not None
-
-
-def delete_room(guild_id: int, owner_id: int) -> None:
-    with _connect() as connection:
-        connection.execute(
-            "DELETE FROM voice_room_members WHERE guild_id = ? AND owner_id = ?",
-            (guild_id, owner_id),
-        )
-        connection.execute(
-            "DELETE FROM voice_room_preferences WHERE guild_id = ? AND owner_id = ?",
-            (guild_id, owner_id),
-        )
-        connection.execute(
-            "DELETE FROM voice_rooms WHERE guild_id = ? AND owner_id = ?",
-            (guild_id, owner_id),
-        )
-        connection.commit()
