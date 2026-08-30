@@ -98,10 +98,9 @@ class BotConfig:
     }
 
     # === Коги (расширения) ===
-    # Загружаются все реально используемые модули. Раньше user_cmd и owner
-    # находились в репозитории, но вообще не загружались.
     COGS = (
         "cogs.owner",
+        "cogs.owner_dump",
         "cogs.user_cmd.create_voice",
         "cogs.user_cmd.get_roles",
         "cogs.logging.chat_logs",
