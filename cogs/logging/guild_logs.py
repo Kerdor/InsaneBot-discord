@@ -45,10 +45,7 @@ class GuildLogs(BaseLogger):
     async def _is_duplicate_event(self, event_type: str, target_id: int) -> bool:
         current_time = disnake.utils.utcnow().timestamp()
         event_key = f"{event_type}:{target_id}"
-        expired = [
-            key for key, timestamp in self._processed_events.items()
-            if current_time - timestamp > self._event_timeout
-        ]
+        expired = [key for key, timestamp in self._processed_events.items() if current_time - timestamp > self._event_timeout]
         for key in expired:
             self._processed_events.pop(key, None)
         if event_key in self._processed_events:
@@ -114,12 +111,22 @@ class GuildLogs(BaseLogger):
                     embed.add_field(name=f"Добавлены роли ({len(added_roles)})", value="\n".join(role.mention for role in added_roles)[:1024], inline=False)
                 if removed_roles:
                     embed.add_field(name=f"Удалены роли ({len(removed_roles)})", value="\n".join(role.mention for role in removed_roles)[:1024], inline=False)
+                entry = await self._audit_entry(after.guild, disnake.AuditLogAction.member_role_update, after.id)
+                if entry:
+                    embed.add_field(name="Изменил", value=f"{entry.user.mention} (ID: {entry.user.id})", inline=False)
+                    if entry.reason:
+                        embed.add_field(name="Причина", value=entry.reason[:1024], inline=False)
                 await self.log_to_channel(after.guild, embed)
 
         if before.nick != after.nick:
             embed = self._member_embed("Никнейм изменён", LOG_COLORS["ORANGE"], after)
             embed.add_field(name="До", value=before.nick or "(не установлен)", inline=True)
             embed.add_field(name="После", value=after.nick or "(не установлен)", inline=True)
+            entry = await self._audit_entry(after.guild, disnake.AuditLogAction.member_update, after.id)
+            if entry:
+                embed.add_field(name="Изменил", value=f"{entry.user.mention} (ID: {entry.user.id})", inline=False)
+                if entry.reason:
+                    embed.add_field(name="Причина", value=entry.reason[:1024], inline=False)
             await self.log_to_channel(after.guild, embed)
 
     @commands.Cog.listener()
@@ -155,6 +162,130 @@ class GuildLogs(BaseLogger):
             if entry.reason:
                 embed.add_field(name="Причина", value=entry.reason[:1024], inline=False)
         await self.log_to_channel(channel.guild, embed)
+
+    @commands.Cog.listener()
+    async def on_guild_channel_update(self, before: disnake.abc.GuildChannel, after: disnake.abc.GuildChannel) -> None:
+        changes: list[str] = []
+        if before.name != after.name:
+            changes.append(f"**Название:** `{before.name}` → `{after.name}`")
+        if before.category != after.category:
+            old_category = before.category.name if before.category else "(нет)"
+            new_category = after.category.name if after.category else "(нет)"
+            changes.append(f"**Категория:** `{old_category}` → `{new_category}`")
+        if isinstance(before, (disnake.TextChannel, disnake.VoiceChannel)) and isinstance(after, type(before)):
+            if getattr(before, "topic", None) != getattr(after, "topic", None):
+                changes.append(f"**Тема:** `{getattr(before, 'topic', None) or '(нет)'}` → `{getattr(after, 'topic', None) or '(нет)'}`")
+        if not changes:
+            return
+        embed = disnake.Embed(title="Канал изменён", color=LOG_COLORS["ORANGE"], timestamp=disnake.utils.utcnow(), description="\n".join(changes)[:4000])
+        embed.add_field(name="Канал", value=f"{after.mention} (ID: {after.id})", inline=False)
+        entry = await self._audit_entry(after.guild, disnake.AuditLogAction.channel_update, after.id)
+        if entry:
+            embed.add_field(name="Изменил", value=f"{entry.user.mention} (ID: {entry.user.id})", inline=False)
+            if entry.reason:
+                embed.add_field(name="Причина", value=entry.reason[:1024], inline=False)
+        await self.log_to_channel(after.guild, embed)
+
+    @commands.Cog.listener()
+    async def on_guild_role_create(self, role: disnake.Role) -> None:
+        if await self._is_duplicate_event("role_create", role.id):
+            return
+        embed = disnake.Embed(title="Роль создана", color=LOG_COLORS["GREEN"], timestamp=disnake.utils.utcnow())
+        embed.add_field(name="Роль", value=f"{role.mention} (ID: {role.id})", inline=True)
+        entry = await self._audit_entry(role.guild, disnake.AuditLogAction.role_create, role.id)
+        if entry:
+            embed.add_field(name="Создал", value=f"{entry.user.mention} (ID: {entry.user.id})", inline=False)
+            if entry.reason:
+                embed.add_field(name="Причина", value=entry.reason[:1024], inline=False)
+        await self.log_to_channel(role.guild, embed)
+
+    @commands.Cog.listener()
+    async def on_guild_role_delete(self, role: disnake.Role) -> None:
+        if await self._is_duplicate_event("role_delete", role.id):
+            return
+        embed = disnake.Embed(title="Роль удалена", color=LOG_COLORS["RED"], timestamp=disnake.utils.utcnow())
+        embed.add_field(name="Название", value=f"**{role.name}** (ID: {role.id})", inline=True)
+        entry = await self._audit_entry(role.guild, disnake.AuditLogAction.role_delete, role.id)
+        if entry:
+            embed.add_field(name="Удалил", value=f"{entry.user.mention} (ID: {entry.user.id})", inline=False)
+            if entry.reason:
+                embed.add_field(name="Причина", value=entry.reason[:1024], inline=False)
+        await self.log_to_channel(role.guild, embed)
+
+    @commands.Cog.listener()
+    async def on_guild_role_update(self, before: disnake.Role, after: disnake.Role) -> None:
+        changes: list[str] = []
+        if before.name != after.name:
+            changes.append(f"**Название:** `{before.name}` → `{after.name}`")
+        if before.position != after.position:
+            changes.append(f"**Позиция:** `{before.position}` → `{after.position}`")
+        if before.permissions != after.permissions:
+            changes.append("**Permissions:** изменены")
+        if before.color != after.color:
+            changes.append("**Цвет:** изменён")
+        if before.hoist != after.hoist:
+            changes.append(f"**Отображение отдельно:** `{before.hoist}` → `{after.hoist}`")
+        if before.mentionable != after.mentionable:
+            changes.append(f"**Упоминание:** `{before.mentionable}` → `{after.mentionable}`")
+        if not changes:
+            return
+        embed = disnake.Embed(title="Роль изменена", color=LOG_COLORS["ORANGE"], timestamp=disnake.utils.utcnow(), description="\n".join(changes)[:4000])
+        embed.add_field(name="Роль", value=f"{after.mention} (ID: {after.id})", inline=False)
+        entry = await self._audit_entry(after.guild, disnake.AuditLogAction.role_update, after.id)
+        if entry:
+            embed.add_field(name="Изменил", value=f"{entry.user.mention} (ID: {entry.user.id})", inline=False)
+            if entry.reason:
+                embed.add_field(name="Причина", value=entry.reason[:1024], inline=False)
+        await self.log_to_channel(after.guild, embed)
+
+    @commands.Cog.listener()
+    async def on_guild_update(self, before: disnake.Guild, after: disnake.Guild) -> None:
+        changes: list[str] = []
+        if before.name != after.name:
+            changes.append(f"**Название:** `{before.name}` → `{after.name}`")
+        if before.icon != after.icon:
+            changes.append("**Иконка:** изменена")
+        if before.banner != after.banner:
+            changes.append("**Баннер:** изменён")
+        if before.description != after.description:
+            changes.append("**Описание:** изменено")
+        if before.verification_level != after.verification_level:
+            changes.append(f"**Уровень верификации:** `{before.verification_level}` → `{after.verification_level}`")
+        if not changes:
+            return
+        embed = disnake.Embed(title="Настройки сервера изменены", color=LOG_COLORS["ORANGE"], timestamp=disnake.utils.utcnow(), description="\n".join(changes)[:4000])
+        entry = await self._audit_entry(after, disnake.AuditLogAction.guild_update, after.id)
+        if entry:
+            embed.add_field(name="Изменил", value=f"{entry.user.mention} (ID: {entry.user.id})", inline=False)
+            if entry.reason:
+                embed.add_field(name="Причина", value=entry.reason[:1024], inline=False)
+        await self.log_to_channel(after, embed)
+
+    @commands.Cog.listener()
+    async def on_member_ban(self, guild: disnake.Guild, user: disnake.User) -> None:
+        if await self._is_duplicate_event("ban", user.id):
+            return
+        embed = disnake.Embed(title="Пользователь заблокирован", color=LOG_COLORS["RED"], timestamp=disnake.utils.utcnow())
+        embed.add_field(name="Пользователь", value=f"{user.mention} (ID: {user.id})", inline=True)
+        entry = await self._audit_entry(guild, disnake.AuditLogAction.ban, user.id)
+        if entry:
+            embed.add_field(name="Модератор", value=f"{entry.user.mention} (ID: {entry.user.id})", inline=False)
+            if entry.reason:
+                embed.add_field(name="Причина", value=entry.reason[:1024], inline=False)
+        await self.log_to_channel(guild, embed)
+
+    @commands.Cog.listener()
+    async def on_member_unban(self, guild: disnake.Guild, user: disnake.User) -> None:
+        if await self._is_duplicate_event("unban", user.id):
+            return
+        embed = disnake.Embed(title="Пользователь разблокирован", color=LOG_COLORS["GREEN"], timestamp=disnake.utils.utcnow())
+        embed.add_field(name="Пользователь", value=f"{user.mention} (ID: {user.id})", inline=True)
+        entry = await self._audit_entry(guild, disnake.AuditLogAction.unban, user.id)
+        if entry:
+            embed.add_field(name="Модератор", value=f"{entry.user.mention} (ID: {entry.user.id})", inline=False)
+            if entry.reason:
+                embed.add_field(name="Причина", value=entry.reason[:1024], inline=False)
+        await self.log_to_channel(guild, embed)
 
 
 def setup(bot: commands.Bot) -> None:
