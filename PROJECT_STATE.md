@@ -274,6 +274,22 @@ Discord Forum Posts cannot provide the required per-user privacy in the same way
 
 Tickets should not be automatically deleted after 24–48 hours. History should remain available and important ticket data should be stored in the database.
 
+### Ticket implementation state
+
+Completed:
+- persistent SQLite ticket records
+- one open ticket per user
+- private Discord threads
+- author + moderation access
+- persistent creation panel
+- category selection
+- moderation notification
+- close button and `/ticket_close`
+- closed ticket metadata
+- transcript saved as `.txt` in the ticket parent channel
+- closed threads archived and locked
+- open ticket recovery after bot restart
+
 ## Moderation
 
 Moderation is available through both slash commands and a button-based panel.
@@ -370,16 +386,14 @@ Known completed repository changes before this document:
 - database preparation for friends-only setting
 - `installed.flag` checked and removed because it was unused
 - `.python-version` retained
-
-Known commits from previous work:
-
-- `873101a` — voice room database
-- `f812c3f` — database structure fix
-- `478dadd` — main voice room system
-- `23662fd` — access management
-- `dd2e9f633abb0a75e6f84c884b69f7c454a66e41` — remove installed.flag
-
-These commit descriptions are historical context only. Always inspect current `main` before editing.
+- persistent voice statistics
+- AFK exclusion and channel-move handling
+- voice recovery after restart
+- ticket database and private-thread ticket system
+- ticket creation panel
+- ticket categories
+- ticket moderation notifications
+- ticket transcripts and persistent close metadata
 
 ## Immediate next work
 
@@ -387,25 +401,14 @@ Continue from the current repository state.
 
 Priority order:
 
-1. Inspect current voice implementation.
-2. Finish/verify the user-room control panel.
-3. Finish/verify primary-room selection for users with access to multiple rooms.
-4. Finish approval flow for making someone else's room primary when the user is not owner/co-owner.
-5. Verify permissions restoration and room persistence.
-6. Add/finish friends-only behavior when the friends system is implemented; do not invent a fake friends lookup before that system exists.
-7. Implement robust voice-time tracking:
-   - join time
-   - leave time
-   - session duration
-   - total duration
-   - per-channel duration
-   - voice-time ranking
-   - AFK exclusion
-   - correct channel-move handling
-   - recovery after bot restart
-8. Then proceed to tickets, moderation and logging.
-9. Then XP/levels/economy/profile.
-10. Then friends/relationships/social actions.
-11. Then achievements/quests/mini-games/PvP/collections/cosmetics.
+1. Verify ticket system locally and fix runtime issues found in testing.
+2. Build/finish moderation panel and persistent moderation actions.
+3. Finish/verify logging coverage and structure restoration.
+4. Implement XP/levels using existing chat and voice activity.
+5. Implement economy, daily rewards and inventory.
+6. Implement profiles and profile cards.
+7. Implement friends and social actions.
+8. Implement romantic relationships.
+9. Then achievements/quests/mini-games/PvP/collections/cosmetics.
 
 Do not redo already agreed product decisions. Continue implementation from the actual repository state.
