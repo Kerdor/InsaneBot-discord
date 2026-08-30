@@ -135,6 +135,7 @@ class BotConfig:
         "cogs.owner_dump",
         "cogs.rebuild_command",
         "cogs.server_manager",
+        "cogs.verification",
         "cogs.user_cmd.create_voice",
         "cogs.user_cmd.get_roles",
         "cogs.logging.chat_logs",
