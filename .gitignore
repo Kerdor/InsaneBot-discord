@@ -2,6 +2,7 @@
 .env
 .env.*
 !.env.example
+secrets.py
 
 # Python
 __pycache__/
@@ -14,10 +15,15 @@ env/
 logs/
 *.log
 
-# Database
-*.sqlite3
+# Database runtime files
 *.sqlite3-journal
 
 # IDE
 .vscode/
 .idea/
+
+# Testing / coverage
+.pytest_cache/
+.coverage
+.coverage.*
+htmlcov/
