@@ -22,10 +22,10 @@ DEFAULTS = {
     "moderation_timeout_enabled": 1,
     "moderation_kick_enabled": 1,
     "moderation_ban_enabled": 1,
-    "moderation_owner_role": None,
-    "moderation_administrator_role": None,
-    "moderation_moderator_role": None,
-    "moderation_helper_role": None,
+    "moderation_owner_role": 0,
+    "moderation_administrator_role": 0,
+    "moderation_moderator_role": 0,
+    "moderation_helper_role": 0,
 }
 
 
@@ -52,12 +52,11 @@ def get_setting(guild_id: int, key: str):
 
 
 def get_int(guild_id: int, key: str) -> int:
-    value = get_setting(guild_id, key)
-    return int(value)
+    return int(get_setting(guild_id, key) or 0)
 
 
 def get_bool(guild_id: int, key: str) -> bool:
-    return bool(int(get_setting(guild_id, key)))
+    return bool(get_int(guild_id, key))
 
 
 def set_setting(guild_id: int, user_id: int, key: str, value) -> tuple[bool, str, str]:
@@ -74,7 +73,7 @@ def set_setting(guild_id: int, user_id: int, key: str, value) -> tuple[bool, str
     return old_value != new_value, old_value, new_value
 
 
-def get_all(guild_id: int) -> dict[str, str | int | None]:
+def get_all(guild_id: int) -> dict[str, str | int]:
     init_settings()
     with _connect() as connection:
         rows = connection.execute("SELECT key, value FROM settings WHERE guild_id = ?", (guild_id,)).fetchall()
