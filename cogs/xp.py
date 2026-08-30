@@ -8,14 +8,11 @@ from datetime import datetime, timezone
 import disnake
 from disnake.ext import commands
 
+from databases.settings import get_bool, get_int, init_settings
 from databases.voice_stats import get_session
 from databases.xp import add_message_xp, add_voice_xp, get_ranking, get_user, init_xp, set_level
 
 logger = logging.getLogger(__name__)
-MESSAGE_XP_MIN = 15
-MESSAGE_XP_MAX = 25
-MESSAGE_XP_COOLDOWN = 60
-VOICE_XP_PER_MINUTE = 5
 
 
 class XP(commands.Cog):
@@ -26,6 +23,7 @@ class XP(commands.Cog):
         self._message_cooldowns: dict[tuple[int, int], datetime] = {}
         self._voice_started: dict[tuple[int, int], datetime] = {}
         init_xp()
+        init_settings()
 
     @staticmethod
     def _level_for_xp(xp: int) -> int:
@@ -57,7 +55,6 @@ class XP(commands.Cog):
 
     @commands.Cog.listener()
     async def on_ready(self) -> None:
-        """Restore voice XP timers from the persistent voice session database."""
         now = self._now()
         for guild in self.bot.guilds:
             for channel in guild.voice_channels:
@@ -77,45 +74,44 @@ class XP(commands.Cog):
     async def on_message(self, message: disnake.Message) -> None:
         if not message.guild or message.author.bot or message.webhook_id is not None:
             return
+        if not get_bool(message.guild.id, "xp_enabled"):
+            return
         now = self._now()
         key = (message.guild.id, message.author.id)
         last = self._message_cooldowns.get(key)
-        if last and (now - last).total_seconds() < MESSAGE_XP_COOLDOWN:
+        cooldown = get_int(message.guild.id, "xp_message_cooldown")
+        if last and (now - last).total_seconds() < cooldown:
             return
         self._message_cooldowns[key] = now
-        row = add_message_xp(message.guild.id, message.author.id, random.randint(MESSAGE_XP_MIN, MESSAGE_XP_MAX))
+        xp_min = get_int(message.guild.id, "xp_message_min")
+        xp_max = get_int(message.guild.id, "xp_message_max")
+        row = add_message_xp(message.guild.id, message.author.id, random.randint(xp_min, xp_max))
         await self._apply_level(message.guild, message.author.id, row)
 
     async def _finish_voice(self, member: disnake.Member, started: datetime, ended: datetime) -> None:
+        if not get_bool(member.guild.id, "xp_enabled"):
+            return
         minutes = int(max(0, (ended - started).total_seconds()) // 60)
         if minutes <= 0:
             return
-        row = add_voice_xp(member.guild.id, member.id, minutes * VOICE_XP_PER_MINUTE)
+        row = add_voice_xp(member.guild.id, member.id, minutes * get_int(member.guild.id, "xp_voice_per_minute"))
         await self._apply_level(member.guild, member.id, row)
 
     @commands.Cog.listener()
-    async def on_voice_state_update(
-        self,
-        member: disnake.Member,
-        before: disnake.VoiceState,
-        after: disnake.VoiceState,
-    ) -> None:
+    async def on_voice_state_update(self, member: disnake.Member, before: disnake.VoiceState, after: disnake.VoiceState) -> None:
         if member.bot:
             return
         before_counted = self._counted_voice(before.channel, member.guild)
         after_counted = self._counted_voice(after.channel, member.guild)
         key = (member.guild.id, member.id)
         now = self._now()
-
         if not before_counted and after_counted:
             self._voice_started[key] = now
             return
-
         if before_counted and not after_counted:
             started = self._voice_started.pop(key, now)
             await self._finish_voice(member, started, now)
             return
-
         if before_counted and after_counted and before.channel.id != after.channel.id:
             started = self._voice_started.pop(key, now)
             await self._finish_voice(member, started, now)
@@ -139,10 +135,7 @@ class XP(commands.Cog):
         next_floor = level ** 2 * 100
         progress = max(0, xp - current_floor)
         required = max(1, next_floor - current_floor)
-        embed = disnake.Embed(
-            title=f"⭐ Уровень — {target.display_name}",
-            color=disnake.Color.gold(),
-        )
+        embed = disnake.Embed(title=f"⭐ Уровень — {target.display_name}", color=disnake.Color.gold())
         embed.add_field(name="Уровень", value=str(level), inline=True)
         embed.add_field(name="XP", value=f"{progress}/{required}\nВсего: {xp}", inline=True)
         embed.add_field(name="Сообщения", value=str(messages), inline=True)
@@ -160,11 +153,7 @@ class XP(commands.Cog):
             member = inter.guild.get_member(int(row["user_id"]))
             name = member.mention if member else f"<@{row['user_id']}>"
             lines.append(f"**{index}.** {name} — уровень **{row['level']}**, **{row['xp']} XP**")
-        embed = disnake.Embed(
-            title="🏆 Рейтинг по XP",
-            description="\n".join(lines),
-            color=disnake.Color.gold(),
-        )
+        embed = disnake.Embed(title="🏆 Рейтинг по XP", description="\n".join(lines), color=disnake.Color.gold())
         await inter.response.send_message(embed=embed)
 
 
