@@ -51,18 +51,39 @@ def _load_extensions(bot_instance: commands.Bot) -> None:
         )
 
 
+def _deployment_guilds() -> list[tuple[int, str]]:
+    guilds: list[tuple[int, str]] = []
+
+    if BotConfig.MAIN_GUILD_ID is not None:
+        guilds.append((BotConfig.MAIN_GUILD_ID, "MAIN"))
+    if BotConfig.TEST_GUILD_ID is not None:
+        guilds.append((BotConfig.TEST_GUILD_ID, "TEST"))
+
+    return guilds
+
+
 @bot.event
 async def on_ready() -> None:
     logger.info("Bot %s is ready", bot.user)
     logger.info("Bot ID: %s", bot.user.id if bot.user else "Unknown")
     logger.info("Guilds: %s", len(bot.guilds))
 
-    print("\n" + "=" * 40)
+    print("\n" + "=" * 50)
     print("Бот успешно запущен")
     print(f"Имя: {bot.user}")
     print(f"ID: {bot.user.id if bot.user else 'Unknown'}")
-    print(f"Серверов: {len(bot.guilds)}")
-    print("=" * 40 + "\n")
+    print(f"Режим: {BotConfig.ENVIRONMENT.upper()}")
+    print("Сервера:")
+
+    for guild_id, label in _deployment_guilds():
+        guild = bot.get_guild(guild_id)
+        if guild:
+            print(f"  [{label}] {guild.name} (ID: {guild.id})")
+        else:
+            print(f"  [{label}] НЕ НАЙДЕН (ID: {guild_id})")
+
+    print(f"Фактически подключённых серверов: {len(bot.guilds)}")
+    print("=" * 50 + "\n")
 
 
 @bot.event
