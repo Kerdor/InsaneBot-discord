@@ -1,10 +1,12 @@
 from __future__ import annotations
 
+import json
 import os
 from pathlib import Path
 
-from dotenv import load_dotenv
+import disnake
 from disnake import SelectOption
+from dotenv import load_dotenv
 
 
 PROJECT_DIR = Path(__file__).resolve().parent
@@ -28,8 +30,17 @@ def _optional_int_env(name: str) -> int | None:
         raise RuntimeError(f"Переменная {name} должна быть числом") from exc
 
 
+def _load_server_map() -> dict:
+    path = PROJECT_DIR / ".server_map.json"
+    if not path.exists():
+        return {}
+    try:
+        return json.loads(path.read_text(encoding="utf-8"))
+    except (OSError, json.JSONDecodeError):
+        return {}
+
+
 class BotConfig:
-    # === Основные настройки бота ===
     TOKEN = _required_env("BOT_TOKEN")
     PREFIX = os.getenv("BOT_PREFIX", "!").strip() or "!"
 
@@ -49,14 +60,12 @@ class BotConfig:
             raise RuntimeError("MAIN_GUILD_ID не задан для ENVIRONMENT=production")
         TEST_GUILDS = [MAIN_GUILD_ID]
 
-    # === Пути к файлам ===
     ASSETS_DIR = PROJECT_DIR / "img"
     DATABASE_DIR = PROJECT_DIR / "databases"
     LOGS_DIR = PROJECT_DIR / "logs"
 
     @staticmethod
     def ensure_asset(filename: str | Path) -> Path:
-        """Проверяет существование файла в папке img и возвращает путь."""
         file_path = Path(filename)
         if not file_path.is_absolute():
             file_path = BotConfig.ASSETS_DIR / file_path
@@ -64,7 +73,6 @@ class BotConfig:
             raise FileNotFoundError(f"Asset file not found: {file_path}")
         return file_path
 
-    # === Роли ===
     MODERATION_ROLES = {
         "owner": 519209664748191759,
         "administrator": 519209661535223808,
@@ -75,9 +83,6 @@ class BotConfig:
     GAME_ROLES = {
         "Dota 2": 1332487694252638320,
         "CS 2": 1332487739932934165,
-        "PAYDAY 2": 1332487809600323624,
-        "Bellwright": 1334981997780795444,
-        "Stardew Valley": 1334984540862808205,
     }
 
     OTHER_ROLES = {
@@ -86,27 +91,17 @@ class BotConfig:
 
     @staticmethod
     def iter_role_ids(role_dict: dict):
-        """Возвращает итератор по ID ролей."""
         return (role_id for role_id in role_dict.values() if isinstance(role_id, int))
 
-    # === Каналы ===
-    CHANNELS = {
-        "create_voice": 1336547276059050004,
-    }
+    CHANNELS = {"create_voice": 1336547276059050004}
 
-    ASSETS = {
-        "rules_image": ASSETS_DIR / "RULES.png",
-    }
+    ASSETS = {"rules_image": ASSETS_DIR / "RULES.png"}
 
     GAME_ROLE_OPTIONS = [
         SelectOption(label="Dota 2", value=str(GAME_ROLES["Dota 2"])),
         SelectOption(label="CS 2", value=str(GAME_ROLES["CS 2"])),
-        SelectOption(label="PAYDAY 2", value=str(GAME_ROLES["PAYDAY 2"])),
-        SelectOption(label="Bellwright", value=str(GAME_ROLES["Bellwright"])),
-        SelectOption(label="Stardew Valley", value=str(GAME_ROLES["Stardew Valley"])),
     ]
 
-    # === Каналы логов ===
     CHANNEL_LOGS = {
         "chat_logs": 1330604289957302350,
         "guild_logs": 1338651230565695558,
@@ -117,7 +112,6 @@ class BotConfig:
     GUILD_LOGS_CHANNEL = CHANNEL_LOGS["guild_logs"]
     MODERATION_LOGS_CHANNEL = CHANNEL_LOGS["moderation_logs"]
 
-    # === Цвета для embed'ов ===
     LOG_COLORS = {
         "GREEN": 0x00FF00,
         "ORANGE": 0xFFA500,
@@ -125,10 +119,10 @@ class BotConfig:
         "BLUE": 0x3498DB,
     }
 
-    # === Коги (расширения) ===
     COGS = (
         "cogs.owner",
         "cogs.owner_dump",
+        "cogs.rebuild_test_server",
         "cogs.user_cmd.create_voice",
         "cogs.user_cmd.get_roles",
         "cogs.logging.chat_logs",
@@ -137,19 +131,59 @@ class BotConfig:
     )
 
     @staticmethod
+    def load_server_map() -> None:
+        if BotConfig.ENVIRONMENT != "test":
+            return
+
+        data = _load_server_map()
+        roles = data.get("roles", {})
+        channels = data.get("channels", {})
+
+        required_roles = {
+            "Owner", "Administrator", "Moderator", "Helper",
+            "Not verified", "Dota 2", "CS 2",
+        }
+        required_channels = {
+            "create_voice", "chat_logs", "guild_logs", "moderation_logs",
+        }
+
+        if not required_roles.issubset(roles) or not required_channels.issubset(channels):
+            return
+
+        BotConfig.MODERATION_ROLES = {
+            "owner": int(roles["Owner"]),
+            "administrator": int(roles["Administrator"]),
+            "moderator": int(roles["Moderator"]),
+            "helper": int(roles["Helper"]),
+        }
+        BotConfig.GAME_ROLES = {
+            "Dota 2": int(roles["Dota 2"]),
+            "CS 2": int(roles["CS 2"]),
+        }
+        BotConfig.OTHER_ROLES = {"Not verified": int(roles["Not verified"])}
+        BotConfig.CHANNELS = {"create_voice": int(channels["create_voice"])}
+        BotConfig.CHANNEL_LOGS = {
+            "chat_logs": int(channels["chat_logs"]),
+            "guild_logs": int(channels["guild_logs"]),
+            "moderation_logs": int(channels["moderation_logs"]),
+        }
+        BotConfig.CHAT_LOGS_CHANNEL = BotConfig.CHANNEL_LOGS["chat_logs"]
+        BotConfig.GUILD_LOGS_CHANNEL = BotConfig.CHANNEL_LOGS["guild_logs"]
+        BotConfig.MODERATION_LOGS_CHANNEL = BotConfig.CHANNEL_LOGS["moderation_logs"]
+        BotConfig.GAME_ROLE_OPTIONS = [
+            SelectOption(label="Dota 2", value=str(BotConfig.GAME_ROLES["Dota 2"])),
+            SelectOption(label="CS 2", value=str(BotConfig.GAME_ROLES["CS 2"])),
+        ]
+
+    @staticmethod
     def validate() -> None:
         if not BotConfig.TOKEN:
             raise ValueError("BOT_TOKEN не задан в .env")
-
         if not BotConfig.COGS:
             raise ValueError("Список COGS пуст")
-
-        for directory in (
-            BotConfig.ASSETS_DIR,
-            BotConfig.DATABASE_DIR,
-            BotConfig.LOGS_DIR,
-        ):
+        for directory in (BotConfig.ASSETS_DIR, BotConfig.DATABASE_DIR, BotConfig.LOGS_DIR):
             directory.mkdir(parents=True, exist_ok=True)
 
 
+BotConfig.load_server_map()
 BotConfig.validate()
