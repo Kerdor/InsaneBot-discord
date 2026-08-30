@@ -151,6 +151,23 @@ Level benefits:
 
 Basic social actions should not be unnecessarily locked behind levels.
 
+### XP implementation state
+
+Completed:
+- persistent SQLite XP storage
+- XP from chat messages
+- 60-second per-user message XP cooldown
+- random 15–25 XP per eligible message
+- XP from counted voice activity
+- 5 XP per completed voice minute
+- AFK voice channels excluded
+- level calculation and persistence
+- `/level`
+- `/xp_ranking`
+- active voice XP recovery after bot restart using persisted voice sessions
+
+Level formula currently uses `100 * level²` as the cumulative threshold: level 1 starts at 0 XP, level 2 at 100 XP, level 3 at 400 XP, etc.
+
 ## Economy
 
 There is one normal currency.
@@ -415,6 +432,9 @@ Known completed repository changes before this document:
 - moderation slash commands
 - persistent moderation panel
 - functional moderation panel actions with ephemeral modals
+- message, bulk-delete, guild/member, moderation, voice and system logging
+- reaction logging implementation kept disabled by default
+- persistent XP and level system
 
 ## Immediate next work
 
@@ -422,13 +442,11 @@ Continue from the current repository state.
 
 Priority order:
 
-1. Verify ticket and moderation systems locally and fix runtime issues found in testing.
-2. Finish/verify logging coverage and structure restoration.
-3. Implement XP/levels using existing chat and voice activity.
-4. Implement economy, daily rewards and inventory.
-5. Implement profiles and profile cards.
-6. Implement friends and social actions.
-7. Implement romantic relationships.
-8. Then achievements/quests/mini-games/PvP/collections/cosmetics.
+1. Verify ticket, moderation, logging and XP systems locally and fix runtime issues found in testing.
+2. Implement economy, daily rewards and inventory.
+3. Implement profiles and profile cards.
+4. Implement friends and social actions.
+5. Implement romantic relationships.
+6. Then achievements/quests/mini-games/PvP/collections/cosmetics.
 
 Do not redo already agreed product decisions. Continue implementation from the actual repository state.
