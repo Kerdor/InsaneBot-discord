@@ -89,7 +89,7 @@ def setup_logging() -> None:
     root_logger.setLevel(logging.INFO)
 
     console_handler = logging.StreamHandler(sys.stdout)
-    console_handler.setLevel(logging.ERROR)
+    console_handler.setLevel(logging.INFO)
     console_handler.setFormatter(formatter)
     root_logger.addHandler(console_handler)
 
