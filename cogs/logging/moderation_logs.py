@@ -46,13 +46,13 @@ def format_duration(duration: timedelta) -> str:
 class ModerationLogs(BaseLogger):
     def __init__(self, bot: commands.Bot) -> None:
         super().__init__(bot)
-        self.log_type = "moderation"
+        self.log_type = "moderation_logs"
         self.log_channel_id = BotConfig.MODERATION_LOGS_CHANNEL
         logger.info("ModerationLogs initialized for channel %s", self.log_channel_id)
 
-    async def get_log_channel(self, guild: disnake.Guild) -> Optional[disnake.TextChannel]:
+    async def get_log_channel(self, guild: disnake.Guild) -> Optional[disnake.abc.Messageable]:
         channel = await super().get_log_channel(guild)
-        if not isinstance(channel, disnake.TextChannel):
+        if not isinstance(channel, (disnake.TextChannel, disnake.Thread)):
             return None
         permissions = channel.permissions_for(guild.me)
         if not (permissions.view_channel and permissions.send_messages and permissions.embed_links):
