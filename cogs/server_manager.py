@@ -9,8 +9,8 @@ from disnake.ext import commands
 from config import BotConfig
 from server_structure import (
     CATEGORY_NAMES,
-    CHANNEL_NAMES,
     apply_channel_overwrites,
+    build_category_overwrites,
     category_key_from_name,
 )
 
@@ -33,7 +33,7 @@ class ServerManager(commands.Cog):
             return 0
 
         applied = 0
-        desired = __import__("server_structure").build_category_overwrites(category.guild, category_key)
+        desired = build_category_overwrites(category.guild, category_key)
         for target, overwrite in desired.items():
             await category.set_permissions(target, overwrite=overwrite, reason="InsaneBot structure sync")
             applied += 1
@@ -59,14 +59,15 @@ class ServerManager(commands.Cog):
         unmanaged = 0
 
         for category in guild.categories:
-            if category_key_from_name(category.name) is None:
+            category_key = category_key_from_name(category.name)
+            if category_key is None:
                 continue
             try:
                 await self._apply_category_permissions(category)
                 categories_fixed += 1
                 for channel in category.channels:
                     try:
-                        await apply_channel_overwrites(channel, category_key_from_name(category.name) or "")
+                        await apply_channel_overwrites(channel, category_key)
                         channels_fixed += 1
                     except (disnake.Forbidden, disnake.HTTPException) as exc:
                         logger.warning("Failed to sync channel %s: %s", channel.id, exc)
