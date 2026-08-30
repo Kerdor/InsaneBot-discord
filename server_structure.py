@@ -25,6 +25,7 @@ CHANNEL_NAMES = {
     "chat_logs": "💬・чат-логи",
     "guild_logs": "🖥️・сервер-логи",
     "moderation_logs": "🛡️・модерация",
+    "system_logs": "⚙️・системные-логи",
 }
 
 ROLE_NAMES = {
