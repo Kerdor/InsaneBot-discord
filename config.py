@@ -122,7 +122,7 @@ class BotConfig:
     COGS = (
         "cogs.owner",
         "cogs.owner_dump",
-        "cogs.rebuild_test_server",
+        "cogs.rebuild_command",
         "cogs.user_cmd.create_voice",
         "cogs.user_cmd.get_roles",
         "cogs.logging.chat_logs",
