@@ -24,17 +24,15 @@ class BaseLogger(commands.Cog):
         """Get the configured log channel for this guild."""
         from config import BotConfig
 
-        channel_id = {
-            "chat": BotConfig.CHAT_LOGS_CHANNEL,
-            "guild": BotConfig.GUILD_LOGS_CHANNEL,
-            "moderation": BotConfig.MODERATION_LOGS_CHANNEL,
-        }.get(self.log_type)
+        channel_id = BotConfig.get_logging_channel(guild.id, self.log_type)
         if not channel_id:
             return None
 
         cached = self._log_channels.get(guild.id)
-        if cached:
+        if cached and cached.id == channel_id:
             return cached
+        if cached:
+            self._log_channels.pop(guild.id, None)
 
         channel = guild.get_channel(channel_id)
         if channel is None:
