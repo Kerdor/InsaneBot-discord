@@ -1,27 +1,55 @@
+from __future__ import annotations
+
+import os
 from pathlib import Path
 
-import disnake
+from dotenv import load_dotenv
 from disnake import SelectOption
+
+
+PROJECT_DIR = Path(__file__).resolve().parent
+load_dotenv(PROJECT_DIR / ".env")
+
+
+def _required_env(name: str) -> str:
+    value = os.getenv(name, "").strip()
+    if not value:
+        raise RuntimeError(f"Переменная {name} не задана в .env")
+    return value
+
+
+def _optional_int_env(name: str) -> int | None:
+    value = os.getenv(name, "").strip()
+    if not value:
+        return None
+    try:
+        return int(value)
+    except ValueError as exc:
+        raise RuntimeError(f"Переменная {name} должна быть числом") from exc
 
 
 class BotConfig:
     # === Основные настройки бота ===
-    try:
-        from secrets import BOT_TOKEN as _BOT_TOKEN, BOT_PREFIX as _BOT_PREFIX, TEST_GUILDS as _TEST_GUILDS
-    except ImportError as exc:
-        raise RuntimeError(
-            "Файл secrets.py не найден. Создайте его с BOT_TOKEN, BOT_PREFIX и TEST_GUILDS."
-        ) from exc
+    TOKEN = _required_env("BOT_TOKEN")
+    PREFIX = os.getenv("BOT_PREFIX", "!").strip() or "!"
 
-    if not _BOT_TOKEN:
-        raise RuntimeError("BOT_TOKEN не задан в secrets.py")
+    ENVIRONMENT = os.getenv("ENVIRONMENT", "test").strip().lower()
+    MAIN_GUILD_ID = _optional_int_env("MAIN_GUILD_ID")
+    TEST_GUILD_ID = _optional_int_env("TEST_GUILD_ID")
 
-    TOKEN = _BOT_TOKEN
-    PREFIX = _BOT_PREFIX
-    TEST_GUILDS = _TEST_GUILDS
+    if ENVIRONMENT not in {"test", "production"}:
+        raise RuntimeError("ENVIRONMENT должен быть 'test' или 'production'")
+
+    if ENVIRONMENT == "test":
+        if TEST_GUILD_ID is None:
+            raise RuntimeError("TEST_GUILD_ID не задан для ENVIRONMENT=test")
+        TEST_GUILDS = [TEST_GUILD_ID]
+    else:
+        if MAIN_GUILD_ID is None:
+            raise RuntimeError("MAIN_GUILD_ID не задан для ENVIRONMENT=production")
+        TEST_GUILDS = [MAIN_GUILD_ID]
 
     # === Пути к файлам ===
-    PROJECT_DIR = Path(__file__).resolve().parent
     ASSETS_DIR = PROJECT_DIR / "img"
     DATABASE_DIR = PROJECT_DIR / "databases"
     LOGS_DIR = PROJECT_DIR / "logs"
@@ -57,7 +85,7 @@ class BotConfig:
     }
 
     @staticmethod
-    def iter_role_ids(role_dict: dict) -> iter:
+    def iter_role_ids(role_dict: dict):
         """Возвращает итератор по ID ролей."""
         return (role_id for role_id in role_dict.values() if isinstance(role_id, int))
 
@@ -109,10 +137,9 @@ class BotConfig:
     )
 
     @staticmethod
-    def validate():
-        """Проверяет корректность конфигурации."""
+    def validate() -> None:
         if not BotConfig.TOKEN:
-            raise ValueError("BOT_TOKEN не задан в secrets.py")
+            raise ValueError("BOT_TOKEN не задан в .env")
 
         if not BotConfig.COGS:
             raise ValueError("Список COGS пуст")
