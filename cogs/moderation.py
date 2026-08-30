@@ -35,7 +35,6 @@ class Moderation(commands.Cog):
         action: str,
         reason: str,
     ) -> None:
-        add_punishment(guild.id, user.id, moderator.id, action, reason)
         channel_id = BotConfig.get_logging_channel(guild.id, "moderation_logs")
         channel = guild.get_channel(channel_id) if channel_id else None
         if isinstance(channel, disnake.Thread):
@@ -46,6 +45,32 @@ class Moderation(commands.Cog):
                 f"Причина: {reason}"
             )
 
+    async def _ensure_panel(self, guild: disnake.Guild) -> None:
+        channel_id = BotConfig.CHANNELS.get("moderation_panel")
+        if not channel_id:
+            logger.warning("Канал moderation_panel не настроен для guild=%s", guild.id)
+            return
+        channel = guild.get_channel(channel_id)
+        if not isinstance(channel, disnake.TextChannel):
+            logger.warning("Канал moderation_panel не найден для guild=%s: %s", guild.id, channel_id)
+            return
+        try:
+            async for message in channel.history(limit=50):
+                if message.author.id == self.bot.user.id and message.components:
+                    for row in message.components:
+                        for component in row.children:
+                            if getattr(component, "custom_id", None) == "moderation:user":
+                                return
+            await channel.send(
+                "🛡️ **Панель модерации**\n\n"
+                "Используйте кнопки ниже для быстрого доступа к основным функциям модерации.\n"
+                "Подробные действия доступны через slash-команды.",
+                view=ModerationView(),
+            )
+            logger.info("Панель модерации создана: guild=%s channel=%s", guild.id, channel.id)
+        except (disnake.Forbidden, disnake.HTTPException):
+            logger.exception("Не удалось создать панель модерации: guild=%s channel=%s", guild.id, channel.id)
+
     @commands.slash_command(name="warn", description="Выдать предупреждение пользователю")
     async def warn(self, inter: disnake.ApplicationCommandInteraction, member: disnake.Member, reason: str = "Не указана") -> None:
         if not await self._check_staff(inter):
@@ -55,13 +80,7 @@ class Moderation(commands.Cog):
         await inter.response.send_message(f"⚠️ {member.mention} получил предупреждение.", ephemeral=True)
 
     @commands.slash_command(name="timeout", description="Выдать timeout пользователю")
-    async def timeout(
-        self,
-        inter: disnake.ApplicationCommandInteraction,
-        member: disnake.Member,
-        minutes: int,
-        reason: str = "Не указана",
-    ) -> None:
+    async def timeout(self, inter: disnake.ApplicationCommandInteraction, member: disnake.Member, minutes: int, reason: str = "Не указана") -> None:
         if not await self._check_staff(inter):
             return
         if minutes < 1 or minutes > 40320:
@@ -114,6 +133,11 @@ class Moderation(commands.Cog):
         for row in rows:
             lines.append(f"#{row['id']} — `{row['action']}` — <@{row['moderator_id']}> — {row['reason'] or 'Не указана'}")
         await inter.response.send_message("\n".join(lines), ephemeral=True)
+
+    @commands.Cog.listener()
+    async def on_ready(self) -> None:
+        for guild in self.bot.guilds:
+            await self._ensure_panel(guild)
 
 
 class ModerationView(disnake.ui.View):
