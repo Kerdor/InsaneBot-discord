@@ -4,6 +4,9 @@
 !.env.example
 secrets.py
 
+# Runtime server mapping
+.server_map.json
+
 # Python
 __pycache__/
 *.py[cod]
