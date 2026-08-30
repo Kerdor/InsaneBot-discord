@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import asyncio
 import json
 import logging
 from pathlib import Path
@@ -56,7 +57,7 @@ class RebuildConfirmView(disnake.ui.View):
 class RebuildTestServer(commands.Cog):
     def __init__(self, bot: commands.Bot) -> None:
         self.bot = bot
-        self._rebuild_lock = __import__("asyncio").Lock()
+        self._rebuild_lock = asyncio.Lock()
 
     @staticmethod
     async def _delete_channels(guild: disnake.Guild) -> int:
@@ -145,22 +146,10 @@ class RebuildTestServer(commands.Cog):
         moderator = guild.get_role(roles["Moderator"])
         administrator = guild.get_role(roles["Administrator"])
 
-        info = await guild.create_category(
-            "INFORMATION",
-            reason="InsaneBot test server rebuild",
-        )
-        community = await guild.create_category(
-            "COMMUNITY",
-            reason="InsaneBot test server rebuild",
-        )
-        games = await guild.create_category(
-            "GAMES",
-            reason="InsaneBot test server rebuild",
-        )
-        support = await guild.create_category(
-            "SUPPORT",
-            reason="InsaneBot test server rebuild",
-        )
+        info = await guild.create_category("INFORMATION", reason="InsaneBot test server rebuild")
+        community = await guild.create_category("COMMUNITY", reason="InsaneBot test server rebuild")
+        games = await guild.create_category("GAMES", reason="InsaneBot test server rebuild")
+        support = await guild.create_category("SUPPORT", reason="InsaneBot test server rebuild")
         logs = await guild.create_category(
             "LOGS",
             overwrites={everyone: disnake.PermissionOverwrite(view_channel=False)},
@@ -185,7 +174,9 @@ class RebuildTestServer(commands.Cog):
             "game-roles",
             category=games,
             overwrites={
-                not_verified: disnake.PermissionOverwrite(view_channel=False) if not_verified else disnake.PermissionOverwrite(),
+                not_verified: disnake.PermissionOverwrite(view_channel=False)
+                if not_verified
+                else disnake.PermissionOverwrite(),
             },
             reason="InsaneBot test server rebuild",
         )
@@ -195,17 +186,27 @@ class RebuildTestServer(commands.Cog):
             reason="InsaneBot test server rebuild",
         )
 
-        help_channel = await guild.create_text_channel("help", category=support, reason="InsaneBot test server rebuild")
-        reports = await guild.create_text_channel("reports", category=support, reason="InsaneBot test server rebuild")
+        help_channel = await guild.create_text_channel(
+            "help", category=support, reason="InsaneBot test server rebuild"
+        )
+        reports = await guild.create_text_channel(
+            "reports", category=support, reason="InsaneBot test server rebuild"
+        )
 
         chat_logs = await guild.create_text_channel(
             "chat-logs",
             category=logs,
             overwrites={
                 everyone: disnake.PermissionOverwrite(view_channel=False),
-                helper: disnake.PermissionOverwrite(view_channel=True) if helper else disnake.PermissionOverwrite(),
-                moderator: disnake.PermissionOverwrite(view_channel=True) if moderator else disnake.PermissionOverwrite(),
-                administrator: disnake.PermissionOverwrite(view_channel=True) if administrator else disnake.PermissionOverwrite(),
+                helper: disnake.PermissionOverwrite(view_channel=True)
+                if helper
+                else disnake.PermissionOverwrite(),
+                moderator: disnake.PermissionOverwrite(view_channel=True)
+                if moderator
+                else disnake.PermissionOverwrite(),
+                administrator: disnake.PermissionOverwrite(view_channel=True)
+                if administrator
+                else disnake.PermissionOverwrite(),
             },
             reason="InsaneBot test server rebuild",
         )
@@ -315,6 +316,7 @@ class RebuildTestServer(commands.Cog):
     @commands.slash_command(
         name="rebuild_test_server",
         description="Полностью пересоздать структуру тестового сервера",
+        guild_ids=[BotConfig.TEST_GUILD_ID] if BotConfig.TEST_GUILD_ID else [],
     )
     @commands.is_owner()
     async def rebuild_test_server(self, inter: disnake.ApplicationCommandInteraction) -> None:
