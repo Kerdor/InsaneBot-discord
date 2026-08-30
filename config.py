@@ -144,6 +144,8 @@ class BotConfig:
         "cogs.logging.setup_logs",
         "cogs.logging.voice_stats",
         "cogs.logging.system_logs",
+        "cogs.shop",
+        "cogs.admin_panel",
     )
 
     @staticmethod
