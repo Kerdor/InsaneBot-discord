@@ -25,14 +25,12 @@ class ChatLogs(BaseLogger):
         self._processing: set[int] = set()
         logger.info("ChatLogs initialized")
 
-    async def get_log_channel(self, guild: disnake.Guild) -> Optional[disnake.TextChannel]:
+    async def get_log_channel(self, guild: disnake.Guild) -> Optional[disnake.abc.Messageable]:
         channel = await super().get_log_channel(guild)
         if channel is None:
             logger.warning("[CHATLOG] Канал логов не настроен для guild %s", guild.id)
             return None
-        if isinstance(channel, disnake.Thread):
-            channel = channel.parent
-        if isinstance(channel, disnake.TextChannel):
+        if isinstance(channel, (disnake.TextChannel, disnake.Thread)):
             permissions = channel.permissions_for(guild.me)
             if permissions.view_channel and permissions.send_messages and permissions.embed_links:
                 return channel
