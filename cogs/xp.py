@@ -8,7 +8,7 @@ from datetime import datetime, timezone
 import disnake
 from disnake.ext import commands
 
-from databases.economy import reward_message, init_economy
+from databases.economy import get_user as get_economy_user, init_economy, reward_message
 from databases.settings import get_bool, get_int, init_settings
 from databases.voice_stats import get_session
 from databases.xp import add_message_xp, add_voice_xp, get_ranking, get_user, init_xp, set_level
@@ -144,6 +144,34 @@ class XP(commands.Cog):
         embed.add_field(name="Сообщения", value=str(messages), inline=True)
         embed.add_field(name="XP за голос", value=str(voice_xp), inline=True)
         await inter.response.send_message(embed=embed, ephemeral=True)
+
+    @commands.slash_command(name="profile", description="Показать профиль пользователя")
+    async def profile(self, inter: disnake.ApplicationCommandInteraction, member: disnake.Member | None = None) -> None:
+        target = member or inter.author
+        xp_row = get_user(inter.guild.id, target.id)
+        economy_row = get_economy_user(inter.guild.id, target.id)
+
+        xp = int(xp_row["xp"])
+        level = int(xp_row["level"])
+        messages = int(xp_row["message_count"])
+        voice_xp = int(xp_row["voice_xp"])
+        balance = int(economy_row["balance"])
+        rare_currency = int(economy_row["rare_currency"])
+
+        current_floor = (level - 1) ** 2 * 100
+        next_floor = level ** 2 * 100
+        progress = max(0, xp - current_floor)
+        required = max(1, next_floor - current_floor)
+
+        embed = disnake.Embed(title=f"👤 Профиль — {target.display_name}", color=disnake.Color.blurple())
+        embed.set_thumbnail(url=target.display_avatar.url)
+        embed.add_field(name="⭐ Уровень", value=f"**{level}**\n{progress}/{required} XP", inline=True)
+        embed.add_field(name="💰 Баланс", value=f"**{balance:,}** 🪙".replace(",", " "), inline=True)
+        embed.add_field(name="💎 Редкая валюта", value=f"**{rare_currency}**", inline=True)
+        embed.add_field(name="💬 Сообщения", value=f"**{messages}**", inline=True)
+        embed.add_field(name="🔊 XP за голос", value=f"**{voice_xp}**", inline=True)
+        embed.add_field(name="📊 Всего XP", value=f"**{xp}**", inline=True)
+        await inter.response.send_message(embed=embed)
 
     @commands.slash_command(name="xp_ranking", description="Показать рейтинг по XP")
     async def xp_ranking(self, inter: disnake.ApplicationCommandInteraction) -> None:
