@@ -210,9 +210,9 @@ class BotConfig:
             encoding="utf-8",
         )
 
-        if guild_id == (BotConfig.TEST_GUILD_ID if BotConfig.ENVIRONMENT == "test" else BotConfig.MAIN_GUILD_ID):
+        current_guild_id = BotConfig.TEST_GUILD_ID if BotConfig.ENVIRONMENT == "test" else BotConfig.MAIN_GUILD_ID
+        if guild_id == current_guild_id:
             BotConfig.CHANNEL_LOGS[log_type] = channel_id
-            setattr(BotConfig, log_type.upper())
             attributes = {
                 "chat_logs": "CHAT_LOGS_CHANNEL",
                 "guild_logs": "GUILD_LOGS_CHANNEL",
