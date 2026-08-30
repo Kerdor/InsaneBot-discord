@@ -4,38 +4,53 @@ import disnake
 
 
 CATEGORY_NAMES = {
-    "information": "📌・ИНФОРМАЦИЯ",
-    "community": "💬・СООБЩЕСТВО",
-    "games": "🎮・ИГРЫ",
-    "support": "🛠️・ПОДДЕРЖКА",
-    "logs": "🔒・ЛОГИ",
+    "entry": "🔐 ВХОД",
+    "information": "📢 ИНФОРМАЦИЯ",
+    "community": "💬 ОБЩЕНИЕ",
+    "games": "🎮 ИГРА",
+    "support": "🎫 ПОДДЕРЖКА",
+    "moderation": "🛡️ МОДЕРАЦИЯ",
+    "voice": "🔊 ГОЛОСОВЫЕ КАНАЛЫ",
 }
 
 CHANNEL_NAMES = {
-    "rules": "📜・правила",
-    "announcements": "📢・объявления",
-    "general": "💬・общение",
-    "chat": "💭・чат",
-    "media": "🖼️・медиа",
-    "bot_commands": "🤖・команды",
-    "game_roles": "🎮・выбор-игр",
-    "create_voice": "🔊・создать-комнату",
-    "help": "❓・помощь",
-    "reports": "🚨・жалобы",
-    "chat_logs": "💬・чат-логи",
-    "guild_logs": "🖥️・сервер-логи",
-    "moderation_logs": "🛡️・модерация",
-    "system_logs": "⚙️・системные-логи",
+    "verification": "🔐・верификация",
+    "rules": "📌・правила",
+    "announcements": "📢・новости",
+    "guides": "📖・гайды",
+    "server_info": "ℹ️・информация",
+    "chat": "💬・чат",
+    "game_chat": "💬・игровой-чат",
+    "leaderboards": "🏆・рейтинги",
+    "game_panel": "🎮・игровая-панель",
+    "create_ticket": "🎫・создать-тикет",
+    "tickets": "🎫・тикеты",
+    "logs": "📜・логи",
+    "moderation_panel": "🔧・панель-модерации",
+    "general_voice_1": "🔊・Общий 1",
+    "general_voice_2": "🔊・Общий 2",
+    "duo_voice": "👥・Для двоих",
+    "trio_voice": "👥・Для троих",
+    "create_voice": "➕・Создать канал",
 }
 
 ROLE_NAMES = {
     "owner": "👑 Владелец",
     "administrator": "🛡️ Администратор",
     "moderator": "🔨 Модератор",
-    "helper": "🤝 Помощник",
+    "helper": "🧪 Хелпер",
+    "member": "👤 Участник",
     "not_verified": "🔐 Не верифицирован",
-    "dota": "🎮 Dota 2",
-    "cs": "🎯 CS 2",
+}
+
+LOG_FORUM_NAME = "📜・логи"
+LOG_THREAD_NAMES = {
+    "chat_logs": "💬・Чат",
+    "guild_logs": "👤・Участники",
+    "moderation_logs": "🛡️・Модерация",
+    "server_logs": "📁・Сервер",
+    "voice_logs": "🔊・Голос",
+    "system_logs": "🤖・Система",
 }
 
 
@@ -49,33 +64,68 @@ def build_category_overwrites(
     administrator = roles.get(ROLE_NAMES["administrator"])
     moderator = roles.get(ROLE_NAMES["moderator"])
     helper = roles.get(ROLE_NAMES["helper"])
+    member = roles.get(ROLE_NAMES["member"])
     not_verified = roles.get(ROLE_NAMES["not_verified"])
 
     overwrites: dict[disnake.Role, disnake.PermissionOverwrite] = {}
 
-    if category_key == "logs":
-        overwrites[everyone] = disnake.PermissionOverwrite(view_channel=False)
-        for role in (helper, moderator, administrator, owner):
-            if role:
-                overwrites[role] = disnake.PermissionOverwrite(
-                    view_channel=True,
-                    send_messages=False,
-                    read_message_history=True,
-                )
-    elif category_key == "support":
-        overwrites[everyone] = disnake.PermissionOverwrite(view_channel=True, send_messages=True)
+    if category_key == "entry":
+        overwrites[everyone] = disnake.PermissionOverwrite(view_channel=True, send_messages=False)
         if not_verified:
-            overwrites[not_verified] = disnake.PermissionOverwrite(view_channel=True, send_messages=True)
-    elif category_key == "games":
-        overwrites[everyone] = disnake.PermissionOverwrite(view_channel=True, send_messages=True)
+            overwrites[not_verified] = disnake.PermissionOverwrite(view_channel=True, send_messages=False)
+        if member:
+            overwrites[member] = disnake.PermissionOverwrite(view_channel=False)
+    elif category_key == "moderation":
+        overwrites[everyone] = disnake.PermissionOverwrite(view_channel=False)
+    else:
+        overwrites[everyone] = disnake.PermissionOverwrite(view_channel=True)
         if not_verified:
             overwrites[not_verified] = disnake.PermissionOverwrite(view_channel=False)
-    else:
-        overwrites[everyone] = disnake.PermissionOverwrite(view_channel=True, send_messages=True)
+
+    if category_key == "support":
+        overwrites[everyone] = disnake.PermissionOverwrite(view_channel=True, send_messages=False)
+        if member:
+            overwrites[member] = disnake.PermissionOverwrite(view_channel=True, send_messages=False)
+
+    if category_key == "voice":
+        overwrites[everyone] = disnake.PermissionOverwrite(view_channel=True, connect=True, speak=True)
+        if not_verified:
+            overwrites[not_verified] = disnake.PermissionOverwrite(view_channel=False, connect=False)
 
     for role in (owner, administrator, moderator, helper):
         if role:
-            overwrites.setdefault(role, disnake.PermissionOverwrite(view_channel=True, send_messages=True))
+            overwrites[role] = disnake.PermissionOverwrite(
+                view_channel=True,
+                send_messages=True,
+                read_message_history=True,
+            )
+
+    return overwrites
+
+
+def build_private_ticket_overwrites(
+    guild: disnake.Guild,
+) -> dict[disnake.Role, disnake.PermissionOverwrite]:
+    everyone = guild.default_role
+    roles = {role.name: role for role in guild.roles}
+    owner = roles.get(ROLE_NAMES["owner"])
+    administrator = roles.get(ROLE_NAMES["administrator"])
+    moderator = roles.get(ROLE_NAMES["moderator"])
+    helper = roles.get(ROLE_NAMES["helper"])
+
+    overwrites: dict[disnake.Role, disnake.PermissionOverwrite] = {
+        everyone: disnake.PermissionOverwrite(view_channel=False),
+    }
+
+    for role in (owner, administrator, moderator, helper):
+        if role:
+            overwrites[role] = disnake.PermissionOverwrite(
+                view_channel=True,
+                send_messages=True,
+                read_message_history=True,
+                manage_messages=True,
+                manage_threads=True,
+            )
 
     return overwrites
 
