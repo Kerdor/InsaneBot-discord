@@ -38,16 +38,10 @@ ROLE_NAMES = {
 }
 
 
-def staff_role_names() -> set[str]:
-    return {
-        ROLE_NAMES["owner"],
-        ROLE_NAMES["administrator"],
-        ROLE_NAMES["moderator"],
-        ROLE_NAMES["helper"],
-    }
-
-
-def build_category_overwrites(guild: disnake.Guild, category_key: str) -> dict[disnake.Role, disnake.PermissionOverwrite]:
+def build_category_overwrites(
+    guild: disnake.Guild,
+    category_key: str,
+) -> dict[disnake.Role, disnake.PermissionOverwrite]:
     everyone = guild.default_role
     roles = {role.name: role for role in guild.roles}
     owner = roles.get(ROLE_NAMES["owner"])
@@ -99,12 +93,17 @@ def channel_key_from_name(name: str) -> str | None:
     return None
 
 
-def apply_channel_overwrites(
+async def apply_channel_overwrites(
     channel: disnake.abc.GuildChannel,
     category_key: str,
 ) -> None:
-    if not isinstance(channel, (disnake.TextChannel, disnake.VoiceChannel, disnake.CategoryChannel)):
+    if isinstance(channel, disnake.CategoryChannel):
         return
+
     desired = build_category_overwrites(channel.guild, category_key)
     for target, overwrite in desired.items():
-        channel.set_permissions(target, overwrite=overwrite, reason="InsaneBot structure sync")
+        await channel.set_permissions(
+            target,
+            overwrite=overwrite,
+            reason="InsaneBot structure sync",
+        )
