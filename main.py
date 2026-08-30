@@ -113,10 +113,15 @@ async def _sync_test_commands() -> None:
 
     print(f"[SYNC] Начинаем явную синхронизацию TEST: guild_id={guild_id}")
 
-    commands_to_sync = list(bot.application_commands)
+    commands_to_sync = []
+    for command in bot.application_commands:
+        guild_ids = getattr(command, "guild_ids", None)
+        if guild_ids is None or guild_id in guild_ids:
+            commands_to_sync.append(command.body)
+
     print(f"[SYNC] Команд в памяти перед overwrite: {len(commands_to_sync)}")
     for command in sorted(commands_to_sync, key=lambda item: item.name):
-        print(f"[SYNC]   -> {command.name} | guild_ids={getattr(command, 'guild_ids', None)}")
+        print(f"[SYNC]   -> {command.name}")
 
     try:
         registered = await bot.bulk_overwrite_guild_commands(
