@@ -35,6 +35,18 @@ class AdminPanel(commands.Cog):
     def _is_admin(member: disnake.Member) -> bool:
         return any(role.id in BotConfig.MODERATION_ROLES.values() for role in member.roles)
 
+    @commands.slash_command(name="admin_panel", description="Открыть панель настроек бота")
+    async def admin_panel(self, inter: disnake.ApplicationCommandInteraction) -> None:
+        if not inter.guild or not isinstance(inter.author, disnake.Member) or not self._is_admin(inter.author):
+            await inter.response.send_message("⛔ Доступ только для администрации.", ephemeral=True)
+            return
+        embed = disnake.Embed(
+            title="⚙️ Админ-панель InsaneBot",
+            description="Выбери раздел ниже. Изменения сохраняются в SQLite и применяются без перезапуска бота.",
+            color=disnake.Color.blurple(),
+        )
+        await inter.response.send_message(embed=embed, view=AdminPanelView(self), ephemeral=True)
+
     async def _deny(self, interaction: disnake.MessageInteraction) -> None:
         await interaction.response.send_message("⛔ Доступ только для администрации.", ephemeral=True)
 
@@ -49,7 +61,7 @@ class AdminPanel(commands.Cog):
             if key.endswith("enabled"):
                 value = "включено" if int(value) else "выключено"
             lines.append(f"**{description}:** `{value}`")
-        embed = disnake.Embed(title="⚙️ Админ-панель", description="\n".join(lines), color=disnake.Color.blurple())
+        embed = disnake.Embed(title="⚙️ Настройки", description="\n".join(lines), color=disnake.Color.blurple())
         await interaction.response.send_message(embed=embed, view=AdminSettingsView(self), ephemeral=True)
 
     async def edit_setting(self, interaction: disnake.MessageInteraction, key: str) -> None:
@@ -60,7 +72,7 @@ class AdminPanel(commands.Cog):
 
     async def save_setting(self, interaction: disnake.ModalInteraction, key: str, raw_value: str) -> None:
         if not interaction.guild or not isinstance(interaction.author, disnake.Member) or not self._is_admin(interaction.author):
-            await self._deny(interaction)
+            await interaction.response.send_message("⛔ Доступ только для администрации.", ephemeral=True)
             return
         try:
             if key.endswith("enabled"):
@@ -75,9 +87,10 @@ class AdminPanel(commands.Cog):
                 value = int(raw_value.strip())
                 if value < 0:
                     raise ValueError
-            if key == "xp_message_min" and value > int(get_all(interaction.guild.id)["xp_message_max"]):
+            settings = get_all(interaction.guild.id)
+            if key == "xp_message_min" and value > int(settings["xp_message_max"]):
                 raise ValueError
-            if key == "xp_message_max" and value < int(get_all(interaction.guild.id)["xp_message_min"]):
+            if key == "xp_message_max" and value < int(settings["xp_message_min"]):
                 raise ValueError
             changed, old_value, new_value = set_setting(interaction.guild.id, interaction.author.id, key, value)
         except ValueError:
