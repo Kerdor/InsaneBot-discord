@@ -76,36 +76,18 @@ class ChatLogs(BaseLogger):
         if first.content_type and first.content_type.startswith("image/"):
             embed.set_image(url=first.url)
 
+    def _is_ignored(self, message: disnake.Message) -> bool:
+        if message.author.bot or message.webhook_id is not None or not message.guild:
+            return True
+        prefix = self.bot.command_prefix
+        return isinstance(prefix, str) and message.content.startswith(prefix)
+
     @commands.Cog.listener()
     async def on_message(self, message: disnake.Message) -> None:
-        print(
-            f"[CHATLOG] on_message: guild={message.guild.id if message.guild else None}, "
-            f"channel={message.channel.id}, author={message.author} ({message.author.id})"
-        )
-        logger.info(
-            "[CHATLOG] Получено сообщение: guild=%s, channel=%s, author=%s (%s)",
-            message.guild.id if message.guild else None,
-            message.channel.id,
-            message.author,
-            message.author.id,
-        )
-
-        if (
-            message.author.bot
-            or message.webhook_id is not None
-            or not message.guild
-            or message.id in self._processing
-            or message.id in self._recent_messages
-        ):
+        if self._is_ignored(message) or message.id in self._processing or message.id in self._recent_messages:
             return
-
-        prefix = self.bot.command_prefix
-        if isinstance(prefix, str) and message.content.startswith(prefix):
-            return
-
         self._processing.add(message.id)
         try:
-            print(f"[CHATLOG] Обрабатываем сообщение {message.id}")
             embed = self._base_embed("Сообщение отправлено", LOG_COLORS["GREEN"], message)
             embed.description = self._truncate(message.clean_content or "*(Пустое сообщение)*", 4000)
             self._add_attachments(embed, message)
@@ -115,26 +97,19 @@ class ChatLogs(BaseLogger):
             embed.add_field(name="Перейти к сообщению", value=f"[Открыть сообщение]({message.jump_url})", inline=False)
             await self.log_to_channel(message.guild, embed)
             self._recent_messages.append(message.id)
-            print(f"[CHATLOG] Сообщение {message.id} отправлено в лог")
         except (disnake.Forbidden, disnake.HTTPException):
             logger.exception("Failed to log created message %s", message.id)
-            print(f"[CHATLOG] Ошибка отправки сообщения {message.id}")
         finally:
             self._processing.discard(message.id)
 
     @commands.Cog.listener()
     async def on_message_edit(self, before: disnake.Message, after: disnake.Message) -> None:
-        if (
-            before.author.bot
-            or not before.guild
-            or (
-                before.content == after.content
-                and before.attachments == after.attachments
-                and before.embeds == after.embeds
-            )
+        if before.author.bot or not before.guild or (
+            before.content == after.content
+            and before.attachments == after.attachments
+            and before.embeds == after.embeds
         ):
             return
-
         embed = self._base_embed("Сообщение отредактировано", LOG_COLORS["ORANGE"], after)
         embed.add_field(name="До", value=self._truncate(before.content or "*(Пустое сообщение)*"), inline=False)
         embed.add_field(name="После", value=self._truncate(after.content or "*(Пустое сообщение)*"), inline=False)
@@ -148,25 +123,47 @@ class ChatLogs(BaseLogger):
 
     @commands.Cog.listener()
     async def on_message_delete(self, message: disnake.Message) -> None:
-        if message.author.bot or not message.guild:
+        if self._is_ignored(message):
             return
-        prefix = self.bot.command_prefix
-        if isinstance(prefix, str) and message.content.startswith(prefix):
-            return
-
         embed = self._base_embed("Сообщение удалено", LOG_COLORS["RED"], message)
         embed.description = self._truncate(message.content or "*(Пустое сообщение)*", 4000)
         self._add_attachments(embed, message)
-        embed.add_field(
-            name="Примечание",
-            value="Кто именно удалил сообщение, определяется модерационными логами отдельно.",
-            inline=False,
-        )
+        embed.add_field(name="Примечание", value="Кто именно удалил сообщение, определяется модерационными логами отдельно.", inline=False)
         embed.add_field(name="Перейти к сообщению", value=f"[Открыть сообщение]({message.jump_url})", inline=False)
         try:
             await self.log_to_channel(message.guild, embed)
         except (disnake.Forbidden, disnake.HTTPException):
             logger.exception("Failed to log deleted message %s", message.id)
+
+    @commands.Cog.listener()
+    async def on_bulk_message_delete(self, messages: list[disnake.Message]) -> None:
+        if not messages:
+            return
+        guild = messages[0].guild
+        if not guild:
+            return
+        channel = messages[0].channel
+        author_counts: dict[str, int] = {}
+        for message in messages:
+            if message.author.bot:
+                continue
+            author_counts[str(message.author)] = author_counts.get(str(message.author), 0) + 1
+        embed = disnake.Embed(
+            title="Массовое удаление сообщений",
+            color=LOG_COLORS["RED"],
+            timestamp=disnake.utils.utcnow(),
+            description=f"Удалено сообщений: **{len(messages)}**",
+        )
+        embed.add_field(name="Канал", value=f"{channel.mention} (ID: {channel.id})", inline=True)
+        if author_counts:
+            authors = "\n".join(f"{author}: {count}" for author, count in sorted(author_counts.items(), key=lambda item: item[1], reverse=True)[:10])
+            embed.add_field(name="Авторы", value=authors, inline=False)
+        footer_text, footer_icon = self._footer()
+        embed.set_footer(text=footer_text, icon_url=footer_icon)
+        try:
+            await self.log_to_channel(guild, embed)
+        except (disnake.Forbidden, disnake.HTTPException):
+            logger.exception("Failed to log bulk message deletion in guild %s", guild.id)
 
 
 def setup(bot: commands.Bot) -> None:
