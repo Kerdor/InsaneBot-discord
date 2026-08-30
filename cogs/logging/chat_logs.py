@@ -15,7 +15,7 @@ LOG_COLORS = BotConfig.LOG_COLORS
 MAX_CACHE_SIZE = 1000
 
 
-class ChatLogs(BaseLogger):
+class ChatLogs(BaseLogger, commands.Cog):
     """Log message create/edit/delete events without unnecessary API calls."""
 
     def __init__(self, bot: commands.Bot) -> None:
@@ -27,7 +27,7 @@ class ChatLogs(BaseLogger):
         logger.info("ChatLogs initialized for channel %s", self.log_channel_id)
 
     async def get_log_channel(self, guild: disnake.Guild) -> Optional[disnake.TextChannel]:
-        channel = await super().get_log_channel(guild)
+        channel = await BaseLogger.get_log_channel(self, guild)
         if channel is None:
             return None
         if isinstance(channel, disnake.Thread):
@@ -111,7 +111,6 @@ class ChatLogs(BaseLogger):
         ):
             return
 
-        # Commands are not chat messages and do not need to be logged here.
         prefix = self.bot.command_prefix
         if isinstance(prefix, str) and message.content.startswith(prefix):
             return
@@ -144,9 +143,11 @@ class ChatLogs(BaseLogger):
         if (
             before.author.bot
             or not before.guild
-            or before.content == after.content
-            and before.attachments == after.attachments
-            and before.embeds == after.embeds
+            or (
+                before.content == after.content
+                and before.attachments == after.attachments
+                and before.embeds == after.embeds
+            )
         ):
             return
 
@@ -179,6 +180,7 @@ class ChatLogs(BaseLogger):
     async def on_message_delete(self, message: disnake.Message) -> None:
         if message.author.bot or not message.guild:
             return
+
         prefix = self.bot.command_prefix
         if isinstance(prefix, str) and message.content.startswith(prefix):
             return
