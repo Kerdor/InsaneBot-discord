@@ -21,11 +21,12 @@ class RebuildConfirmView(disnake.ui.View):
     @disnake.ui.button(label="Перестроить сервер", style=disnake.ButtonStyle.danger, custom_id="rebuild_confirm")
     async def confirm(self, _: disnake.ui.Button, interaction: disnake.MessageInteraction) -> None:
         logger.info(
-            "[REBUILD] Нажата кнопка подтверждения: user=%s (%s), guild=%s (%s)",
+            "[REBUILD] Нажата кнопка подтверждения: user=%s (%s), guild=%s (%s), channel=%s",
             interaction.author,
             interaction.author.id,
             interaction.guild.name if interaction.guild else "N/A",
             interaction.guild.id if interaction.guild else "N/A",
+            interaction.channel.id if interaction.channel else "N/A",
         )
 
         if not interaction.guild or interaction.guild.id != BotConfig.TEST_GUILD_ID:
@@ -37,18 +38,31 @@ class RebuildConfirmView(disnake.ui.View):
             await interaction.response.send_message("Команда доступна только на тестовом сервере.", ephemeral=True)
             return
 
+        source_channel_id = interaction.channel.id if interaction.channel else None
         await interaction.response.defer(ephemeral=True)
         logger.info("[REBUILD] Начинаем перестройку тестового сервера %s", interaction.guild.id)
         try:
-            summary = await self.cog.rebuild(interaction.guild)
+            summary = await self.cog.rebuild(interaction.guild, protected_channel_id=source_channel_id)
             logger.info("[REBUILD] Перестройка завершена успешно")
             await interaction.followup.send(summary, ephemeral=True)
+
+            if source_channel_id is not None:
+                source_channel = interaction.guild.get_channel(source_channel_id)
+                if source_channel is not None:
+                    try:
+                        logger.info("[REBUILD] Удаляем исходный канал команды: %s (%s)", source_channel.name, source_channel.id)
+                        await source_channel.delete(reason="InsaneBot test server rebuild")
+                    except (disnake.Forbidden, disnake.HTTPException) as exc:
+                        logger.warning("[REBUILD] Не удалось удалить исходный канал команды %s: %s", source_channel_id, exc)
         except Exception:
             logger.exception("[REBUILD] Не удалось перестроить тестовый сервер %s", interaction.guild.id)
-            await interaction.followup.send(
-                "❌ Перестройка завершилась с ошибкой. Подробности смотри в консоли бота и канале системных логов.",
-                ephemeral=True,
-            )
+            try:
+                await interaction.followup.send(
+                    "❌ Перестройка завершилась с ошибкой. Подробности смотри в консоли бота и канале системных логов.",
+                    ephemeral=True,
+                )
+            except (disnake.NotFound, disnake.HTTPException):
+                logger.exception("[REBUILD] Не удалось отправить сообщение об ошибке перестройки")
         finally:
             self.stop()
             logger.info("[REBUILD] Окно подтверждения закрыто")
@@ -72,10 +86,13 @@ class RebuildTestServer(commands.Cog):
         logger.info("[REBUILD] RebuildTestServer initialized")
 
     @staticmethod
-    async def _delete_channels(guild: disnake.Guild) -> int:
+    async def _delete_channels(guild: disnake.Guild, protected_channel_id: int | None = None) -> int:
         deleted = 0
         logger.info("[REBUILD] Этап 1/4: удаление каналов, найдено=%s", len(guild.channels))
         for channel in sorted(guild.channels, key=lambda item: (item.position, item.id), reverse=True):
+            if protected_channel_id is not None and channel.id == protected_channel_id:
+                logger.info("[REBUILD] Временно сохраняем канал команды: #%s (%s)", channel.name, channel.id)
+                continue
             try:
                 logger.info("[REBUILD] Удаляем канал: #%s (%s)", channel.name, channel.id)
                 await channel.delete(reason="InsaneBot test server rebuild")
@@ -256,14 +273,15 @@ class RebuildTestServer(commands.Cog):
             disnake.SelectOption(label="CS 2", value=str(role_ids["CS 2"])),
         ]
 
-    async def rebuild(self, guild: disnake.Guild) -> str:
+    async def rebuild(self, guild: disnake.Guild, protected_channel_id: int | None = None) -> str:
         async with self._rebuild_lock:
             logger.info(
-                "[REBUILD] Запрос перестройки: guild=%s (%s), environment=%s, test_guild=%s",
+                "[REBUILD] Запрос перестройки: guild=%s (%s), environment=%s, test_guild=%s, protected_channel=%s",
                 guild.name,
                 guild.id,
                 BotConfig.ENVIRONMENT,
                 BotConfig.TEST_GUILD_ID,
+                protected_channel_id,
             )
             if BotConfig.ENVIRONMENT != "test" or guild.id != BotConfig.TEST_GUILD_ID:
                 raise RuntimeError("Перестройка разрешена только для тестового сервера.")
@@ -273,7 +291,7 @@ class RebuildTestServer(commands.Cog):
             logger.info("[REBUILD] Бот в сервере: %s, top_role=%s (%s)", guild.me, guild.me.top_role.name, guild.me.top_role.id)
             logger.info("[REBUILD] === НАЧАЛО ПЕРЕСТРОЙКИ %s (%s) ===", guild.name, guild.id)
 
-            deleted_channels = await self._delete_channels(guild)
+            deleted_channels = await self._delete_channels(guild, protected_channel_id)
             logger.info("[REBUILD] Удалено каналов: %s", deleted_channels)
 
             deleted_roles = await self._delete_roles(guild)
