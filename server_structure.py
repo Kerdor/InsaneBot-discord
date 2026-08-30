@@ -75,22 +75,26 @@ def build_category_overwrites(
             overwrites[not_verified] = disnake.PermissionOverwrite(view_channel=True, send_messages=False)
         if member:
             overwrites[member] = disnake.PermissionOverwrite(view_channel=False)
-    elif category_key == "moderation":
-        overwrites[everyone] = disnake.PermissionOverwrite(view_channel=False)
     else:
-        overwrites[everyone] = disnake.PermissionOverwrite(view_channel=True)
+        overwrites[everyone] = disnake.PermissionOverwrite(view_channel=False)
+        if member:
+            overwrites[member] = disnake.PermissionOverwrite(
+                view_channel=True,
+                send_messages=True,
+                read_message_history=True,
+            )
         if not_verified:
             overwrites[not_verified] = disnake.PermissionOverwrite(view_channel=False)
 
-    if category_key == "support":
-        overwrites[everyone] = disnake.PermissionOverwrite(view_channel=True, send_messages=False)
-        if member:
-            overwrites[member] = disnake.PermissionOverwrite(view_channel=True, send_messages=False)
+    if category_key == "moderation":
+        overwrites[everyone] = disnake.PermissionOverwrite(view_channel=False)
 
-    if category_key == "voice":
-        overwrites[everyone] = disnake.PermissionOverwrite(view_channel=True, connect=True, speak=True)
-        if not_verified:
-            overwrites[not_verified] = disnake.PermissionOverwrite(view_channel=False, connect=False)
+    if category_key == "voice" and member:
+        overwrites[member] = disnake.PermissionOverwrite(
+            view_channel=True,
+            connect=True,
+            speak=True,
+        )
 
     for role in (owner, administrator, moderator, helper):
         if role:
@@ -98,6 +102,8 @@ def build_category_overwrites(
                 view_channel=True,
                 send_messages=True,
                 read_message_history=True,
+                connect=True,
+                speak=True,
             )
 
     return overwrites
