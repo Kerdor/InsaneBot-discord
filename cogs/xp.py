@@ -8,6 +8,7 @@ from datetime import datetime, timezone
 import disnake
 from disnake.ext import commands
 
+from databases.economy import reward_message, init_economy
 from databases.settings import get_bool, get_int, init_settings
 from databases.voice_stats import get_session
 from databases.xp import add_message_xp, add_voice_xp, get_ranking, get_user, init_xp, set_level
@@ -24,6 +25,7 @@ class XP(commands.Cog):
         self._voice_started: dict[tuple[int, int], datetime] = {}
         init_xp()
         init_settings()
+        init_economy()
 
     @staticmethod
     def _level_for_xp(xp: int) -> int:
@@ -86,6 +88,7 @@ class XP(commands.Cog):
         xp_min = get_int(message.guild.id, "xp_message_min")
         xp_max = get_int(message.guild.id, "xp_message_max")
         row = add_message_xp(message.guild.id, message.author.id, random.randint(xp_min, xp_max))
+        reward_message(message.guild.id, message.author.id)
         await self._apply_level(message.guild, message.author.id, row)
 
     async def _finish_voice(self, member: disnake.Member, started: datetime, ended: datetime) -> None:
