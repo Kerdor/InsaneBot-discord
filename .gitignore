@@ -6,6 +6,7 @@ secrets.py
 
 # Runtime server mapping
 .server_map.json
+.logging_channels.json
 
 # Python
 __pycache__/
