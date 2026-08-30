@@ -28,7 +28,7 @@ class RebuildConfirmView(disnake.ui.View):
             summary = await self.cog.rebuild(interaction.guild)
             await interaction.followup.send(summary, ephemeral=True)
         except Exception:
-            logger.exception("Failed to rebuild test guild %s", interaction.guild.id)
+            logger.exception("Не удалось перестроить тестовый сервер %s", interaction.guild.id)
             await interaction.followup.send(
                 "❌ Перестройка завершилась с ошибкой. Подробности смотри в консоли бота.",
                 ephemeral=True,
@@ -77,9 +77,10 @@ class RebuildTestServer(commands.Cog):
     @staticmethod
     async def _create_roles(guild: disnake.Guild) -> dict[str, int]:
         role_specs = [
-            ("👑 Владелец", disnake.Permissions(administrator=True), 0xF1C40F, True, False),
-            ("🛡️ Администратор", disnake.Permissions(administrator=True), 0xE74C3C, True, True),
+            ("Owner", "👑 Владелец", disnake.Permissions(administrator=True), 0xF1C40F, True, False),
+            ("Administrator", "🛡️ Администратор", disnake.Permissions(administrator=True), 0xE74C3C, True, True),
             (
+                "Moderator",
                 "🔨 Модератор",
                 disnake.Permissions(
                     kick_members=True,
@@ -97,6 +98,7 @@ class RebuildTestServer(commands.Cog):
                 True,
             ),
             (
+                "Helper",
                 "🤝 Помощник",
                 disnake.Permissions(
                     manage_messages=True,
@@ -107,13 +109,13 @@ class RebuildTestServer(commands.Cog):
                 False,
                 True,
             ),
-            ("🔐 Не верифицирован", disnake.Permissions.none(), 0x7F8C8D, False, False),
-            ("🎮 Dota 2", disnake.Permissions.none(), 0x5865F2, False, True),
-            ("🎯 CS 2", disnake.Permissions.none(), 0x57F287, False, True),
+            ("Not verified", "🔐 Не верифицирован", disnake.Permissions.none(), 0x7F8C8D, False, False),
+            ("Dota 2", "🎮 Dota 2", disnake.Permissions.none(), 0x5865F2, False, True),
+            ("CS 2", "🎯 CS 2", disnake.Permissions.none(), 0x57F287, False, True),
         ]
 
         created: dict[str, int] = {}
-        for name, permissions, colour, hoist, mentionable in role_specs:
+        for key, name, permissions, colour, hoist, mentionable in role_specs:
             role = await guild.create_role(
                 name=name,
                 permissions=permissions,
@@ -122,17 +124,17 @@ class RebuildTestServer(commands.Cog):
                 mentionable=mentionable,
                 reason="InsaneBot test server rebuild",
             )
-            created[name] = role.id
-            logger.info("Создана роль: %s (%s)", name, role.id)
+            created[key] = role.id
+            logger.info("Создана роль: %s [%s] (%s)", name, key, role.id)
         return created
 
     @staticmethod
     async def _create_structure(guild: disnake.Guild, roles: dict[str, int]) -> dict[str, int]:
         everyone = guild.default_role
-        not_verified = guild.get_role(roles["🔐 Не верифицирован"])
-        helper = guild.get_role(roles["🤝 Помощник"])
-        moderator = guild.get_role(roles["🔨 Модератор"])
-        administrator = guild.get_role(roles["🛡️ Администратор"])
+        not_verified = guild.get_role(roles["Not verified"])
+        helper = guild.get_role(roles["Helper"])
+        moderator = guild.get_role(roles["Moderator"])
+        administrator = guild.get_role(roles["Administrator"])
 
         info = await guild.create_category("📌・ИНФОРМАЦИЯ", reason="InsaneBot test server rebuild")
         community = await guild.create_category("💬・СООБЩЕСТВО", reason="InsaneBot test server rebuild")
@@ -216,16 +218,16 @@ class RebuildTestServer(commands.Cog):
     @staticmethod
     def _apply_runtime_config(role_ids: dict[str, int], channel_ids: dict[str, int]) -> None:
         BotConfig.MODERATION_ROLES = {
-            "owner": role_ids["👑 Владелец"],
-            "administrator": role_ids["🛡️ Администратор"],
-            "moderator": role_ids["🔨 Модератор"],
-            "helper": role_ids["🤝 Помощник"],
+            "owner": role_ids["Owner"],
+            "administrator": role_ids["Administrator"],
+            "moderator": role_ids["Moderator"],
+            "helper": role_ids["Helper"],
         }
         BotConfig.GAME_ROLES = {
-            "Dota 2": role_ids["🎮 Dota 2"],
-            "CS 2": role_ids["🎯 CS 2"],
+            "Dota 2": role_ids["Dota 2"],
+            "CS 2": role_ids["CS 2"],
         }
-        BotConfig.OTHER_ROLES = {"Не верифицирован": role_ids["🔐 Не верифицирован"]}
+        BotConfig.OTHER_ROLES = {"Not verified": role_ids["Not verified"]}
         BotConfig.CHANNELS = {"create_voice": channel_ids["create_voice"]}
         BotConfig.CHANNEL_LOGS = {
             "chat_logs": channel_ids["chat_logs"],
@@ -236,8 +238,8 @@ class RebuildTestServer(commands.Cog):
         BotConfig.GUILD_LOGS_CHANNEL = channel_ids["guild_logs"]
         BotConfig.MODERATION_LOGS_CHANNEL = channel_ids["moderation_logs"]
         BotConfig.GAME_ROLE_OPTIONS = [
-            disnake.SelectOption(label="Dota 2", value=str(role_ids["🎮 Dota 2"])),
-            disnake.SelectOption(label="CS 2", value=str(role_ids["🎯 CS 2"])),
+            disnake.SelectOption(label="Dota 2", value=str(role_ids["Dota 2"])),
+            disnake.SelectOption(label="CS 2", value=str(role_ids["CS 2"])),
         ]
 
     async def rebuild(self, guild: disnake.Guild) -> str:
