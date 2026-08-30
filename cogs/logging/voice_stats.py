@@ -12,6 +12,7 @@ from databases.voice_stats import (
     get_channel_seconds,
     get_ranking,
     get_session,
+    get_sessions,
     get_total_seconds,
     init_voice_stats,
     start_session,
@@ -98,17 +99,33 @@ class VoiceStats(BaseLogger):
 
     @commands.Cog.listener()
     async def on_ready(self) -> None:
-        """Recover sessions after reconnect/restart without resetting their original join time."""
+        """Recover and reconcile persisted sessions after a restart or reconnect."""
         now = self._now()
         for guild in self.bot.guilds:
+            active_sessions = get_sessions(guild.id)
+            active_members: dict[int, disnake.VoiceChannel] = {}
             for channel in guild.voice_channels:
                 if not self._is_counted(channel, guild):
                     continue
                 for member in channel.members:
-                    if member.bot:
-                        continue
-                    if get_session(guild.id, member.id) is None:
-                        start_session(guild.id, member.id, channel.id, now)
+                    if not member.bot:
+                        active_members[member.id] = channel
+
+            for session in active_sessions:
+                user_id = int(session["user_id"])
+                channel_id = int(session["channel_id"])
+                channel = active_members.get(user_id)
+                if channel is None:
+                    finish_session(guild.id, user_id, now)
+                    continue
+                if channel.id != channel_id:
+                    finish_session(guild.id, user_id, now)
+                    start_session(guild.id, user_id, channel.id, now)
+
+            for user_id, channel in active_members.items():
+                if get_session(guild.id, user_id) is None:
+                    start_session(guild.id, user_id, channel.id, now)
+
         logger.info("[VOICE] Active voice sessions recovered")
 
     @commands.Cog.listener()
