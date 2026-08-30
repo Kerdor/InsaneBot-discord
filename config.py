@@ -41,6 +41,7 @@ def _load_server_map() -> dict:
 
 
 class BotConfig:
+    PROJECT_DIR = PROJECT_DIR
     TOKEN = _required_env("BOT_TOKEN")
     PREFIX = os.getenv("BOT_PREFIX", "!").strip() or "!"
 
