@@ -6,6 +6,7 @@ import disnake
 from disnake.ext import commands
 
 from databases.economy import claim_daily, get_user, init_economy, transfer_balance
+from databases.settings import get_bool, get_int
 
 logger = logging.getLogger(__name__)
 
@@ -27,16 +28,22 @@ class Economy(commands.Cog):
 
     @commands.slash_command(name="daily", description="Получить ежедневную награду")
     async def daily(self, inter: disnake.ApplicationCommandInteraction) -> None:
+        if not get_bool(inter.guild.id, "economy_enabled"):
+            await inter.response.send_message("💰 Экономика сейчас отключена администрацией.", ephemeral=True)
+            return
         claimed, row, remaining = claim_daily(inter.guild.id, inter.author.id)
         if not claimed:
             hours, rest = divmod(remaining, 3600)
             minutes = rest // 60
             await inter.response.send_message(f"⏳ Ежедневная награда уже получена. Следующая через **{hours} ч. {minutes} мин.**", ephemeral=True)
             return
-        await inter.response.send_message(f"🎁 Ты получил **100 монет**! Баланс: **{row['balance']}**.", ephemeral=True)
+        await inter.response.send_message(f"🎁 Ты получил **{get_int(inter.guild.id, 'economy_daily_reward')} монет**! Баланс: **{row['balance']}**.", ephemeral=True)
 
     @commands.slash_command(name="pay", description="Перевести монеты другому пользователю")
     async def pay(self, inter: disnake.ApplicationCommandInteraction, member: disnake.Member, amount: int) -> None:
+        if not get_bool(inter.guild.id, "economy_enabled"):
+            await inter.response.send_message("💰 Экономика сейчас отключена администрацией.", ephemeral=True)
+            return
         success, message, row = transfer_balance(inter.guild.id, inter.author.id, member.id, amount)
         if success:
             message += f" Твой баланс: **{row['balance']}**."
