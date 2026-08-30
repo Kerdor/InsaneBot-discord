@@ -21,6 +21,18 @@ SETTINGS_INFO = {
     "economy_enabled": "Экономика включена",
 }
 
+MODERATION_INFO = {
+    "moderation_timeout_max": "Максимальный timeout (мин.)",
+    "moderation_warn_enabled": "Warn включён",
+    "moderation_timeout_enabled": "Timeout включён",
+    "moderation_kick_enabled": "Kick включён",
+    "moderation_ban_enabled": "Ban включён",
+    "moderation_owner_role": "ID роли Owner",
+    "moderation_administrator_role": "ID роли Administrator",
+    "moderation_moderator_role": "ID роли Moderator",
+    "moderation_helper_role": "ID роли Helper",
+}
+
 LOG_TYPES = {
     "chat_logs": "💬 Сообщения",
     "guild_logs": "📁 Сервер / участники",
@@ -32,8 +44,6 @@ LOG_TYPES = {
 
 
 class AdminPanel(commands.Cog):
-    """Persistent owner/admin settings panel."""
-
     def __init__(self, bot: commands.Bot) -> None:
         self.bot = bot
         init_settings()
@@ -59,11 +69,7 @@ class AdminPanel(commands.Cog):
 
     @staticmethod
     def _main_embed() -> disnake.Embed:
-        return disnake.Embed(
-            title="⚙️ Админ-панель InsaneBot",
-            description="Управление основными системами бота. Изменения применяются без перезапуска.",
-            color=disnake.Color.blurple(),
-        )
+        return disnake.Embed(title="⚙️ Админ-панель InsaneBot", description="Управление основными системами бота. Изменения применяются без перезапуска.", color=disnake.Color.blurple())
 
     async def show_settings(self, interaction: disnake.MessageInteraction) -> None:
         if not await self._allowed(interaction):
@@ -77,6 +83,21 @@ class AdminPanel(commands.Cog):
             lines.append(f"**{description}:** `{value}`")
         embed = disnake.Embed(title="⚙️ Настройки", description="\n".join(lines), color=disnake.Color.blurple())
         await interaction.response.send_message(embed=embed, view=AdminSettingsView(self), ephemeral=True)
+
+    async def show_moderation(self, interaction: disnake.MessageInteraction) -> None:
+        if not await self._allowed(interaction):
+            return
+        settings = get_all(interaction.guild.id)
+        lines = []
+        for key, description in MODERATION_INFO.items():
+            value = settings[key]
+            if key.endswith("enabled"):
+                value = "включено" if int(value) else "выключено"
+            elif key.endswith("role"):
+                value = f"<@&{value}>" if int(value) else "config.py"
+            lines.append(f"**{description}:** `{value}`")
+        embed = disnake.Embed(title="🛡️ Модерация", description="\n".join(lines), color=disnake.Color.red())
+        await interaction.response.send_message(embed=embed, view=AdminModerationView(self), ephemeral=True)
 
     async def show_logging(self, interaction: disnake.MessageInteraction) -> None:
         if not await self._allowed(interaction):
@@ -92,7 +113,7 @@ class AdminPanel(commands.Cog):
     async def edit_setting(self, interaction: disnake.MessageInteraction, key: str) -> None:
         if not await self._allowed(interaction):
             return
-        await interaction.response.send_modal(SettingModal(self, key))
+        await interaction.response.send_modal(SettingModal(self, key, SETTINGS_INFO.get(key, MODERATION_INFO.get(key, key))))
 
     async def save_setting(self, interaction: disnake.ModalInteraction, key: str, raw_value: str) -> None:
         if not await self._allowed(interaction):
@@ -117,6 +138,10 @@ class AdminPanel(commands.Cog):
                 raise ValueError
             if key == "xp_message_cooldown" and value < 1:
                 raise ValueError
+            if key == "moderation_timeout_max" and value < 1:
+                raise ValueError
+            if key.endswith("_role") and value != 0 and interaction.guild.get_role(value) is None:
+                raise ValueError
             changed, old_value, new_value = set_setting(interaction.guild.id, interaction.user.id, key, value)
         except ValueError:
             await interaction.response.send_message("❌ Некорректное значение.", ephemeral=True)
@@ -125,7 +150,7 @@ class AdminPanel(commands.Cog):
             await interaction.response.send_message("Значение не изменилось.", ephemeral=True)
             return
         logger.info("[SETTINGS] %s changed %s: %s -> %s in guild %s", interaction.user.id, key, old_value, new_value, interaction.guild.id)
-        await interaction.response.send_message(f"✅ **{SETTINGS_INFO[key]}**: `{old_value}` → `{new_value}`", ephemeral=True)
+        await interaction.response.send_message(f"✅ **{SETTINGS_INFO.get(key, MODERATION_INFO.get(key, key))}**: `{old_value}` → `{new_value}`", ephemeral=True)
 
     async def set_log_channel(self, interaction: disnake.ModalInteraction, log_type: str, raw_channel: str) -> None:
         if not await self._allowed(interaction):
@@ -137,68 +162,78 @@ class AdminPanel(commands.Cog):
             await interaction.response.send_message("❌ Укажи корректный ID канала.", ephemeral=True)
             return
         channel = interaction.guild.get_channel(channel_id)
-        if channel is None:
-            await interaction.response.send_message("❌ Канал с таким ID не найден на сервере.", ephemeral=True)
-            return
-        if not isinstance(channel, (disnake.TextChannel, disnake.Thread)):
-            await interaction.response.send_message("❌ Нужен текстовый канал или thread.", ephemeral=True)
+        if channel is None or not isinstance(channel, (disnake.TextChannel, disnake.Thread)):
+            await interaction.response.send_message("❌ Нужен существующий текстовый канал или thread.", ephemeral=True)
             return
         BotConfig.set_logging_channel(interaction.guild.id, log_type, channel_id)
-        logger.info("[SETTINGS] %s changed log channel %s -> %s in guild %s", interaction.user.id, log_type, channel_id, interaction.guild.id)
         await interaction.response.send_message(f"✅ **{LOG_TYPES[log_type]}** теперь пишет в {channel.mention}.", ephemeral=True)
 
 
 class AdminPanelView(disnake.ui.View):
-    def __init__(self, cog: AdminPanel) -> None:
+    def __init__(self, cog):
         super().__init__(timeout=None)
         self.cog = cog
 
     @disnake.ui.button(label="⚙️ Настройки", style=disnake.ButtonStyle.primary, custom_id="admin:settings")
-    async def settings(self, button: disnake.ui.Button, interaction: disnake.MessageInteraction) -> None:
+    async def settings(self, button, interaction):
         await self.cog.show_settings(interaction)
 
+    @disnake.ui.button(label="🛡️ Модерация", style=disnake.ButtonStyle.danger, custom_id="admin:moderation")
+    async def moderation(self, button, interaction):
+        await self.cog.show_moderation(interaction)
+
     @disnake.ui.button(label="📋 Логирование", style=disnake.ButtonStyle.secondary, custom_id="admin:logging")
-    async def logging(self, button: disnake.ui.Button, interaction: disnake.MessageInteraction) -> None:
+    async def logging(self, button, interaction):
         await self.cog.show_logging(interaction)
 
 
 class AdminSettingsView(disnake.ui.View):
-    def __init__(self, cog: AdminPanel) -> None:
+    def __init__(self, cog):
         super().__init__(timeout=None)
         self.cog = cog
 
-    @disnake.ui.select(placeholder="Выберите настройку для изменения", custom_id="admin:setting_select", options=[disnake.SelectOption(label=value, value=key) for key, value in SETTINGS_INFO.items()])
-    async def select(self, select: disnake.ui.Select, interaction: disnake.MessageInteraction) -> None:
+    @disnake.ui.select(placeholder="Выберите настройку", custom_id="admin:setting_select", options=[disnake.SelectOption(label=value, value=key) for key, value in SETTINGS_INFO.items()])
+    async def select(self, select, interaction):
+        await self.cog.edit_setting(interaction, select.values[0])
+
+
+class AdminModerationView(disnake.ui.View):
+    def __init__(self, cog):
+        super().__init__(timeout=None)
+        self.cog = cog
+
+    @disnake.ui.select(placeholder="Выберите настройку модерации", custom_id="admin:moderation_select", options=[disnake.SelectOption(label=value, value=key) for key, value in MODERATION_INFO.items()])
+    async def select(self, select, interaction):
         await self.cog.edit_setting(interaction, select.values[0])
 
 
 class AdminLoggingView(disnake.ui.View):
-    def __init__(self, cog: AdminPanel) -> None:
+    def __init__(self, cog):
         super().__init__(timeout=None)
         self.cog = cog
 
     @disnake.ui.select(placeholder="Выберите тип логов", custom_id="admin:log_select", options=[disnake.SelectOption(label=value, value=key) for key, value in LOG_TYPES.items()])
-    async def select(self, select: disnake.ui.Select, interaction: disnake.MessageInteraction) -> None:
+    async def select(self, select, interaction):
         await interaction.response.send_modal(LogChannelModal(self.cog, select.values[0]))
 
 
 class SettingModal(disnake.ui.Modal):
-    def __init__(self, cog: AdminPanel, key: str) -> None:
+    def __init__(self, cog, key: str, label: str):
         self.cog = cog
         self.key = key
-        super().__init__(title=f"Изменить: {SETTINGS_INFO[key]}", components=[disnake.ui.TextInput(label="Новое значение", custom_id="value", required=True, max_length=20)])
+        super().__init__(title=f"Изменить: {label}", components=[disnake.ui.TextInput(label="Новое значение", custom_id="value", required=True, max_length=20)])
 
-    async def callback(self, interaction: disnake.ModalInteraction) -> None:
+    async def callback(self, interaction):
         await self.cog.save_setting(interaction, self.key, interaction.text_values["value"])
 
 
 class LogChannelModal(disnake.ui.Modal):
-    def __init__(self, cog: AdminPanel, log_type: str) -> None:
+    def __init__(self, cog, log_type: str):
         self.cog = cog
         self.log_type = log_type
         super().__init__(title=f"Канал: {LOG_TYPES[log_type]}", components=[disnake.ui.TextInput(label="ID канала или #канал", custom_id="channel", required=True, max_length=30)])
 
-    async def callback(self, interaction: disnake.ModalInteraction) -> None:
+    async def callback(self, interaction):
         await self.cog.set_log_channel(interaction, self.log_type, interaction.text_values["channel"])
 
 
