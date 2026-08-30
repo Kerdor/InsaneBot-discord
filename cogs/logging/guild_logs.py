@@ -97,12 +97,12 @@ class GuildLogs(BaseLogger):
 
     @commands.Cog.listener()
     async def on_member_update(self, before: disnake.Member, after: disnake.Member) -> None:
-        if before.timed_out_until != after.timed_out_until:
-            title = "Тайм-аут установлен" if after.timed_out_until else "Тайм-аут снят"
-            color = LOG_COLORS["ORANGE"] if after.timed_out_until else LOG_COLORS["GREEN"]
+        if before.current_timeout != after.current_timeout:
+            title = "Тайм-аут установлен" if after.current_timeout else "Тайм-аут снят"
+            color = LOG_COLORS["ORANGE"] if after.current_timeout else LOG_COLORS["GREEN"]
             embed = self._member_embed(title, color, after)
-            if after.timed_out_until:
-                embed.add_field(name="Окончание", value=f"{disnake.utils.format_dt(after.timed_out_until, 'f')} ({disnake.utils.format_dt(after.timed_out_until, 'R')})", inline=False)
+            if after.current_timeout:
+                embed.add_field(name="Окончание", value=f"{disnake.utils.format_dt(after.current_timeout, 'f')} ({disnake.utils.format_dt(after.current_timeout, 'R')})", inline=False)
             await self.log_to_channel(after.guild, embed)
 
         if before.roles != after.roles:
