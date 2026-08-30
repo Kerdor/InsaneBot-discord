@@ -137,6 +137,7 @@ class BotConfig:
         "cogs.tickets",
         "cogs.moderation",
         "cogs.xp",
+        "cogs.economy",
         "cogs.logging.chat_logs",
         "cogs.logging.guild_logs",
         "cogs.logging.moderation_logs",
