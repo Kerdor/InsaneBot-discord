@@ -5,7 +5,6 @@ import os
 from pathlib import Path
 
 import disnake
-from disnake import SelectOption
 from dotenv import load_dotenv
 
 
@@ -107,8 +106,6 @@ class BotConfig:
 
     ASSETS = {"rules_image": ASSETS_DIR / "RULES.png"}
 
-    GAME_ROLE_OPTIONS = []
-
     CHANNEL_LOGS = {
         "chat_logs": None,
         "guild_logs": None,
@@ -137,7 +134,6 @@ class BotConfig:
         "cogs.server_manager",
         "cogs.verification",
         "cogs.user_cmd.create_voice",
-        "cogs.user_cmd.get_roles",
         "cogs.logging.chat_logs",
         "cogs.logging.guild_logs",
         "cogs.logging.moderation_logs",
