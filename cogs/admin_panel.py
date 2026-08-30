@@ -33,12 +33,13 @@ class AdminPanel(commands.Cog):
 
     @staticmethod
     def _is_admin(member: disnake.Member) -> bool:
-        return any(role.id in BotConfig.MODERATION_ROLES.values() for role in member.roles)
+        admin_roles = {BotConfig.MODERATION_ROLES.get("owner"), BotConfig.MODERATION_ROLES.get("administrator")}
+        return any(role.id in admin_roles for role in member.roles)
 
     @commands.slash_command(name="admin_panel", description="Открыть панель настроек бота")
     async def admin_panel(self, inter: disnake.ApplicationCommandInteraction) -> None:
         if not inter.guild or not isinstance(inter.author, disnake.Member) or not self._is_admin(inter.author):
-            await inter.response.send_message("⛔ Доступ только для администрации.", ephemeral=True)
+            await inter.response.send_message("⛔ Доступ только для владельца и администратора.", ephemeral=True)
             return
         embed = disnake.Embed(
             title="⚙️ Админ-панель InsaneBot",
@@ -48,7 +49,7 @@ class AdminPanel(commands.Cog):
         await inter.response.send_message(embed=embed, view=AdminPanelView(self), ephemeral=True)
 
     async def _deny(self, interaction: disnake.MessageInteraction) -> None:
-        await interaction.response.send_message("⛔ Доступ только для администрации.", ephemeral=True)
+        await interaction.response.send_message("⛔ Доступ только для владельца и администратора.", ephemeral=True)
 
     async def show_settings(self, interaction: disnake.MessageInteraction) -> None:
         if not interaction.guild or not isinstance(interaction.author, disnake.Member) or not self._is_admin(interaction.author):
@@ -72,7 +73,7 @@ class AdminPanel(commands.Cog):
 
     async def save_setting(self, interaction: disnake.ModalInteraction, key: str, raw_value: str) -> None:
         if not interaction.guild or not isinstance(interaction.author, disnake.Member) or not self._is_admin(interaction.author):
-            await interaction.response.send_message("⛔ Доступ только для администрации.", ephemeral=True)
+            await interaction.response.send_message("⛔ Доступ только для владельца и администратора.", ephemeral=True)
             return
         try:
             if key.endswith("enabled"):
