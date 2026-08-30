@@ -6,7 +6,7 @@ import disnake
 from disnake.ext import commands
 
 from config import BotConfig
-from databases.tickets import close_ticket, create_ticket, get_open_ticket, get_ticket_by_thread, init_tickets
+from databases.tickets import close_ticket, create_ticket, get_open_ticket, get_open_tickets, get_ticket_by_thread, init_tickets
 
 logger = logging.getLogger(__name__)
 
@@ -101,6 +101,35 @@ class Tickets(commands.Cog):
         bot.add_view(TicketView())
         bot.add_view(CloseTicketView())
 
+    async def _ensure_panel(self, guild: disnake.Guild) -> None:
+        channel_id = BotConfig.CHANNELS.get("create_ticket")
+        if not channel_id:
+            logger.warning("Канал create_ticket не настроен для guild=%s", guild.id)
+            return
+
+        channel = guild.get_channel(channel_id)
+        if not isinstance(channel, disnake.TextChannel):
+            logger.warning("Канал create_ticket не найден для guild=%s: %s", guild.id, channel_id)
+            return
+
+        try:
+            async for message in channel.history(limit=50):
+                if message.author.id == self.bot.user.id and message.components:
+                    for row in message.components:
+                        for component in row.children:
+                            if getattr(component, "custom_id", None) == "ticket:create":
+                                return
+
+            await channel.send(
+                "🎫 **Служба поддержки**\n\n"
+                "Если у вас возник вопрос, проблема или нужна помощь администрации — создайте приватный тикет.\n\n"
+                "Нажмите кнопку ниже, чтобы открыть обращение.",
+                view=TicketView(),
+            )
+            logger.info("Панель создания тикетов создана: guild=%s channel=%s", guild.id, channel.id)
+        except (disnake.Forbidden, disnake.HTTPException):
+            logger.exception("Не удалось создать панель тикетов: guild=%s channel=%s", guild.id, channel.id)
+
     @commands.slash_command(name="ticket_close", description="Закрыть текущий тикет")
     async def ticket_close(self, inter: disnake.ApplicationCommandInteraction) -> None:
         if not inter.guild or not isinstance(inter.channel, disnake.Thread):
@@ -128,7 +157,9 @@ class Tickets(commands.Cog):
     @commands.Cog.listener()
     async def on_ready(self) -> None:
         for guild in self.bot.guilds:
-            for ticket in __import__("databases.tickets", fromlist=["get_open_tickets"]).get_open_tickets(guild.id):
+            await self._ensure_panel(guild)
+
+            for ticket in get_open_tickets(guild.id):
                 thread = guild.get_thread(ticket["thread_id"])
                 if thread is None:
                     close_ticket(guild.id, ticket["thread_id"])
