@@ -20,25 +20,47 @@ class RebuildConfirmView(disnake.ui.View):
 
     @disnake.ui.button(label="Перестроить сервер", style=disnake.ButtonStyle.danger, custom_id="rebuild_confirm")
     async def confirm(self, _: disnake.ui.Button, interaction: disnake.MessageInteraction) -> None:
+        logger.info(
+            "[REBUILD] Нажата кнопка подтверждения: user=%s (%s), guild=%s (%s)",
+            interaction.author,
+            interaction.author.id,
+            interaction.guild.name if interaction.guild else "N/A",
+            interaction.guild.id if interaction.guild else "N/A",
+        )
+
         if not interaction.guild or interaction.guild.id != BotConfig.TEST_GUILD_ID:
+            logger.warning(
+                "[REBUILD] Подтверждение отклонено: guild_id=%s, test_guild_id=%s",
+                interaction.guild.id if interaction.guild else None,
+                BotConfig.TEST_GUILD_ID,
+            )
             await interaction.response.send_message("Команда доступна только на тестовом сервере.", ephemeral=True)
             return
 
         await interaction.response.defer(ephemeral=True)
+        logger.info("[REBUILD] Начинаем перестройку тестового сервера %s", interaction.guild.id)
         try:
             summary = await self.cog.rebuild(interaction.guild)
+            logger.info("[REBUILD] Перестройка завершена успешно")
             await interaction.followup.send(summary, ephemeral=True)
         except Exception:
-            logger.exception("Не удалось перестроить тестовый сервер %s", interaction.guild.id)
+            logger.exception("[REBUILD] Не удалось перестроить тестовый сервер %s", interaction.guild.id)
             await interaction.followup.send(
                 "❌ Перестройка завершилась с ошибкой. Подробности смотри в консоли бота.",
                 ephemeral=True,
             )
         finally:
             self.stop()
+            logger.info("[REBUILD] Окно подтверждения закрыто")
 
     @disnake.ui.button(label="Отмена", style=disnake.ButtonStyle.secondary, custom_id="rebuild_cancel")
     async def cancel(self, _: disnake.ui.Button, interaction: disnake.MessageInteraction) -> None:
+        logger.info(
+            "[REBUILD] Перестройка отменена: user=%s (%s), guild=%s",
+            interaction.author,
+            interaction.author.id,
+            interaction.guild.id if interaction.guild else "N/A",
+        )
         await interaction.response.send_message("Перестройка отменена.", ephemeral=True)
         self.stop()
 
@@ -47,36 +69,42 @@ class RebuildTestServer(commands.Cog):
     def __init__(self, bot: commands.Bot) -> None:
         self.bot = bot
         self._rebuild_lock = asyncio.Lock()
+        logger.info("[REBUILD] RebuildTestServer initialized")
 
     @staticmethod
     async def _delete_channels(guild: disnake.Guild) -> int:
         deleted = 0
+        logger.info("[REBUILD] Этап 1/4: удаление каналов, найдено=%s", len(guild.channels))
         for channel in sorted(guild.channels, key=lambda item: (item.position, item.id), reverse=True):
             try:
+                logger.info("[REBUILD] Удаляем канал: #%s (%s)", channel.name, channel.id)
                 await channel.delete(reason="InsaneBot test server rebuild")
                 deleted += 1
             except (disnake.Forbidden, disnake.HTTPException) as exc:
-                logger.warning("Не удалось удалить канал %s (%s): %s", channel.id, channel.name, exc)
+                logger.warning("[REBUILD] Не удалось удалить канал %s (%s): %s", channel.id, channel.name, exc)
         return deleted
 
     @staticmethod
     async def _delete_roles(guild: disnake.Guild) -> int:
         deleted = 0
+        logger.info("[REBUILD] Этап 2/4: удаление ролей, найдено=%s", len(guild.roles))
         for role in sorted(guild.roles, key=lambda item: item.position, reverse=True):
             if role.is_default() or role.managed:
                 continue
             if role >= guild.me.top_role:
-                logger.warning("Пропускаем роль выше роли бота: %s (%s)", role.name, role.id)
+                logger.warning("[REBUILD] Пропускаем роль выше роли бота: %s (%s)", role.name, role.id)
                 continue
             try:
+                logger.info("[REBUILD] Удаляем роль: %s (%s)", role.name, role.id)
                 await role.delete(reason="InsaneBot test server rebuild")
                 deleted += 1
             except (disnake.Forbidden, disnake.HTTPException) as exc:
-                logger.warning("Не удалось удалить роль %s (%s): %s", role.name, role.id, exc)
+                logger.warning("[REBUILD] Не удалось удалить роль %s (%s): %s", role.name, role.id, exc)
         return deleted
 
     @staticmethod
     async def _create_roles(guild: disnake.Guild) -> dict[str, int]:
+        logger.info("[REBUILD] Этап 3/4: создание ролей")
         role_specs = [
             ("Owner", ROLE_NAMES["owner"], disnake.Permissions(administrator=True), 0xF1C40F, True, False),
             ("Administrator", ROLE_NAMES["administrator"], disnake.Permissions(administrator=True), 0xE74C3C, True, True),
@@ -117,6 +145,7 @@ class RebuildTestServer(commands.Cog):
 
         created: dict[str, int] = {}
         for key, name, permissions, colour, hoist, mentionable in role_specs:
+            logger.info("[REBUILD] Создаём роль: %s [%s]", name, key)
             role = await guild.create_role(
                 name=name,
                 permissions=permissions,
@@ -126,11 +155,12 @@ class RebuildTestServer(commands.Cog):
                 reason="InsaneBot test server rebuild",
             )
             created[key] = role.id
-            logger.info("Создана роль: %s [%s] (%s)", name, key, role.id)
+            logger.info("[REBUILD] Создана роль: %s [%s] (%s)", name, key, role.id)
         return created
 
     @staticmethod
     async def _create_structure(guild: disnake.Guild, roles: dict[str, int]) -> dict[str, int]:
+        logger.info("[REBUILD] Этап 4/4: создание категорий, каналов и прав")
         info = await guild.create_category(CATEGORY_NAMES["information"], reason="InsaneBot test server rebuild")
         community = await guild.create_category(CATEGORY_NAMES["community"], reason="InsaneBot test server rebuild")
         games = await guild.create_category(CATEGORY_NAMES["games"], reason="InsaneBot test server rebuild")
@@ -146,6 +176,7 @@ class RebuildTestServer(commands.Cog):
         }
 
         for key, category in categories.items():
+            logger.info("[REBUILD] Настраиваем права категории: %s [%s]", category.name, key)
             desired = build_category_overwrites(guild, key)
             for target, overwrite in desired.items():
                 await category.set_permissions(target, overwrite=overwrite, reason="InsaneBot structure rebuild")
@@ -170,6 +201,12 @@ class RebuildTestServer(commands.Cog):
 
         for key, category_key, voice in channel_specs:
             category = categories[category_key]
+            logger.info(
+                "[REBUILD] Создаём канал: %s [%s] в категории %s",
+                CHANNEL_NAMES[key],
+                key,
+                category.name,
+            )
             if voice:
                 channel = await guild.create_voice_channel(
                     CHANNEL_NAMES[key], category=category, reason="InsaneBot test server rebuild"
@@ -184,14 +221,16 @@ class RebuildTestServer(commands.Cog):
         if isinstance(general, disnake.TextChannel):
             try:
                 await guild.edit(system_channel=general, reason="InsaneBot test server rebuild")
+                logger.info("[REBUILD] Системный канал установлен: %s (%s)", general.name, general.id)
             except (disnake.Forbidden, disnake.HTTPException):
-                logger.warning("Не удалось установить канал системных сообщений")
+                logger.warning("[REBUILD] Не удалось установить канал системных сообщений")
 
         return channels
 
     @staticmethod
     def _write_server_map(role_ids: dict[str, int], channel_ids: dict[str, int]) -> None:
         path = BotConfig.PROJECT_DIR / ".server_map.json"
+        logger.info("[REBUILD] Сохраняем карту сервера: %s", path)
         path.write_text(
             json.dumps({"roles": role_ids, "channels": channel_ids}, ensure_ascii=False, indent=2),
             encoding="utf-8",
@@ -199,6 +238,7 @@ class RebuildTestServer(commands.Cog):
 
     @staticmethod
     def _apply_runtime_config(role_ids: dict[str, int], channel_ids: dict[str, int]) -> None:
+        logger.info("[REBUILD] Обновляем runtime-конфигурацию")
         BotConfig.MODERATION_ROLES = {
             "owner": role_ids["Owner"],
             "administrator": role_ids["Administrator"],
@@ -226,21 +266,36 @@ class RebuildTestServer(commands.Cog):
 
     async def rebuild(self, guild: disnake.Guild) -> str:
         async with self._rebuild_lock:
+            logger.info(
+                "[REBUILD] Запрос перестройки: guild=%s (%s), environment=%s, test_guild=%s",
+                guild.name,
+                guild.id,
+                BotConfig.ENVIRONMENT,
+                BotConfig.TEST_GUILD_ID,
+            )
             if BotConfig.ENVIRONMENT != "test" or guild.id != BotConfig.TEST_GUILD_ID:
                 raise RuntimeError("Перестройка разрешена только для тестового сервера.")
             if guild.me is None:
                 raise RuntimeError("Не удалось определить участника бота на тестовом сервере.")
 
-            logger.info("=== НАЧАЛО ПЕРЕСТРОЙКИ %s (%s) ===", guild.name, guild.id)
+            logger.info("[REBUILD] Бот в сервере: %s, top_role=%s (%s)", guild.me, guild.me.top_role.name, guild.me.top_role.id)
+            logger.info("[REBUILD] === НАЧАЛО ПЕРЕСТРОЙКИ %s (%s) ===", guild.name, guild.id)
+
             deleted_channels = await self._delete_channels(guild)
-            logger.info("Удалено каналов: %s", deleted_channels)
+            logger.info("[REBUILD] Удалено каналов: %s", deleted_channels)
+
             deleted_roles = await self._delete_roles(guild)
-            logger.info("Удалено ролей: %s", deleted_roles)
+            logger.info("[REBUILD] Удалено ролей: %s", deleted_roles)
+
             role_ids = await self._create_roles(guild)
+            logger.info("[REBUILD] Создано ролей: %s", len(role_ids))
+
             channel_ids = await self._create_structure(guild, role_ids)
+            logger.info("[REBUILD] Создано каналов: %s", len(channel_ids))
+
             self._write_server_map(role_ids, channel_ids)
             self._apply_runtime_config(role_ids, channel_ids)
-            logger.info("=== ПЕРЕСТРОЙКА ЗАВЕРШЕНА ===")
+            logger.info("[REBUILD] === ПЕРЕСТРОЙКА ЗАВЕРШЕНА ===")
 
             return (
                 "✅ **Тестовый сервер перестроен**\n\n"
@@ -255,3 +310,4 @@ class RebuildTestServer(commands.Cog):
 
 def setup(bot: commands.Bot) -> None:
     bot.add_cog(RebuildTestServer(bot))
+    logger.info("[REBUILD] RebuildTestServer cog loaded")
