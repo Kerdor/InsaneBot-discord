@@ -136,6 +136,7 @@ class BotConfig:
         "cogs.user_cmd.create_voice",
         "cogs.tickets",
         "cogs.moderation",
+        "cogs.xp",
         "cogs.logging.chat_logs",
         "cogs.logging.guild_logs",
         "cogs.logging.moderation_logs",
