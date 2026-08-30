@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import io
 import logging
 
 import disnake
@@ -10,13 +11,42 @@ from databases.tickets import close_ticket, create_ticket, get_open_ticket, get_
 
 logger = logging.getLogger(__name__)
 
+TICKET_CATEGORIES = (
+    "Техническая проблема",
+    "Жалоба",
+    "Вопрос",
+    "Предложение",
+    "Другое",
+)
 
-class TicketView(disnake.ui.View):
+
+def _is_moderator(member: disnake.Member) -> bool:
+    return any(role.id in BotConfig.MODERATION_ROLES.values() for role in member.roles)
+
+
+async def build_transcript(thread: disnake.Thread) -> io.BytesIO:
+    lines = [f"Тикет: {thread.name}", f"Thread ID: {thread.id}", "", "История сообщений:", ""]
+    messages = [message async for message in thread.history(limit=None, oldest_first=True)]
+    for message in messages:
+        timestamp = message.created_at.isoformat()
+        content = message.content or "[без текста]"
+        if message.attachments:
+            content += " | Вложения: " + ", ".join(attachment.filename for attachment in message.attachments)
+        lines.append(f"[{timestamp}] {message.author} ({message.author.id}): {content}")
+
+    return io.BytesIO("\n".join(lines).encode("utf-8"))
+
+
+class TicketCategorySelect(disnake.ui.Select):
     def __init__(self) -> None:
-        super().__init__(timeout=None)
+        options = [disnake.SelectOption(label=category) for category in TICKET_CATEGORIES]
+        super().__init__(
+            placeholder="Выберите категорию обращения",
+            options=options,
+            custom_id="ticket:category",
+        )
 
-    @disnake.ui.button(label="🎫 Создать тикет", style=disnake.ButtonStyle.primary, custom_id="ticket:create")
-    async def create(self, button: disnake.ui.Button, interaction: disnake.MessageInteraction) -> None:
+    async def callback(self, interaction: disnake.MessageInteraction) -> None:
         if not interaction.guild:
             await interaction.response.send_message("Тикеты доступны только на сервере.", ephemeral=True)
             return
@@ -37,10 +67,11 @@ class TicketView(disnake.ui.View):
             await interaction.response.send_message("Канал тикетов сейчас недоступен.", ephemeral=True)
             return
 
+        category = self.values[0]
         await interaction.response.defer(ephemeral=True)
 
         thread = await channel.create_thread(
-            name=f"ticket-{interaction.author.name}",
+            name=f"🎫・{category.lower()}・{interaction.author.name}",
             type=disnake.ChannelType.private_thread,
             reason="Ticket created",
         )
@@ -54,15 +85,31 @@ class TicketView(disnake.ui.View):
                 except disnake.HTTPException:
                     pass
 
-        ticket_id = create_ticket(interaction.guild.id, interaction.author.id, thread.id)
+        ticket_id = create_ticket(interaction.guild.id, interaction.author.id, thread.id, category)
         await thread.send(
             f"🎫 **Тикет #{ticket_id}**\n"
+            f"Категория: **{category}**\n"
             f"Автор: {interaction.author.mention}\n\n"
             "Опишите проблему или вопрос. Модерация ответит здесь.\n\n"
             "Используйте кнопку ниже, чтобы закрыть тикет.",
             view=CloseTicketView(),
         )
+
+        moderation_mentions = " ".join(
+            role.mention
+            for role in interaction.guild.roles
+            if role.id in moderation_role_ids
+        )
+        if moderation_mentions:
+            await thread.send(f"🔔 Новое обращение для модерации: {moderation_mentions}")
+
         await interaction.followup.send(f"✅ Тикет создан: {thread.mention}", ephemeral=True)
+
+
+class TicketView(disnake.ui.View):
+    def __init__(self) -> None:
+        super().__init__(timeout=None)
+        self.add_item(TicketCategorySelect())
 
 
 class CloseTicketView(disnake.ui.View):
@@ -81,13 +128,29 @@ class CloseTicketView(disnake.ui.View):
             return
 
         is_author = interaction.author.id == ticket["author_id"]
-        is_moderator = any(role.id in BotConfig.MODERATION_ROLES.values() for role in interaction.author.roles)
-        if not (is_author or is_moderator):
+        if not (is_author or _is_moderator(interaction.author)):
             await interaction.response.send_message("Закрыть тикет может только его автор или модерация.", ephemeral=True)
             return
 
-        close_ticket(interaction.guild.id, interaction.channel.id)
-        await interaction.response.send_message("🔒 Тикет закрыт.")
+        await interaction.response.defer()
+        transcript = await build_transcript(interaction.channel)
+        close_ticket(interaction.guild.id, interaction.channel.id, interaction.author.id)
+
+        parent = interaction.channel.parent
+        if isinstance(parent, disnake.TextChannel):
+            try:
+                transcript.seek(0)
+                await parent.send(
+                    f"📁 **Тикет #{ticket['id']} закрыт**\n"
+                    f"Автор: <@{ticket['author_id']}>\n"
+                    f"Категория: **{ticket['category']}**\n"
+                    f"Закрыл: {interaction.author.mention}",
+                    file=disnake.File(transcript, filename=f"ticket-{ticket['id']}-transcript.txt"),
+                )
+            except disnake.HTTPException:
+                logger.exception("Не удалось сохранить transcript тикета %s", interaction.channel.id)
+
+        await interaction.followup.send("🔒 Тикет закрыт. История сохранена.")
         try:
             await interaction.channel.edit(archived=True, locked=True, reason="Ticket closed")
         except disnake.HTTPException:
@@ -117,13 +180,13 @@ class Tickets(commands.Cog):
                 if message.author.id == self.bot.user.id and message.components:
                     for row in message.components:
                         for component in row.children:
-                            if getattr(component, "custom_id", None) == "ticket:create":
+                            if getattr(component, "custom_id", None) == "ticket:category":
                                 return
 
             await channel.send(
                 "🎫 **Служба поддержки**\n\n"
                 "Если у вас возник вопрос, проблема или нужна помощь администрации — создайте приватный тикет.\n\n"
-                "Нажмите кнопку ниже, чтобы открыть обращение.",
+                "Сначала выберите категорию обращения.",
                 view=TicketView(),
             )
             logger.info("Панель создания тикетов создана: guild=%s channel=%s", guild.id, channel.id)
@@ -141,14 +204,29 @@ class Tickets(commands.Cog):
             await inter.response.send_message("Тикет уже закрыт.", ephemeral=True)
             return
 
-        is_author = inter.author.id == ticket["author_id"]
-        is_moderator = any(role.id in BotConfig.MODERATION_ROLES.values() for role in inter.author.roles)
-        if not (is_author or is_moderator):
+        if inter.author.id != ticket["author_id"] and not _is_moderator(inter.author):
             await inter.response.send_message("Закрыть тикет может только его автор или модерация.", ephemeral=True)
             return
 
-        close_ticket(inter.guild.id, inter.channel.id)
-        await inter.response.send_message("🔒 Тикет закрыт.")
+        await inter.response.defer()
+        transcript = await build_transcript(inter.channel)
+        close_ticket(inter.guild.id, inter.channel.id, inter.author.id)
+
+        parent = inter.channel.parent
+        if isinstance(parent, disnake.TextChannel):
+            try:
+                transcript.seek(0)
+                await parent.send(
+                    f"📁 **Тикет #{ticket['id']} закрыт**\n"
+                    f"Автор: <@{ticket['author_id']}>\n"
+                    f"Категория: **{ticket['category']}**\n"
+                    f"Закрыл: {inter.author.mention}",
+                    file=disnake.File(transcript, filename=f"ticket-{ticket['id']}-transcript.txt"),
+                )
+            except disnake.HTTPException:
+                logger.exception("Не удалось сохранить transcript тикета %s", inter.channel.id)
+
+        await inter.followup.send("🔒 Тикет закрыт. История сохранена.")
         try:
             await inter.channel.edit(archived=True, locked=True, reason="Ticket closed")
         except disnake.HTTPException:
