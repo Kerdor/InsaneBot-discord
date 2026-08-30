@@ -21,14 +21,14 @@ class ChatLogs(BaseLogger):
     def __init__(self, bot: commands.Bot) -> None:
         super().__init__(bot)
         self.log_type = "chat"
-        self.log_channel_id = BotConfig.CHAT_LOGS_CHANNEL
         self._recent_messages: deque[int] = deque(maxlen=MAX_CACHE_SIZE)
         self._processing: set[int] = set()
-        logger.info("ChatLogs initialized for channel %s", self.log_channel_id)
+        logger.info("ChatLogs initialized")
 
     async def get_log_channel(self, guild: disnake.Guild) -> Optional[disnake.TextChannel]:
         channel = await super().get_log_channel(guild)
         if channel is None:
+            logger.warning("[CHATLOG] Канал логов не настроен для guild %s", guild.id)
             return None
         if isinstance(channel, disnake.Thread):
             channel = channel.parent
@@ -36,7 +36,9 @@ class ChatLogs(BaseLogger):
             permissions = channel.permissions_for(guild.me)
             if permissions.view_channel and permissions.send_messages and permissions.embed_links:
                 return channel
-        logger.error("Invalid or inaccessible chat log channel in guild %s", guild.id)
+            logger.error("[CHATLOG] Нет прав для отправки логов в #%s (%s)", channel.name, channel.id)
+        else:
+            logger.error("[CHATLOG] Канал логов имеет неподходящий тип: %s", type(channel).__name__)
         return None
 
     @staticmethod
@@ -78,6 +80,14 @@ class ChatLogs(BaseLogger):
 
     @commands.Cog.listener()
     async def on_message(self, message: disnake.Message) -> None:
+        logger.info(
+            "[CHATLOG] Получено сообщение: guild=%s, channel=%s, author=%s (%s)",
+            message.guild.id if message.guild else None,
+            message.channel.id,
+            message.author,
+            message.author.id,
+        )
+
         if (
             message.author.bot
             or message.webhook_id is not None
