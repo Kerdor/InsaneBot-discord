@@ -20,7 +20,7 @@ class ChatLogs(BaseLogger):
 
     def __init__(self, bot: commands.Bot) -> None:
         super().__init__(bot)
-        self.log_type = "chat"
+        self.log_type = "chat_logs"
         self._recent_messages: deque[int] = deque(maxlen=MAX_CACHE_SIZE)
         self._processing: set[int] = set()
         logger.info("ChatLogs initialized")
