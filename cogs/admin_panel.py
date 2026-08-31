@@ -334,7 +334,7 @@ class EconomyBalanceModal(disnake.ui.Modal):
         super().__init__(
             title="Изменить баланс",
             components=[
-                disnake.ui.TextInput(label="ID пользователя", custom_id="user_id", required=True, max_length=25),
+                disnake.ui.TextInput(label="Пользователь (@упоминание)", custom_id="user_id", required=True, max_length=100, placeholder="@username"),
                 disnake.ui.TextInput(label="Сумма (+ выдать / - снять)", custom_id="amount", required=True, max_length=15),
             ],
         )
