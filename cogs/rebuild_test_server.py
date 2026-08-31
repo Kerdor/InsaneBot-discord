@@ -216,6 +216,33 @@ class RebuildTestServer(commands.Cog):
             )
             created[key] = role.id
             logger.info("[REBUILD] Создана роль: %s [%s] (%s)", name, key, role.id)
+
+        role_objects = {
+            key: guild.get_role(role_id)
+            for key, role_id in created.items()
+        }
+        role_positions = {
+            role_objects["Not verified"]: 1,
+            role_objects["Member"]: 2,
+            role_objects["Helper"]: 3,
+            role_objects["Moderator"]: 4,
+            role_objects["Administrator"]: 5,
+            role_objects["Owner"]: 6,
+        }
+        role_positions = {
+            role: position
+            for role, position in role_positions.items()
+            if role is not None
+        }
+
+        await guild.edit_role_positions(
+            positions=role_positions,
+            reason="InsaneBot test server rebuild: set role hierarchy",
+        )
+        logger.info(
+            "[REBUILD] Порядок ролей установлен: Owner > Administrator > Moderator > Helper > Member > Not verified"
+        )
+
         return created
 
     @staticmethod
@@ -447,6 +474,7 @@ class RebuildTestServer(commands.Cog):
 
             self._write_server_map(role_ids, channel_ids)
             self._apply_runtime_config(role_ids, channel_ids)
+
             logger.info("[REBUILD] === ПЕРЕСТРОЙКА ЗАВЕРШЕНА ===")
 
             return (
