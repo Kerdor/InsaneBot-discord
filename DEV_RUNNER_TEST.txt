@@ -1,0 +1,1 @@
+Temporary harmless file used to verify dev_runner automatic git pull and child-bot restart on 2026-08-31.
