@@ -26,41 +26,16 @@ async def build_transcript(thread: disnake.Thread) -> io.BytesIO:
         if message.attachments:
             content += " | Вложения: " + ", ".join(attachment.filename for attachment in message.attachments)
         lines.append(f"[{timestamp}] {message.author} ({message.author.id}): {content}")
-    return io.BytesIO(b"\xef\xbb\xbf" + "\n".join(lines).encode("utf-8"))
+    return io.BytesIO("\n".join(lines).encode("utf-8-sig"))
 
 
 class TicketModal(disnake.ui.Modal):
     def __init__(self) -> None:
         components = [
-            disnake.ui.TextInput(
-                label="Краткое описание",
-                custom_id="short_description",
-                placeholder="Опишите суть проблемы в 1–2 предложениях",
-                style=disnake.TextInputStyle.short,
-                max_length=200,
-            ),
-            disnake.ui.TextInput(
-                label="Подробное описание",
-                custom_id="detailed_description",
-                placeholder="Расскажите подробнее, что произошло или что вы хотите",
-                style=disnake.TextInputStyle.paragraph,
-                max_length=1000,
-            ),
-            disnake.ui.TextInput(
-                label="Ожидаемый результат",
-                custom_id="expected_result",
-                placeholder="Как, по вашему мнению, это должно работать?",
-                style=disnake.TextInputStyle.paragraph,
-                max_length=1000,
-            ),
-            disnake.ui.TextInput(
-                label="Дополнительная информация",
-                custom_id="additional_information",
-                placeholder="Ссылки, примеры и другие важные детали (необязательно)",
-                style=disnake.TextInputStyle.paragraph,
-                required=False,
-                max_length=1000,
-            ),
+            disnake.ui.TextInput(label="Краткое описание", custom_id="short_description", placeholder="Опишите суть проблемы в 1–2 предложениях", style=disnake.TextInputStyle.short, max_length=200),
+            disnake.ui.TextInput(label="Подробное описание", custom_id="detailed_description", placeholder="Расскажите подробнее, что произошло или что вы хотите", style=disnake.TextInputStyle.paragraph, max_length=1000),
+            disnake.ui.TextInput(label="Ожидаемый результат", custom_id="expected_result", placeholder="Как, по вашему мнению, это должно работать?", style=disnake.TextInputStyle.paragraph, max_length=1000),
+            disnake.ui.TextInput(label="Дополнительная информация", custom_id="additional_information", placeholder="Ссылки, примеры и другие важные детали (необязательно)", style=disnake.TextInputStyle.paragraph, required=False, max_length=1000),
         ]
         super().__init__(title="Создание тикета", components=components, custom_id="ticket:create_modal")
 
@@ -87,11 +62,7 @@ class TicketModal(disnake.ui.Modal):
             return
 
         await interaction.response.defer(ephemeral=True)
-        thread = await channel.create_thread(
-            name=f"ticket-{interaction.author.name}",
-            type=disnake.ChannelType.private_thread,
-            reason="Ticket created",
-        )
+        thread = await channel.create_thread(name=f"ticket-{interaction.author.name}", type=disnake.ChannelType.private_thread, reason="Ticket created")
         await thread.add_user(interaction.author)
 
         support_role_id = get_int(interaction.guild.id, "tickets_support_role")
@@ -118,7 +89,6 @@ class TicketModal(disnake.ui.Modal):
         embed.add_field(name="🎯 Ожидаемый результат", value=expected_result, inline=False)
         embed.add_field(name="📎 Дополнительная информация", value=additional_information, inline=False)
         embed.set_footer(text="Статус: 🟢 Открыт")
-
         await thread.send(embed=embed, view=CloseTicketView())
 
         moderation_mentions = " ".join(role.mention for role in interaction.guild.roles if role.id in moderation_role_ids)
@@ -147,6 +117,45 @@ class TicketView(disnake.ui.View):
         self.add_item(CreateTicketButton())
 
 
+class ConfirmCloseTicketView(disnake.ui.View):
+    def __init__(self, ticket_id: int) -> None:
+        super().__init__(timeout=60)
+        self.ticket_id = ticket_id
+
+    @disnake.ui.button(label="Да, закрыть", emoji="✅", style=disnake.ButtonStyle.danger)
+    async def confirm(self, button: disnake.ui.Button, interaction: disnake.MessageInteraction) -> None:
+        if not interaction.guild or not isinstance(interaction.channel, disnake.Thread):
+            await interaction.response.send_message("Эта кнопка работает только внутри тикета.", ephemeral=True)
+            return
+        ticket = get_ticket_by_thread(interaction.guild.id, interaction.channel.id)
+        if not ticket or ticket["status"] != "open":
+            await interaction.response.edit_message(content="Тикет уже закрыт.", view=None)
+            return
+        if not _is_moderator(interaction.author):
+            await interaction.response.send_message("Закрыть тикет может только администрация.", ephemeral=True)
+            return
+
+        await interaction.response.defer()
+        transcript = await build_transcript(interaction.channel) if get_bool(interaction.guild.id, "tickets_transcript_enabled") else None
+        close_ticket(interaction.guild.id, interaction.channel.id, interaction.author.id)
+        parent = interaction.channel.parent
+        if transcript is not None and isinstance(parent, disnake.TextChannel):
+            try:
+                transcript.seek(0)
+                await parent.send(f"📁 **Тикет #{ticket['id']} закрыт**\nАвтор: <@{ticket['author_id']}>\nЗакрыл: {interaction.author.mention}", file=disnake.File(transcript, filename=f"ticket-{ticket['id']}-transcript.txt"))
+            except disnake.HTTPException:
+                logger.exception("Не удалось сохранить transcript тикета %s", interaction.channel.id)
+        await interaction.followup.send("🔒 Тикет закрыт. История сохранена." if transcript is not None else "🔒 Тикет закрыт.")
+        try:
+            await interaction.channel.edit(archived=True, locked=True, reason="Ticket closed")
+        except disnake.HTTPException:
+            logger.exception("Не удалось архивировать тикет %s", interaction.channel.id)
+
+    @disnake.ui.button(label="Отмена", emoji="❌", style=disnake.ButtonStyle.secondary)
+    async def cancel(self, button: disnake.ui.Button, interaction: disnake.MessageInteraction) -> None:
+        await interaction.response.edit_message(content="❌ Закрытие тикета отменено.", view=None)
+
+
 class CloseTicketView(disnake.ui.View):
     def __init__(self) -> None:
         super().__init__(timeout=None)
@@ -160,28 +169,10 @@ class CloseTicketView(disnake.ui.View):
         if not ticket or ticket["status"] != "open":
             await interaction.response.send_message("Тикет уже закрыт.", ephemeral=True)
             return
-        if not (interaction.author.id == ticket["author_id"] or _is_moderator(interaction.author)):
-            await interaction.response.send_message("Закрыть тикет может только его автор или модерация.", ephemeral=True)
+        if not _is_moderator(interaction.author):
+            await interaction.response.send_message("Закрыть тикет может только администрация.", ephemeral=True)
             return
-
-        await interaction.response.defer()
-        transcript = await build_transcript(interaction.channel) if get_bool(interaction.guild.id, "tickets_transcript_enabled") else None
-        close_ticket(interaction.guild.id, interaction.channel.id, interaction.author.id)
-        parent = interaction.channel.parent
-        if transcript is not None and isinstance(parent, disnake.TextChannel):
-            try:
-                transcript.seek(0)
-                await parent.send(
-                    f"📁 **Тикет #{ticket['id']} закрыт**\nАвтор: <@{ticket['author_id']}>\nЗакрыл: {interaction.author.mention}",
-                    file=disnake.File(transcript, filename=f"ticket-{ticket['id']}-transcript.txt"),
-                )
-            except disnake.HTTPException:
-                logger.exception("Не удалось сохранить transcript тикета %s", interaction.channel.id)
-        await interaction.followup.send("🔒 Тикет закрыт." if transcript is None else "🔒 Тикет закрыт. История сохранена.")
-        try:
-            await interaction.channel.edit(archived=True, locked=True, reason="Ticket closed")
-        except disnake.HTTPException:
-            logger.exception("Не удалось архивировать тикет %s", interaction.channel.id)
+        await interaction.response.send_message("🔒 **Закрытие тикета**\n\nВы действительно хотите закрыть этот тикет?", ephemeral=True, view=ConfirmCloseTicketView(ticket["id"]))
 
 
 class Tickets(commands.Cog):
@@ -209,12 +200,7 @@ class Tickets(commands.Cog):
                         for component in row.children:
                             if getattr(component, "custom_id", None) == "ticket:create":
                                 return
-            await channel.send(
-                "🎫 **СЛУЖБА ПОДДЕРЖКИ**\n\n"
-                "Нужна помощь, хотите сообщить о проблеме или предложить улучшение? "
-                "Создайте тикет и подробно опишите обращение. Администрация рассмотрит его как можно скорее.",
-                view=TicketView(),
-            )
+            await channel.send("🎫 **СЛУЖБА ПОДДЕРЖКИ**\n\nНужна помощь, хотите сообщить о проблеме или предложить улучшение? Создайте тикет и подробно опишите обращение. Администрация рассмотрит его как можно скорее.", view=TicketView())
             logger.info("Панель создания тикетов создана: guild=%s channel=%s", guild.id, channel.id)
         except (disnake.Forbidden, disnake.HTTPException):
             logger.exception("Не удалось создать панель тикетов: guild=%s channel=%s", guild.id, channel.id)
@@ -228,27 +214,10 @@ class Tickets(commands.Cog):
         if not ticket or ticket["status"] != "open":
             await inter.response.send_message("Тикет уже закрыт.", ephemeral=True)
             return
-        if inter.author.id != ticket["author_id"] and not _is_moderator(inter.author):
-            await inter.response.send_message("Закрыть тикет может только его автор или модерация.", ephemeral=True)
+        if not _is_moderator(inter.author):
+            await inter.response.send_message("Закрыть тикет может только администрация.", ephemeral=True)
             return
-        await inter.response.defer()
-        transcript = await build_transcript(inter.channel) if get_bool(inter.guild.id, "tickets_transcript_enabled") else None
-        close_ticket(inter.guild.id, inter.channel.id, inter.author.id)
-        parent = inter.channel.parent
-        if transcript is not None and isinstance(parent, disnake.TextChannel):
-            try:
-                transcript.seek(0)
-                await parent.send(
-                    f"📁 **Тикет #{ticket['id']} закрыт**\nАвтор: <@{ticket['author_id']}>\nЗакрыл: {inter.author.mention}",
-                    file=disnake.File(transcript, filename=f"ticket-{ticket['id']}-transcript.txt"),
-                )
-            except disnake.HTTPException:
-                logger.exception("Не удалось сохранить transcript тикета %s", inter.channel.id)
-        await inter.followup.send("🔒 Тикет закрыт." if transcript is None else "🔒 Тикет закрыт. История сохранена.")
-        try:
-            await inter.channel.edit(archived=True, locked=True, reason="Ticket closed")
-        except disnake.HTTPException:
-            logger.exception("Не удалось архивировать тикет %s", inter.channel.id)
+        await inter.response.send_message("🔒 **Закрытие тикета**\n\nВы действительно хотите закрыть этот тикет?", ephemeral=True, view=ConfirmCloseTicketView(ticket["id"]))
 
     @commands.Cog.listener()
     async def on_ready(self) -> None:
