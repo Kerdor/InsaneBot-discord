@@ -12,14 +12,6 @@ from databases.tickets import close_ticket, create_ticket, get_open_ticket, get_
 
 logger = logging.getLogger(__name__)
 
-TICKET_CATEGORIES = (
-    "Техническая проблема",
-    "Жалоба",
-    "Вопрос",
-    "Предложение",
-    "Другое",
-)
-
 
 def _is_moderator(member: disnake.Member) -> bool:
     return any(role.id in BotConfig.MODERATION_ROLES.values() for role in member.roles)
@@ -37,12 +29,42 @@ async def build_transcript(thread: disnake.Thread) -> io.BytesIO:
     return io.BytesIO("\n".join(lines).encode("utf-8"))
 
 
-class TicketCategorySelect(disnake.ui.Select):
+class TicketModal(disnake.ui.Modal):
     def __init__(self) -> None:
-        options = [disnake.SelectOption(label=category) for category in TICKET_CATEGORIES]
-        super().__init__(placeholder="Выберите категорию обращения", options=options, custom_id="ticket:category")
+        components = [
+            disnake.ui.TextInput(
+                label="Краткое описание",
+                custom_id="short_description",
+                placeholder="Опишите суть проблемы в 1–2 предложениях",
+                style=disnake.TextInputStyle.short,
+                max_length=200,
+            ),
+            disnake.ui.TextInput(
+                label="Подробное описание",
+                custom_id="detailed_description",
+                placeholder="Расскажите подробнее, что произошло или что вы хотите",
+                style=disnake.TextInputStyle.paragraph,
+                max_length=1000,
+            ),
+            disnake.ui.TextInput(
+                label="Ожидаемый результат",
+                custom_id="expected_result",
+                placeholder="Как, по вашему мнению, это должно работать?",
+                style=disnake.TextInputStyle.paragraph,
+                max_length=1000,
+            ),
+            disnake.ui.TextInput(
+                label="Дополнительная информация",
+                custom_id="additional_information",
+                placeholder="Ссылки, примеры и другие важные детали (необязательно)",
+                style=disnake.TextInputStyle.paragraph,
+                required=False,
+                max_length=1000,
+            ),
+        ]
+        super().__init__(title="Создание тикета", components=components, custom_id="ticket:create_modal")
 
-    async def callback(self, interaction: disnake.MessageInteraction) -> None:
+    async def callback(self, interaction: disnake.ModalInteraction) -> None:
         if not interaction.guild:
             await interaction.response.send_message("Тикеты доступны только на сервере.", ephemeral=True)
             return
@@ -64,9 +86,12 @@ class TicketCategorySelect(disnake.ui.Select):
             await interaction.response.send_message("Канал тикетов сейчас недоступен.", ephemeral=True)
             return
 
-        category = self.values[0]
         await interaction.response.defer(ephemeral=True)
-        thread = await channel.create_thread(name=f"🎫・{category.lower()}・{interaction.author.name}", type=disnake.ChannelType.private_thread, reason="Ticket created")
+        thread = await channel.create_thread(
+            name=f"ticket-{interaction.author.name}",
+            type=disnake.ChannelType.private_thread,
+            reason="Ticket created",
+        )
         await thread.add_user(interaction.author)
 
         support_role_id = get_int(interaction.guild.id, "tickets_support_role")
@@ -78,12 +103,23 @@ class TicketCategorySelect(disnake.ui.Select):
                 except disnake.HTTPException:
                     pass
 
-        ticket_id = create_ticket(interaction.guild.id, interaction.author.id, thread.id, category)
-        await thread.send(
-            f"🎫 **Тикет #{ticket_id}**\nКатегория: **{category}**\nАвтор: {interaction.author.mention}\n\n"
-            "Опишите проблему или вопрос. Модерация ответит здесь.\n\nИспользуйте кнопку ниже, чтобы закрыть тикет.",
-            view=CloseTicketView(),
-        )
+        ticket_id = create_ticket(interaction.guild.id, interaction.author.id, thread.id)
+        await thread.edit(name=f"ticket-{interaction.author.name}-{ticket_id}", reason="Set ticket number")
+
+        short_description = interaction.text_values["short_description"]
+        detailed_description = interaction.text_values["detailed_description"]
+        expected_result = interaction.text_values["expected_result"]
+        additional_information = interaction.text_values.get("additional_information") or "Не указана"
+
+        embed = disnake.Embed(title=f"🎫 Тикет #{ticket_id}")
+        embed.add_field(name="👤 Автор", value=interaction.author.mention, inline=False)
+        embed.add_field(name="📌 Краткое описание", value=short_description, inline=False)
+        embed.add_field(name="📝 Подробное описание", value=detailed_description, inline=False)
+        embed.add_field(name="🎯 Ожидаемый результат", value=expected_result, inline=False)
+        embed.add_field(name="📎 Дополнительная информация", value=additional_information, inline=False)
+        embed.set_footer(text="Статус: 🟢 Открыт")
+
+        await thread.send(embed=embed, view=CloseTicketView())
 
         moderation_mentions = " ".join(role.mention for role in interaction.guild.roles if role.id in moderation_role_ids)
         if moderation_mentions:
@@ -91,10 +127,24 @@ class TicketCategorySelect(disnake.ui.Select):
         await interaction.followup.send(f"✅ Тикет создан: {thread.mention}", ephemeral=True)
 
 
+class CreateTicketButton(disnake.ui.Button):
+    def __init__(self) -> None:
+        super().__init__(label="Создать тикет", emoji="🎫", style=disnake.ButtonStyle.primary, custom_id="ticket:create")
+
+    async def callback(self, interaction: disnake.MessageInteraction) -> None:
+        if not interaction.guild:
+            await interaction.response.send_message("Тикеты доступны только на сервере.", ephemeral=True)
+            return
+        if not get_bool(interaction.guild.id, "tickets_enabled"):
+            await interaction.response.send_message("🎫 Система тикетов сейчас отключена.", ephemeral=True)
+            return
+        await interaction.response.send_modal(TicketModal())
+
+
 class TicketView(disnake.ui.View):
     def __init__(self) -> None:
         super().__init__(timeout=None)
-        self.add_item(TicketCategorySelect())
+        self.add_item(CreateTicketButton())
 
 
 class CloseTicketView(disnake.ui.View):
@@ -122,7 +172,7 @@ class CloseTicketView(disnake.ui.View):
             try:
                 transcript.seek(0)
                 await parent.send(
-                    f"📁 **Тикет #{ticket['id']} закрыт**\nАвтор: <@{ticket['author_id']}>\nКатегория: **{ticket['category']}**\nЗакрыл: {interaction.author.mention}",
+                    f"📁 **Тикет #{ticket['id']} закрыт**\nАвтор: <@{ticket['author_id']}>\nЗакрыл: {interaction.author.mention}",
                     file=disnake.File(transcript, filename=f"ticket-{ticket['id']}-transcript.txt"),
                 )
             except disnake.HTTPException:
@@ -157,9 +207,14 @@ class Tickets(commands.Cog):
                 if message.author.id == self.bot.user.id and message.components:
                     for row in message.components:
                         for component in row.children:
-                            if getattr(component, "custom_id", None) == "ticket:category":
+                            if getattr(component, "custom_id", None) == "ticket:create":
                                 return
-            await channel.send("🎫 **Служба поддержки**\n\nЕсли у вас возник вопрос, проблема или нужна помощь администрации — создайте приватный тикет.\n\nСначала выберите категорию обращения.", view=TicketView())
+            await channel.send(
+                "🎫 **СЛУЖБА ПОДДЕРЖКИ**\n\n"
+                "Нужна помощь, хотите сообщить о проблеме или предложить улучшение? "
+                "Создайте тикет и подробно опишите обращение. Администрация рассмотрит его как можно скорее.",
+                view=TicketView(),
+            )
             logger.info("Панель создания тикетов создана: guild=%s channel=%s", guild.id, channel.id)
         except (disnake.Forbidden, disnake.HTTPException):
             logger.exception("Не удалось создать панель тикетов: guild=%s channel=%s", guild.id, channel.id)
@@ -184,7 +239,7 @@ class Tickets(commands.Cog):
             try:
                 transcript.seek(0)
                 await parent.send(
-                    f"📁 **Тикет #{ticket['id']} закрыт**\nАвтор: <@{ticket['author_id']}>\nКатегория: **{ticket['category']}**\nЗакрыл: {inter.author.mention}",
+                    f"📁 **Тикет #{ticket['id']} закрыт**\nАвтор: <@{ticket['author_id']}>\nЗакрыл: {inter.author.mention}",
                     file=disnake.File(transcript, filename=f"ticket-{ticket['id']}-transcript.txt"),
                 )
             except disnake.HTTPException:
