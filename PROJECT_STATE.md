@@ -17,7 +17,8 @@ State date: 2026-09-01
 - If a function changes for local replacement, provide the complete function.
 - Check callers/references after code changes.
 - Validate/test when practical.
-- Normally commit completed changes directly to `main`.
+- **After every code/config fix, update `PROJECT_STATE.md` with the fix, current state and relevant verification result before considering the task complete.**
+- **Do not create branches; make completed changes directly on `main`.**
 - For runtime problems, inspect actual code and supplied logs before guessing.
 - Prefer `БЫЛО → СТАЛО` for focused changes.
 - Python indentation: 4 spaces.
@@ -255,6 +256,19 @@ Groups: messages, members/server, moderation, setup, voice, system.
 
 Reaction logging is disabled by default because it is noisy. Do not redesign logging into a forum/thread architecture unless explicitly requested.
 
+### 2026-09-01 rebuild/logging fix
+
+During `/rebuild`, deletion/recreation of channels and roles generated repeated `ClientException: Parent channel not found` errors in `GuildLogs.get_log_channel()` because a cached log `Thread` could remain after its parent channel was deleted.
+
+Fixed in commit `4daa1cf72811b9fa4ffc92d5170171ba6a1376e2`:
+
+- stale cached threads are no longer trusted when their parent is unavailable;
+- invalid log-channel cache entries are invalidated instead of being used;
+- fetched channels are validated before being accepted as the logging destination;
+- normal logging architecture and behavior were preserved.
+
+This fix specifically addresses the errors shown during the 2026-09-01 `/rebuild` run. A new `/rebuild` runtime test is still required to verify the fix end-to-end.
+
 ## 13. Moderation
 
 Implemented persistent moderation DB, slash commands, moderation panel and moderation logging.
@@ -374,12 +388,14 @@ Do not use destructive restore/reset/cleanup commands against these without expl
 - Dev runner 5-second polling.
 - Full live auto-pull/restart cycle.
 - Runner test file removal.
+- Logging stale-thread fix committed directly to `main`.
 
 ### NEXT
 
-1. **Tickets:** configure TEST `create_ticket` and test the full lifecycle.
-2. **Admin panel:** fix only issues discovered during real testing.
-3. **Economy:** explicitly decide whether negative balances are allowed.
+1. **Verify the logging fix:** run `/rebuild` on TEST and confirm there are no `Parent channel not found` errors.
+2. **Tickets:** configure TEST `create_ticket` and test the full lifecycle.
+3. **Admin panel:** fix only issues discovered during real testing.
+4. **Economy:** explicitly decide whether negative balances are allowed.
 
 ### FUTURE
 
@@ -393,7 +409,7 @@ Do not use destructive restore/reset/cleanup commands against these without expl
 
 ## 19. IMPORTANT HAND-OFF FACTS
 
-- Branch: `main`.
+- Branch: `main` only; **do not create branches**.
 - TEST guild: `519209364280573954` (`Insane TEST`).
 - Bot: `Insane#6907`.
 - Runner interval: **5 seconds**.
@@ -403,6 +419,8 @@ Do not use destructive restore/reset/cleanup commands against these without expl
 - `/shop`, `/buy`, `/shop_admin`, `/admin_panel`: synchronized and available in TEST.
 - Shop UI redesign is **planned, not current work**.
 - Tickets exist in code but TEST `create_ticket` mapping still needs configuration/testing.
+- Logging stale-thread fix is committed on `main`; end-to-end rebuild verification remains.
+- **After every fix, update `PROJECT_STATE.md` before considering the work complete.**
 - Do not repeat completed shop/runner tests without a relevant code change.
 - Do not discard local runtime databases.
 - Do not turn the project into a traditional RPG.
