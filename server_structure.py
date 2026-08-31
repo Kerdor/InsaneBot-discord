@@ -70,30 +70,60 @@ def build_category_overwrites(
     overwrites: dict[disnake.Role, disnake.PermissionOverwrite] = {}
 
     if category_key == "entry":
-        overwrites[everyone] = disnake.PermissionOverwrite(view_channel=True, send_messages=False)
+        overwrites[everyone] = disnake.PermissionOverwrite(
+            view_channel=True,
+            send_messages=False,
+            create_public_threads=False,
+            create_private_threads=False,
+        )
         if not_verified:
-            overwrites[not_verified] = disnake.PermissionOverwrite(view_channel=True, send_messages=False)
+            overwrites[not_verified] = disnake.PermissionOverwrite(
+                view_channel=True,
+                send_messages=False,
+                create_public_threads=False,
+                create_private_threads=False,
+            )
         if member:
-            overwrites[member] = disnake.PermissionOverwrite(view_channel=False)
+            overwrites[member] = disnake.PermissionOverwrite(
+                view_channel=False,
+                create_public_threads=False,
+                create_private_threads=False,
+            )
     else:
-        overwrites[everyone] = disnake.PermissionOverwrite(view_channel=False)
+        overwrites[everyone] = disnake.PermissionOverwrite(
+            view_channel=False,
+            create_public_threads=False,
+            create_private_threads=False,
+        )
         if member:
             overwrites[member] = disnake.PermissionOverwrite(
                 view_channel=True,
                 send_messages=True,
                 read_message_history=True,
+                create_public_threads=False,
+                create_private_threads=False,
             )
         if not_verified:
-            overwrites[not_verified] = disnake.PermissionOverwrite(view_channel=False)
+            overwrites[not_verified] = disnake.PermissionOverwrite(
+                view_channel=False,
+                create_public_threads=False,
+                create_private_threads=False,
+            )
 
     if category_key == "moderation":
-        overwrites[everyone] = disnake.PermissionOverwrite(view_channel=False)
+        overwrites[everyone] = disnake.PermissionOverwrite(
+            view_channel=False,
+            create_public_threads=False,
+            create_private_threads=False,
+        )
 
     if category_key == "voice" and member:
         overwrites[member] = disnake.PermissionOverwrite(
             view_channel=True,
             connect=True,
             speak=True,
+            create_public_threads=False,
+            create_private_threads=False,
         )
 
     for role in (owner, administrator, moderator, helper):
@@ -104,6 +134,8 @@ def build_category_overwrites(
                 read_message_history=True,
                 connect=True,
                 speak=True,
+                create_public_threads=True,
+                create_private_threads=True,
             )
 
     return overwrites
