@@ -257,11 +257,10 @@ class AdminEconomyView(disnake.ui.View):
         if not await self.cog._allowed(interaction):
             return
         try:
-            user_id = int(select.values[0])
-            member = interaction.guild.get_member(user_id)
-            if member is None:
+            member = select.values[0]
+            if not isinstance(member, disnake.Member) or member.guild.id != interaction.guild.id:
                 raise ValueError
-        except (TypeError, ValueError):
+        except (TypeError, ValueError, IndexError):
             await interaction.response.send_message("❌ Не удалось определить пользователя.", ephemeral=True)
             return
 
@@ -338,48 +337,3 @@ class AdminSettingsView(disnake.ui.View):
 class AdminLoggingView(disnake.ui.View):
     def __init__(self, cog):
         super().__init__(timeout=None)
-        self.cog = cog
-
-    @disnake.ui.select(placeholder="Выберите тип логов", custom_id="admin:log_select", options=[disnake.SelectOption(label=value, value=key) for key, value in LOG_TYPES.items()])
-    async def select(self, select, interaction):
-        await interaction.response.send_modal(LogChannelModal(self.cog, select.values[0]))
-
-
-class SettingModal(disnake.ui.Modal):
-    def __init__(self, cog, key: str, label: str):
-        self.cog = cog
-        self.key = key
-        super().__init__(title=f"Изменить: {label}"[:45], components=[disnake.ui.TextInput(label="Новое значение", custom_id="value", required=True, max_length=20)])
-
-    async def callback(self, interaction):
-        await self.cog.save_setting(interaction, self.key, interaction.text_values["value"])
-
-
-class EconomyBalanceModal(disnake.ui.Modal):
-    def __init__(self, cog, user_id: int):
-        self.cog = cog
-        self.user_id = user_id
-        super().__init__(
-            title="Изменить баланс",
-            components=[
-                disnake.ui.TextInput(label="Сумма (+ выдать / - снять)", custom_id="amount", required=True, max_length=15),
-            ],
-        )
-
-    async def callback(self, interaction):
-        await self.cog.set_balance(interaction, self.user_id, interaction.text_values["amount"])
-
-
-class LogChannelModal(disnake.ui.Modal):
-    def __init__(self, cog, log_type: str):
-        self.cog = cog
-        self.log_type = log_type
-        super().__init__(title=f"Канал: {LOG_TYPES[log_type]}"[:45], components=[disnake.ui.TextInput(label="ID канала или #канал", custom_id="channel", required=True, max_length=30)])
-
-    async def callback(self, interaction):
-        await self.cog.set_log_channel(interaction, self.log_type, interaction.text_values["channel"])
-
-
-def setup(bot: commands.Bot) -> None:
-    bot.add_cog(AdminPanel(bot))
-    logger.info("AdminPanel cog loaded")
