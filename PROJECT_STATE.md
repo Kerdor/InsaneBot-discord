@@ -4,47 +4,39 @@ Repository: https://github.com/Kerdor/InsaneBot-discord
 Branch: `main`
 State date: 2026-09-01
 
-> Persistent hand-off document for future chats. Always inspect the actual current GitHub `main` before editing. Do not silently undo agreed decisions.
+> Persistent hand-off document. Always inspect actual GitHub `main` before editing. Do not silently undo agreed decisions.
 
----
+## 1. Working rules
 
-## 1. WORKING RULES
-
-The user wants the assistant to act as a technical editor/developer.
-
-- Inspect actual current GitHub `main` before making changes.
-- Preserve architecture, names, function order and formatting unless a change is necessary.
+- Act as a technical editor/developer.
+- Inspect current repository before changes.
+- Preserve architecture, names, order and formatting unless change is necessary.
 - Make the smallest necessary change.
-- Do not add unnecessary libraries, abstractions or unrelated refactors.
-- Never use `...` as an omitted-code placeholder.
-- If a function is changed for local replacement, provide the complete function.
-- Check callers/references after changing or removing code.
-- Validate/test changes whenever practical.
+- No unnecessary libraries/refactors.
+- Never use `...` as omitted-code placeholder.
+- If a function changes for local replacement, provide the complete function.
+- Check callers/references after code changes.
+- Validate/test when practical.
 - Normally commit completed changes directly to `main`.
-- For runtime problems, inspect the current repository and supplied logs before guessing.
-- Prefer `БЫЛО → СТАЛО` for focused code changes.
+- For runtime problems, inspect actual code and supplied logs before guessing.
+- Prefer `БЫЛО → СТАЛО` for focused changes.
 - Python indentation: 4 spaces.
-- If multiple issues exist, list them with severity.
 
----
-
-## 2. PRODUCT DECISION
+## 2. Product decision
 
 InsaneBot is a Discord moderation/social/community bot with progression and game-like community systems.
 
-### NOT A TRADITIONAL RPG
+### NOT A TRADITIONAL RPG — BINDING
 
-This is binding. Do not introduce RPG mechanics such as talismans, consumable combat items, loot boxes, RPG equipment/inventory or meaningless RPG stats. The intended progression is community/social: activity, XP, levels, economy, profiles, achievements, relationships, mini-games, rankings and future social systems.
+Do not introduce talismans, consumable combat items, loot boxes, RPG equipment/inventory or meaningless RPG stats. Progression is primarily community/social: activity, XP, levels, economy, profiles, achievements, relationships, mini-games and rankings.
 
-The shop is primarily for server/community benefits such as Discord roles, not an RPG inventory.
+Shop is primarily for server/community benefits such as Discord roles, not RPG inventory.
 
----
-
-## 3. ROADMAP
+## 3. Roadmap
 
 1. Levels/XP — implemented
 2. Economy — implemented/expanding
-3. Shop — implemented and runtime-tested; remaining edge/admin tests are non-blocking cleanup
+3. Shop — implemented and runtime-tested; UI redesign postponed
 4. Profiles — basic `/profile` implemented
 5. Daily rewards — implemented
 6. Quests — planned
@@ -58,15 +50,11 @@ The shop is primarily for server/community benefits such as Discord roles, not a
 14. Voice-time rankings — implemented
 15. Friends — planned
 16. Romantic relationships — planned
-17. Tickets — implemented, TEST configuration still needs testing
+17. Tickets — implemented; TEST configuration/testing next
 18. Moderation — implemented
 19. Logging — implemented/expanding
 
-Do not interpret the roadmap as permission to add unrelated RPG mechanics.
-
----
-
-## 4. CURRENT TEST RUNTIME
+## 4. TEST runtime
 
 ```text
 ENVIRONMENT=test
@@ -76,15 +64,13 @@ TEST_GUILDS=[519209364280573954]
 ```
 
 TEST guild: `Insane TEST` (`519209364280573954`).
-Bot during latest run: `Insane#6907` (`1329863697358782504`).
+Bot: `Insane#6907` (`1329863697358782504`).
 
-The configured MAIN guild is not connected during TEST runs; this is expected.
+MAIN guild is not connected during TEST runs; expected.
 
-`config.py` uses TEST_GUILD_ID for TEST_GUILDS, loads `.server_map.json` and `.logging_channels.json`, validates/creates database/assets/log directories, and includes `cogs.shop` and `cogs.admin_panel`.
+`config.py` separates TEST/production, loads `.server_map.json` and `.logging_channels.json`, validates/creates required directories, and includes `cogs.shop` and `cogs.admin_panel`.
 
----
-
-## 5. CURRENT COGS
+## 5. Current COGs
 
 ```text
 cogs.owner
@@ -107,98 +93,42 @@ cogs.shop
 cogs.admin_panel
 ```
 
-`cogs.shop` was previously missing and caused `/shop` and `/buy` not to load. Fixed in `77e0bd8`.
+All loaded successfully in the latest verified run.
 
----
+## 6. Command sync — VERIFIED
 
-## 6. COMMAND SYNC — VERIFIED
+Latest verified startup:
 
-Latest supplied startup log showed:
+- all configured COGs loaded;
+- 33 application commands in memory;
+- Discord returned 33 registered TEST commands;
+- `/shop`, `/buy`, `/shop_admin`, `/admin_panel` are available;
+- Discord connection/startup succeeded.
 
-- all configured COGs loaded successfully;
-- **33 application commands in memory**;
-- Discord returned **33 registered TEST commands** after overwrite;
-- `/shop`, `/buy`, `/shop_admin` and `/admin_panel` are present;
-- Discord connection and startup succeeded.
+The previous missing `cogs.shop` problem was fixed in `77e0bd8`.
 
-The 33 registered commands were:
-
-```text
-admin_panel
-balance
-ban
-buy
-channel_create
-chatlog
-daily
-dump_server
-history
-kick
-level
-load
-logsetup
-modlog
-pay
-profile
-rebuild_test_server
-reload
-restart
-rich
-serverlog
-shop
-shop_admin
-sync_server
-systemlog
-ticket_close
-timeout
-unban
-unload
-voice
-voice_ranking
-warn
-xp_ranking
-```
-
-The previous missing-shop-COG problem is verified fixed.
-
----
-
-## 7. XP / LEVELS
+## 7. XP / Levels
 
 Persistent SQLite XP system.
 
-Implemented:
-- chat XP with per-user anti-spam cooldown;
-- voice XP and AFK exclusion;
-- persistent levels;
-- `/level`;
-- `/xp_ranking`;
-- active voice session recovery after restart;
-- DM notification on level-up.
+Implemented: chat XP with anti-spam cooldown, voice XP with AFK exclusion, persistent levels, `/level`, `/xp_ranking`, active voice session recovery and level-up DM notification.
 
 Recorded defaults:
+
 - message XP cooldown: 60 seconds;
 - message XP: 15–25 XP;
 - voice XP: 5 XP per completed voice minute;
-- cumulative level threshold: `100 * level²`.
+- level threshold: `100 * level²`;
+- eligible message also awards 2 🪙.
 
-An XP-eligible message also awards normal economy currency; recorded default is **2 🪙 per eligible message**, using the same anti-spam eligibility concept.
-
----
-
-## 8. ECONOMY
+## 8. Economy
 
 Persistent SQLite economy.
 
-Normal currency: 🪙.
-Rare currency: 💎.
-
-Binding rare-currency decisions:
-- no real-money purchase;
-- intentionally difficult to obtain;
-- future sources may include every 5th level, achievements, daily quests and other special activities.
+Normal currency: 🪙. Rare currency: 💎.
 
 Commands:
+
 ```text
 /balance
 /daily
@@ -206,110 +136,112 @@ Commands:
 /rich
 ```
 
-`/pay` transfers normal coins; bots cannot receive transfers and users cannot pay themselves. Economy can be disabled through persistent server settings.
+Rare currency has no real-money purchase and is intended to be difficult to obtain.
 
-### Admin economy — VERIFIED
+### Admin Economy — VERIFIED
 
-`/admin_panel → 💰 Экономика → UserSelect → amount`.
+`/admin_panel → 💰 Экономика → UserSelect → amount` works.
 
-The UserSelect flow was runtime-tested successfully:
-- selecting a user works;
-- giving coins works;
-- removing coins works;
-- zero amount is rejected;
-- balance changes are applied correctly.
+Verified:
+- select user;
+- give coins;
+- remove coins;
+- reject zero;
+- apply balance changes.
 
-Potential negative balances when removing more than available remain an explicit undecided design question. Do not silently change this behavior during unrelated work.
+Negative-balance policy is still undecided. Do not silently change it.
 
-Relevant history:
-- `989a7f6` — add economy balance management;
-- `b5ff3f1` — temporary mention input;
-- `c9e0b11` — replace with Discord UserSelect;
-- `118e653` — fix UserSelect member handling.
+## 9. Shop — FUNCTIONALLY TESTED
 
----
-
-## 9. SHOP — TESTED
-
-`databases/shop.py` stores persistent shop items with id, guild_id, name, description, price, role_id and enabled state.
+Persistent `shop_items` storage contains id, guild_id, name, description, price, role_id and enabled state.
 
 Public commands:
+
 ```text
 /shop
 /buy <item_id>
 ```
 
-Admin controls include create/edit/enable/disable/delete and configuration of name, description, price and role.
+Admin operations: create, edit, enable/disable, delete, configure name/description/price/role.
 
-### Purchase safety fix
+### Purchase safety
 
 `ad99f0a` — `Fix shop role purchase validation`.
 
-The current purchase flow:
-1. resolves an enabled item;
-2. validates configured Discord role;
-3. rejects duplicate role ownership;
-4. checks coins;
-5. purchases/deducts;
-6. attempts role assignment;
-7. refunds on `disnake.Forbidden` or `disnake.HTTPException`.
+Current flow validates enabled item and role, rejects duplicate role ownership, checks coins, purchases/deducts, assigns role, and refunds on `disnake.Forbidden` or `disnake.HTTPException`.
 
-### Runtime shop tests completed 2026-08-31
+### Runtime tests completed 2026-08-31
 
-The TEST shop was opened and CRUD behavior was exercised.
+Verified:
 
-Observed/verified:
-- shop items display correctly;
-- item editing changes name/description/price/role display as expected;
-- disabling item #3 removes it from public `/shop`;
-- deleting item #3 removes it from public `/shop`;
-- buying a nonexistent/deleted item returns `❌ Товар не найден или больше недоступен.`;
-- insufficient balance returns the expected error;
-- duplicate purchase is rejected with `❌ У тебя уже есть эта роль. Повторная покупка невозможна.`;
-- missing role returns `❌ Роль товара не найдена на этом сервере. Покупка отменена.`;
-- role assignment failure returns the warning and money is refunded;
-- normal role purchase was verified: balance decreased by the price and the Discord role was actually granted after checking the server;
-- shop admin CRUD behavior used during testing works.
+- shop display;
+- CRUD/edit;
+- disabling item removes it from public shop;
+- deleting item removes it from public shop;
+- nonexistent/deleted item error;
+- insufficient balance error;
+- duplicate purchase rejection;
+- missing role error;
+- role assignment failure with refund;
+- successful role purchase and actual Discord role assignment.
 
-Therefore the previously critical shop purchase bug is fixed and the main end-to-end flow is verified.
+The previous PROJECT_STATE test list is stale; these tests must not be repeated unless a relevant regression/code change occurs.
 
-The old PROJECT_STATE listed duplicate purchase and other negative tests as future work; **that is stale and must not be repeated as if untested**.
+### FUTURE SHOP UI/UX — AGREED, POSTPONED
 
-Remaining shop cleanup only if needed:
-- broader admin permission/UI coverage;
-- explicitly decide negative-balance policy for admin economy (not shop-specific);
-- any new regression tests requested by the user.
+The current shop presentation is considered too dry. The user wants a later visual redesign without changing the purchase mechanism.
 
----
+Current style:
 
-## 10. PROFILE
+```text
+🛒 Магазин
 
-Basic `/profile` is implemented and shows display name/avatar, level, XP progress, normal/rare currency, message count, voice XP and total XP. It can show another member.
+#1 · test — 1 🪙 → @Неизвестная роль — test
+#2 · test — 2 🪙 → @test — test
 
-Future: visual profile cards, customization, achievements and social information.
+Используйте /buy <ID> для покупки
+```
 
----
+Agreed future design:
 
-## 11. ADMIN PANEL
+- make the shop embed/text more visually appealing and less dry;
+- paginate shop items;
+- allow/display a choice of **5 or 10 items per page**;
+- add bottom navigation buttons;
+- left/right arrow buttons with page number in the center, visually like:
 
-`/admin_panel` is the central management UI and is admin/owner restricted.
+```text
+◀  1/2  ▶
+```
 
-Current areas include:
-- settings;
-- logging;
-- shop;
-- economy balance management;
-- future controls.
+Navigation behavior:
 
-Persistent server settings are in `databases/settings.db`; settings changes are audited in `settings_audit`.
+- first page: left disabled;
+- last page: right disabled;
+- middle pages: both enabled;
+- page number updates when navigating;
+- `/buy <ID>` remains the purchase mechanism.
 
-Do not create settings for systems that do not exist yet.
+**Do not implement this redesign until the user explicitly asks to start it.** It is a planned UI/UX improvement, not a bug.
 
----
+## 10. Profile
 
-## 12. LOGGING
+Basic `/profile` is implemented using existing XP/economy persistence. It shows identity, level/XP progress, normal/rare currency, message count, voice XP and total XP.
 
-Logging COGs:
+Future: profile cards, customization, achievements and social information.
+
+## 11. Admin panel
+
+`/admin_panel` is admin/owner restricted and is becoming the central management UI.
+
+Current areas: settings, logging, shop and economy balance management; future controls may be added incrementally.
+
+Persistent server settings: `databases/settings.db` with settings audit history.
+
+## 12. Logging
+
+COGs:
+
 ```text
 cogs.logging.chat_logs
 cogs.logging.guild_logs
@@ -321,17 +253,12 @@ cogs.logging.system_logs
 
 Groups: messages, members/server, moderation, setup, voice, system.
 
-Reaction logging is disabled by default because it is noisy.
+Reaction logging is disabled by default because it is noisy. Do not redesign logging into a forum/thread architecture unless explicitly requested.
 
-`.logging_channels.json` persists logging destinations/forum/thread IDs. Do not redesign logging into a forum/thread architecture unless the user explicitly requests it.
+## 13. Moderation
 
----
+Implemented persistent moderation DB, slash commands, moderation panel and moderation logging.
 
-## 13. MODERATION
-
-Implemented persistent moderation DB, slash commands, persistent moderation panel and moderation logging.
-
-Commands:
 ```text
 /ban
 /kick
@@ -340,28 +267,26 @@ Commands:
 /warn
 ```
 
----
+## 14. Tickets — NEXT CONCRETE TASK
 
-## 14. TICKETS
-
-Private-thread ticket system exists with ticket creation, transcripts, recovery and persistent ticket state.
+Private-thread ticket system exists with creation, transcripts, recovery and persistent state.
 
 Current TEST warning:
+
 ```text
 Канал create_ticket не настроен для guild=519209364280573954
 ```
 
 This is configuration, not a startup crash.
 
-**Next ticket task:** configure/map the TEST `create_ticket` channel and then perform an end-to-end test of ticket creation, thread behavior, closing/transcript and recovery.
+Next: configure/map the TEST `create_ticket` channel, then test ticket creation, private thread behavior, closing/transcript and recovery.
 
----
+## 15. Server map / persistent config
 
-## 15. SERVER MAP / PERSISTENT CONFIG
+`.server_map.json` provides TEST server-specific role/channel IDs.
 
-`.server_map.json` is used in TEST for server-specific role/channel IDs.
+Required roles:
 
-Required role names:
 ```text
 Owner
 Administrator
@@ -371,7 +296,8 @@ Member
 Not verified
 ```
 
-Required channel names include:
+Required channels include:
+
 ```text
 create_voice
 verification
@@ -387,61 +313,45 @@ voice_logs
 logs
 ```
 
-Incomplete mappings may fall back to values in `BotConfig`.
+`.logging_channels.json` stores logging destinations/forum/thread IDs.
 
----
-
-## 16. DEV RUNNER — VERIFIED 2026-08-31 / 2026-09-01
+## 16. Dev runner — VERIFIED
 
 `dev_runner.py` is the local development auto-update runner.
 
-**Current polling interval: 5 seconds.**
+Current polling interval: **5 seconds**.
 
-Important: the previous PROJECT_STATE incorrectly said 10 seconds and said the full cycle was untested. That is now stale.
+### Full live test
 
-### Actual end-to-end test
+While runner was already running, commit `6dbd454` (`test: verify dev runner auto update`) was made.
 
-While `dev_runner.py` was already running, a harmless commit was made:
+Runner output confirmed:
 
-`6dbd454` — `test: verify dev runner auto update`
-
-The runner detected it:
 ```text
 [GIT] Updating 53bf473..6dbd454
-Fast-forward
- DEV_RUNNER_TEST.txt | 1 +
 [RUNNER] Обнаружены изменения: 53bf473... -> 6dbd454...
 [RUNNER] Останавливаем старый процесс бота...
 [RUNNER] Запуск бота...
 ```
 
-The restarted bot then successfully:
-- loaded all COGs;
-- connected to Discord;
-- became ready;
-- synchronized 33 TEST commands;
-- continued polling and printing `[GIT] Already up to date.`.
+Restarted bot loaded all COGs, connected to Discord, became ready and synchronized 33 TEST commands. Runner continued with `[GIT] Already up to date.`.
 
-This proves the live **pull → changed HEAD detection → stop child → start child → continue polling** cycle.
+Temporary `DEV_RUNNER_TEST.txt` was removed in commit `3b872d6`, and that deletion was also automatically pulled/restarted.
 
-The test file was then removed from GitHub in a follow-up commit:
-`3b872d6` — `chore: remove dev runner test file`.
+Therefore the complete **pull → detect changed HEAD → stop child → start child → continue polling** cycle is verified.
 
-The runner automatically pulled that deletion and restarted the bot as expected.
-
-Do not repeat the runner test unless a regression occurs.
+Do not repeat the runner test unless runner code changes or regression occurs.
 
 Do not run a separate `main.py` alongside the runner.
 
-One limitation remains by design: if `dev_runner.py` itself is modified through GitHub, the currently running runner process cannot automatically replace its own Python process merely by restarting the child bot. Treat runner self-update as a separate feature only if explicitly requested.
+Runner self-update is not implemented: changing `dev_runner.py` itself through GitHub does not replace the currently running runner process. Treat that as a separate feature only if explicitly requested.
 
----
+## 17. Local Git / databases
 
-## 17. LOCAL GIT / DATABASE STATE
-
-Runtime-generated local DB changes must not be discarded blindly.
+Do not blindly discard local runtime DB changes.
 
 Previously observed local files:
+
 ```text
 modified: databases/Insane.sqlite3
 untracked: databases/economy.db
@@ -451,55 +361,48 @@ databases/tickets.db
 databases/xp.db
 ```
 
-The user has local development databases. Do not use `git restore`, reset or cleanup commands that could destroy them without explicit instruction.
+Do not use destructive restore/reset/cleanup commands against these without explicit instruction.
 
-A previous GitHub Desktop discrepancy showed many commits to pull while command-line Git said `main` was up to date. Command-line Git was treated as authoritative for the local repository check.
-
----
-
-## 18. CURRENT STATUS / NEXT STEPS
+## 18. Current status / next steps
 
 ### DONE / VERIFIED
+
 - Admin Economy UserSelect and balance operations.
 - Shop loading and command synchronization.
-- Shop CRUD scenarios exercised.
-- Shop role purchase and role assignment.
-- Shop duplicate purchase/insufficient funds/disabled/deleted/missing-role/role-assignment failure behavior tested.
-- Shop refunds on role assignment failure tested.
-- `dev_runner.py` 5-second polling configured.
-- Full live runner auto-pull/restart cycle tested.
-- Runner test file removed.
+- Shop CRUD and purchase/error/refund behavior.
+- Successful shop role assignment.
+- Dev runner 5-second polling.
+- Full live auto-pull/restart cycle.
+- Runner test file removal.
 
-### NEXT — HIGH PRIORITY
-1. **Tickets:** configure `create_ticket` in TEST and test the full ticket lifecycle.
-2. **Admin panel:** only address remaining issues discovered during real testing; do not refactor unnecessarily.
-3. **Economy:** decide whether negative balances are allowed when an admin removes more than the user owns.
+### NEXT
+
+1. **Tickets:** configure TEST `create_ticket` and test the full lifecycle.
+2. **Admin panel:** fix only issues discovered during real testing.
+3. **Economy:** explicitly decide whether negative balances are allowed.
 
 ### FUTURE
-- profile cards/customization;
-- quests;
-- achievements;
-- mini-games;
-- friends/relationships;
-- other planned social systems.
 
-If a test fails, inspect the actual current code and fix the smallest necessary part. Do not add speculative workarounds.
-
----
+- Shop visual redesign with 5/10 items per page and `◀ page/total ▶` navigation.
+- Profile cards/customization.
+- Quests.
+- Achievements.
+- Mini-games.
+- Friends/relationships.
+- Other planned social systems.
 
 ## 19. IMPORTANT HAND-OFF FACTS
 
 - Branch: `main`.
 - TEST guild: `519209364280573954` (`Insane TEST`).
 - Bot: `Insane#6907`.
-- Current runner interval: **5 seconds**.
-- Runner auto-update cycle: **verified**.
-- Shop normal purchase: **verified**.
-- Shop duplicate purchase rejection: **verified**.
-- Shop error/refund cases listed above: **verified during current testing**.
+- Runner interval: **5 seconds**.
+- Runner auto-update: **verified**.
+- Shop function/error/CRUD tests: **verified**.
 - Admin Economy UserSelect: **verified**.
 - `/shop`, `/buy`, `/shop_admin`, `/admin_panel`: synchronized and available in TEST.
-- Tickets exist in code but TEST `create_ticket` channel mapping is not configured.
-- Do not repeat already completed shop/runner tests unless regression occurs.
+- Shop UI redesign is **planned, not current work**.
+- Tickets exist in code but TEST `create_ticket` mapping still needs configuration/testing.
+- Do not repeat completed shop/runner tests without a relevant code change.
 - Do not discard local runtime databases.
 - Do not turn the project into a traditional RPG.
