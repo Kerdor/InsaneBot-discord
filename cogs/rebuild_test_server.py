@@ -140,6 +140,14 @@ class RebuildTestServer(commands.Cog):
         logger.info("[REBUILD] Этап 3/4: создание ролей")
         role_specs = [
             (
+                "Not verified",
+                ROLE_NAMES["not_verified"],
+                disnake.Permissions.none(),
+                0x7F8C8D,
+                False,
+                False,
+            ),
+            (
                 "Member",
                 ROLE_NAMES["member"],
                 disnake.Permissions.none(),
@@ -191,14 +199,6 @@ class RebuildTestServer(commands.Cog):
                 disnake.Permissions(administrator=True),
                 0xF1C40F,
                 True,
-                False,
-            ),
-            (
-                "Not verified",
-                ROLE_NAMES["not_verified"],
-                disnake.Permissions.none(),
-                0x7F8C8D,
-                False,
                 False,
             ),
         ]
@@ -392,77 +392,3 @@ class RebuildTestServer(commands.Cog):
             "system_logs": channel_ids["system_logs"],
             "voice_logs": channel_ids["voice_logs"],
         }
-        BotConfig.CHAT_LOGS_CHANNEL = channel_ids["chat_logs"]
-        BotConfig.GUILD_LOGS_CHANNEL = channel_ids["guild_logs"]
-        BotConfig.MODERATION_LOGS_CHANNEL = channel_ids["moderation_logs"]
-        BotConfig.SYSTEM_LOGS_CHANNEL = channel_ids["system_logs"]
-        BotConfig.LOGGING_FORUM_ID = channel_ids["logs"]
-        BotConfig.set_logging_channels(
-            BotConfig.TEST_GUILD_ID,
-            channel_ids["logs"],
-            {
-                "chat_logs": channel_ids["chat_logs"],
-                "guild_logs": channel_ids["guild_logs"],
-                "moderation_logs": channel_ids["moderation_logs"],
-                "server_logs": channel_ids["server_logs"],
-                "voice_logs": channel_ids["voice_logs"],
-                "system_logs": channel_ids["system_logs"],
-            },
-        )
-
-    async def rebuild(self, guild: disnake.Guild, protected_channel_id: int | None = None) -> str:
-        async with self._rebuild_lock:
-            logger.info(
-                "[REBUILD] Запрос перестройки: guild=%s (%s), environment=%s, test_guild=%s, protected_channel=%s",
-                guild.name,
-                guild.id,
-                BotConfig.ENVIRONMENT,
-                BotConfig.TEST_GUILD_ID,
-                protected_channel_id,
-            )
-            if BotConfig.ENVIRONMENT != "test" or guild.id != BotConfig.TEST_GUILD_ID:
-                raise RuntimeError("Перестройка разрешена только для тестового сервера.")
-            if guild.me is None:
-                raise RuntimeError("Не удалось определить участника бота на тестовом сервере.")
-
-            logger.info(
-                "[REBUILD] Бот в сервере: %s, top_role=%s (%s)",
-                guild.me,
-                guild.me.top_role.name,
-                guild.me.top_role.id,
-            )
-            logger.info("[REBUILD] === НАЧАЛО ПЕРЕСТРОЙКИ %s (%s) ===", guild.name, guild.id)
-
-            deleted_channels = await self._delete_channels(guild, protected_channel_id)
-            logger.info("[REBUILD] Удалено каналов: %s", deleted_channels)
-
-            deleted_roles = await self._delete_roles(guild)
-            logger.info("[REBUILD] Удалено ролей: %s", deleted_roles)
-
-            role_ids = await self._create_roles(guild)
-            logger.info("[REBUILD] Создано ролей: %s", len(role_ids))
-
-            channel_ids = await self._create_structure(guild, role_ids)
-            logger.info("[REBUILD] Создано каналов: %s", len(channel_ids))
-
-            self._write_server_map(role_ids, channel_ids)
-            self._apply_runtime_config(role_ids, channel_ids)
-            logger.info("[REBUILD] === ПЕРЕСТРОЙКА ЗАВЕРШЕНА ===")
-
-            return (
-                "✅ **Тестовый сервер перестроен**\n\n"
-                f"Удалено каналов: **{deleted_channels}**\n"
-                f"Удалено ролей: **{deleted_roles}**\n"
-                f"Создано ролей: **{len(role_ids)}**\n"
-                f"Создано объектов каналов: **{len(channel_ids)}**\n\n"
-                "🔐 Верификация подготовлена\n"
-                "🎫 Поддержка и приватные тикеты подготовлены\n"
-                "🛡️ Модерация и форум логов подготовлены\n"
-                "🔊 Голосовые каналы подготовлены\n"
-                "🎮 Игровая структура подготовлена"
-            )
-
-
-def setup(bot: commands.Bot) -> None:
-    bot.add_cog(RebuildTestServer(bot))
-    logger.info("[REBUILD] RebuildTestServer cog loaded")
