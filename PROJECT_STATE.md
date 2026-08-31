@@ -327,7 +327,26 @@ Not verified
 @everyone
 ```
 
-The rebuild creates these roles in reverse creation order so Discord places them in the intended hierarchy. This was fixed in commit `edb35207f3ec901cf9a739450a6a63467fd129e1`.
+### Role hierarchy fix — 2026-09-01
+
+The previous rebuild relied on role creation order alone. Runtime testing showed that the resulting Discord hierarchy did not match the required order: `Not verified` appeared above `Member`, while `Owner` appeared at the bottom.
+
+Fixed in commit `4dea2a9d80e05672af8c5fd77dad12a1732db0f0`:
+
+- `_create_roles()` still creates the same six roles with the same permissions, colors, hoist and mentionable settings;
+- after creation, the actual created `Role` objects are collected from the guild cache;
+- `guild.edit_role_positions()` explicitly sets:
+  - `Not verified` = 1;
+  - `Member` = 2;
+  - `Helper` = 3;
+  - `Moderator` = 4;
+  - `Administrator` = 5;
+  - `Owner` = 6;
+- a rebuild log line records the intended final hierarchy.
+
+Disnake documents that `Guild.edit_role_positions()` bulk-edits role positions and requires `manage_roles`; positions are hierarchy positions above `@everyone`. citeturn0search0turn0search8
+
+**Verification status:** code fix committed directly to `main`. A new live `/rebuild` is required to verify the final Discord UI order.
 
 Required channels include:
 
@@ -362,7 +381,7 @@ Runner output confirmed:
 
 ```text
 [GIT] Updating 53bf473..6dbd454
-[RUNNER] Обнаружены изменения: 53bf473... -> 6dbd454...
+[RUNNER] Обнаружены изменения: 53bf473... -> 6dbd454
 [RUNNER] Останавливаем старый процесс бота...
 [RUNNER] Запуск бота...
 ```
@@ -409,14 +428,20 @@ Do not use destructive restore/reset/cleanup commands against these without expl
 - Runner test file removal.
 - Discord ticket/private-thread behavior fix verified: ticket channels no longer create unwanted Discord threads.
 - Logging `Parent channel not found` stale-thread crash fixed and verified gone.
-- Rebuild role hierarchy creation order fixed in `edb35207f3ec901cf9a739450a6a63467fd129e1`; runtime verification still required.
+- Rebuild logging stale cached-channel 404 fix committed on `main`; runtime verification still required.
+
+### DONE / CODE-FIXED, RUNTIME VERIFICATION PENDING
+
+- Rebuild role hierarchy now explicitly uses `guild.edit_role_positions()` after role creation.
+- Target hierarchy is Owner → Administrator → Moderator → Helper → Member → Not verified → @everyone.
 
 ### NEXT
 
-1. **Run `/rebuild` again** to verify the new stale cached-channel fix and confirm there are no `Unknown Channel` logging errors, and verify the role hierarchy is Owner → Administrator → Moderator → Helper → Member → Not verified.
-2. **Tickets:** configure TEST `create_ticket` and test the full lifecycle.
-3. **Admin panel:** fix only issues discovered during real testing.
-4. **Economy:** explicitly decide whether negative balances are allowed.
+1. **Run `/rebuild` again** to verify the stale cached-channel fix and confirm there are no `Unknown Channel` logging errors.
+2. In the same rebuild test, verify the Discord role hierarchy is exactly Owner → Administrator → Moderator → Helper → Member → Not verified.
+3. **Tickets:** configure TEST `create_ticket` and test the full lifecycle.
+4. **Admin panel:** fix only issues discovered during real testing.
+5. **Economy:** explicitly decide whether negative balances are allowed.
 
 ### FUTURE
 
@@ -441,7 +466,7 @@ Do not use destructive restore/reset/cleanup commands against these without expl
 - Shop UI redesign is **planned, not current work**.
 - Tickets exist in code; Discord ticket-thread behavior has been corrected and needs lifecycle testing.
 - Logging stale-thread crash is verified fixed; stale cached-channel 404 fix is committed on `main` and needs runtime verification.
-- Rebuild role hierarchy is now created in the intended top-to-bottom Discord order; runtime verification is still pending.
+- Rebuild role hierarchy is explicitly positioned in code; live Discord verification is still pending.
 - **After every fix, update `PROJECT_STATE.md` before considering the work complete.**
 - Do not repeat completed shop/runner tests without a relevant code change.
 - Do not discard local runtime databases.
