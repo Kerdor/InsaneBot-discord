@@ -2,74 +2,89 @@
 
 Repository: https://github.com/Kerdor/InsaneBot-discord
 Branch: `main`
-Last known repository commit: `77e0bd8090e3bba5ae2e003f437d9781521861d9` (`Load shop and admin panel cogs`)
+Current HEAD: `89e232ac81b5075fd3a86ebddd5ecf609b2edded`
+Current HEAD message: `Add local development auto-pull runner`
 State date: 2026-08-31
 
-> **Purpose of this file:** this is the persistent hand-off/context document for future chats. A new chat must read this file first and then inspect the actual current repository before making changes. This document records product decisions, architecture, implementation history, current test state, known issues, and the immediate next steps. Do not silently undo decisions marked as agreed.
+> **Purpose:** persistent hand-off/context document for future chats. A new chat must read this file first and then inspect the actual current repository before making changes. This document records product decisions, architecture, implemented systems, exact recent changes, runtime verification, known issues, and the next development steps. Do not silently undo decisions marked as agreed.
 
 ---
 
-## 1. How to work on this project
+## 1. HOW TO WORK ON THIS PROJECT
 
-The user wants the assistant to act as a **technical editor/developer**:
+The user wants the assistant to act as a **technical editor/developer**.
 
-- Inspect the actual current GitHub `main` before editing. Do not rely on old snippets if the repository can be checked.
-- Continue directly from the current state; do not repeatedly ask questions that have already been settled here.
-- If an error is caused by the user's local changes, the user explicitly allows changing those parts when necessary.
-- Preserve the existing architecture, names, function order and formatting unless a change is necessary.
+Mandatory rules:
+
+- Inspect the actual current GitHub `main` before editing.
+- Do not rely on old snippets when the repository can be checked.
+- Continue directly from the current state; do not repeatedly ask for information already documented here.
+- If a problem is caused by the user's local changes, the user allows changing the affected parts when necessary.
+- Preserve existing architecture, names, function order and formatting unless a change is necessary.
 - Make the smallest necessary change.
 - Do not add unnecessary libraries, abstractions, checks or unrelated refactors.
-- Never use `...` as a placeholder for omitted code.
-- When reporting a changed function, provide the full ready-to-replace function, not a partial fragment.
+- **Never use `...` as a placeholder for omitted code.**
+- If a function is changed and the user needs to edit locally, provide the full ready-to-replace function.
 - Check callers/references after changing or removing methods, variables, settings or modules.
 - Validate/test changes whenever practical.
-- Completed changes should be committed directly to `main` unless the user explicitly asks otherwise.
-- When a local/runtime problem is reported, investigate the actual current repository rather than guessing.
-- The user prefers a concise explanation of what is wrong, followed by the concrete change and commit.
+- Completed changes should normally be committed directly to `main` unless the user explicitly asks otherwise.
+- When a runtime problem is reported, investigate the actual current repository and supplied runtime log before guessing.
+- The user prefers a concise explanation of the problem followed by the concrete change and commit.
 
-### Code-editing style requested by the user
+### Code-editing style
 
-1. Prefer `БЫЛО → СТАЛО` when explaining a focused change.
+1. Prefer `БЫЛО → СТАЛО` for focused changes.
 2. Keep original indentation and formatting.
 3. Python indentation is 4 spaces.
 4. Do not rewrite a huge file when only a few functions need changing.
 5. Keep existing logic unless the requested feature/fix requires changing it.
-6. If several issues exist, list them and mark critical ones.
+6. If several issues exist, list them and mark them critical/high/medium.
 
 ---
 
-## 2. Product concept
+## 2. PRODUCT CONCEPT
 
-InsaneBot is a Discord moderation/social/community bot with optional progression and game-like systems.
+InsaneBot is a Discord moderation/social/community bot with progression and game-like community systems.
 
-### Critical product decision: NOT an RPG system
+### CRITICAL DECISION: NOT A TRADITIONAL RPG
 
-The bot is **not** intended to become a traditional RPG.
+The project must **not** become a traditional RPG.
 
-There will be no invented RPG mechanics such as:
+Do not invent mechanics such as:
 
 - talismans of luck;
 - energy drinks;
 - consumable combat items;
-- loot-box style mechanics;
-- an RPG equipment/inventory system;
+- loot-box mechanics;
+- RPG equipment/inventory systems;
 - RPG stats merely for the sake of having RPG stats.
 
 If a future system needs an item/collectible mechanic, it must be explicitly designed and agreed first.
 
-The intended progression is primarily community/social: activity, XP, levels, economy, profiles, achievements, relationships, mini-games, rankings, etc.
+The intended progression is primarily community/social:
+
+- activity;
+- XP;
+- levels;
+- economy;
+- profiles;
+- achievements;
+- relationships;
+- mini-games;
+- rankings;
+- future social systems.
+
+The shop is currently intended mainly for server/community benefits such as Discord roles, not as an RPG inventory.
 
 ---
 
-## 3. Planned systems / product roadmap
+## 3. PRODUCT ROADMAP
 
-The project is implemented incrementally. Do not attempt to build everything in one giant refactor.
-
-Planned systems currently include:
+Current roadmap/status:
 
 1. Levels and XP — **implemented**
 2. Economy — **implemented, expanding**
-3. Shop — **partially implemented**
+3. Shop — **implemented in code, currently undergoing end-to-end testing**
 4. Profiles — **basic `/profile` implemented; profile cards/customization later**
 5. Daily rewards — **implemented**
 6. Quests — **planned**
@@ -87,13 +102,13 @@ Planned systems currently include:
 18. Moderation — **implemented**
 19. Logging — **implemented/expanding**
 
-Do not interpret this list as a requirement to implement all RPG-like ideas. The no-RPG decision remains binding.
+Do not interpret the roadmap as permission to add unrelated RPG mechanics. The no-RPG decision is binding.
 
 ---
 
-## 4. Repository/runtime configuration
+## 4. CURRENT REPOSITORY / RUNTIME CONFIGURATION
 
-Current local test run showed:
+Current local TEST configuration reported by the user:
 
 ```text
 [CONFIG] ENVIRONMENT=test
@@ -102,27 +117,37 @@ Current local test run showed:
 [CONFIG] TEST_GUILDS=[519209364280573954]
 ```
 
-The bot was running locally as:
+Bot during the reported local run:
 
 ```text
-Insane#6907
+Name: Insane#6907
 Bot ID: 1329863697358782504
 ```
 
-The test guild is:
+Connected guild during the run:
 
 ```text
 Insane TEST
 ID: 519209364280573954
 ```
 
-The configured main guild ID was not found during the reported local test. This is expected for the current TEST environment and is not itself a crash.
+The configured MAIN guild ID was not found during the TEST run. This was not a crash and is expected for the current TEST environment.
+
+The current `config.py` confirms:
+
+- `ENVIRONMENT` accepts `test` or `production`;
+- TEST mode requires `TEST_GUILD_ID` and uses `[TEST_GUILD_ID]` as `TEST_GUILDS`;
+- production mode requires `MAIN_GUILD_ID`;
+- `.server_map.json` is loaded for TEST role/channel mapping;
+- `.logging_channels.json` is loaded for logging destinations;
+- database/assets/log directories are validated/created;
+- `cogs.shop` and `cogs.admin_panel` are in `BotConfig.COGS`.
 
 ---
 
-## 5. Current COG loading state
+## 5. CURRENT COG LIST
 
-The local test was started with the following configured COG list:
+The actual current `config.py` COG list is:
 
 ```text
 cogs.owner
@@ -141,51 +166,37 @@ cogs.logging.moderation_logs
 cogs.logging.setup_logs
 cogs.logging.voice_stats
 cogs.logging.system_logs
-cogs.admin_panel
-```
-
-A subsequent repository fix added the missing shop cog to the configured list:
-
-```text
 cogs.shop
 cogs.admin_panel
 ```
 
-Commit:
-
-`77e0bd8090e3bba5ae2e003f437d9781521861d9` — `Load shop and admin panel cogs`
-
-This was done because the user's local startup log showed `/shop` and `/buy` were missing from the loaded application commands even though shop code had been added.
-
-### IMPORTANT: first action after pulling
-
-The user should run:
-
-```bash
-git pull
-```
-
-and restart the bot. The next test must verify that `cogs.shop` actually loads and that the shop commands appear in the synchronized TEST guild commands.
+`cogs.shop` was previously missing and caused shop commands not to load. That problem was fixed in `77e0bd8`.
 
 ---
 
-## 6. Application-command synchronization
+## 6. APPLICATION COMMAND SYNCHRONIZATION
 
-The bot has explicit TEST guild synchronization/overwrite logic.
+The bot explicitly synchronizes/overwrites commands for the TEST guild.
 
-The user's reported startup showed:
+### Previous broken state
 
-```text
-[SYNC] Начинаем явную синхронизацию TEST: guild_id=519209364280573954
-[SYNC] Команд в памяти перед overwrite: 30
-```
+Before `cogs.shop` was loaded, the runtime had 30 commands and `/shop` + `/buy` were absent.
 
-At that moment the registered commands included:
+### Current verified state
+
+The user subsequently ran the bot and supplied a complete startup log at approximately 03:03 on 2026-08-31.
+
+All configured COGs loaded successfully, including `cogs.shop` and `cogs.admin_panel`.
+
+The runtime had **33 application commands in memory** and Discord returned **33 registered TEST commands** after overwrite.
+
+Commands verified in that run:
 
 ```text
 admin_panel
 balance
 ban
+buy
 channel_create
 chatlog
 daily
@@ -203,6 +214,8 @@ reload
 restart
 rich
 serverlog
+shop
+shop_admin
 sync_server
 systemlog
 ticket_close
@@ -215,15 +228,20 @@ warn
 xp_ranking
 ```
 
-The shop commands were absent because `cogs.shop` was not in the loaded COG configuration at that time.
+Representative lines:
 
-After commit `77e0bd8`, the next startup should be used to verify the corrected command set. Do not claim shop commands are registered until the actual runtime log confirms it.
+```text
+[STARTUP] Все расширения успешно загружены
+[SYNC] Команд в памяти перед overwrite: 33
+[SYNC] Discord вернул зарегистрированных команд: 33
+[STARTUP] Discord system logging активирован
+```
+
+Therefore the old missing-shop-COG problem is **verified fixed**.
 
 ---
 
-## 7. Major systems already implemented
-
-### 7.1 Tickets
+## 7. TICKETS
 
 Private-thread ticket system exists with:
 
@@ -232,68 +250,72 @@ Private-thread ticket system exists with:
 - recovery;
 - persistent ticket-related state.
 
-Current known warning from the local run:
+Known TEST warning:
 
 ```text
-[cogs.tickets] Канал create_ticket не настроен для guild=519209364280573954
+2026-08-31 03:03:03,023 - cogs.tickets - WARNING - Канал create_ticket не настроен для guild=519209364280573954
 ```
 
-This is a configuration warning, not a bot startup crash. It means the TEST guild does not currently have the `create_ticket` channel configured, so ticket creation/panel behavior needs to be configured/tested later.
+This is a configuration warning, not a startup crash.
 
-Do not treat this warning as a failure of the entire bot.
+The TEST guild currently does not have the `create_ticket` channel configured. Ticket creation/panel behavior still needs a separate configuration/test pass.
 
 ---
 
-### 7.2 Moderation
+## 8. MODERATION
 
-Moderation system exists with:
+Moderation is implemented with:
 
 - persistent moderation database;
 - slash commands;
 - persistent moderation panel;
 - moderation logging.
 
-Known commands from the test run include:
+Known commands:
 
 ```text
-ban
-kick
-timeout
-unban
-warn
+/ban
+/kick
+/timeout
+/unban
+/warn
 ```
 
 ---
 
-### 7.3 Logging
+## 9. LOGGING
 
-Logging is implemented as separate logical COGs:
+Logging is split into:
 
-- `cogs.logging.chat_logs`
-- `cogs.logging.guild_logs`
-- `cogs.logging.moderation_logs`
-- `cogs.logging.setup_logs`
-- `cogs.logging.voice_stats`
-- `cogs.logging.system_logs`
+```text
+cogs.logging.chat_logs
+cogs.logging.guild_logs
+cogs.logging.moderation_logs
+cogs.logging.setup_logs
+cogs.logging.voice_stats
+cogs.logging.system_logs
+```
 
-Logical log groups:
+Logical groups:
 
-- 💬 messages
-- 👤 members/server
-- 🛡️ moderation
-- 📁 server/setup
-- 🔊 voice
-- 🤖 system
+- 💬 messages;
+- 👤 members/server;
+- 🛡️ moderation;
+- 📁 server/setup;
+- 🔊 voice;
+- 🤖 system.
 
-Reaction logging implementation exists but is disabled by default because it is noisy.
+Reaction logging exists but is disabled by default because it is noisy.
 
-The admin panel can configure logging destinations per log type.
+The admin panel can configure logging destinations.
 
-The user previously considered putting chat logs into a forum with log threads; do not change the existing logging architecture solely for that idea unless explicitly requested again. The current system already separates log types and is being expanded incrementally.
+The user previously considered turning chat logs into a forum with log threads. **Do not change the current logging architecture solely because of that old idea** unless explicitly requested again.
+
+`config.py` supports persisted logging channel/forum mappings via `.logging_channels.json`.
 
 ---
 
-## 8. XP / levels
+## 10. XP / LEVELS
 
 XP is persistent and stored in SQLite.
 
@@ -309,50 +331,48 @@ Implemented:
 - `/xp_ranking`;
 - recovery of active voice XP sessions after restart using persisted voice sessions.
 
-Current settings/behavior recorded in the project:
+Recorded behavior/defaults:
 
 - message XP cooldown: **60 seconds**;
 - message XP: **15–25 XP** per eligible message;
 - voice XP: **5 XP per completed voice minute**;
 - AFK channels excluded.
 
-Level thresholds currently use cumulative `100 * level²`:
+Level thresholds use cumulative `100 * level²`:
 
-- level 1 starts at 0 XP;
-- level 2 at 100 XP;
-- level 3 at 400 XP;
-- level 4 at 900 XP;
+- level 1: 0 XP;
+- level 2: 100 XP;
+- level 3: 400 XP;
+- level 4: 900 XP;
 - etc.
 
-The XP implementation also calculates level changes and can notify the user by DM when they level up.
+The XP system calculates level changes and can notify the user by DM on level-up.
 
 ### Message economy reward
 
-A successful XP-eligible message also gives the normal economy reward.
+An XP-eligible message also gives normal economy currency.
 
-Current default:
+Recorded default:
 
 ```text
 1 XP-eligible message = XP + 2 🪙
 ```
 
-The economy message reward uses the same eligibility/cooldown concept as message XP, so spam does not generate unlimited coins.
-
-This is an intentional design decision.
+The economy message reward follows the same eligibility/cooldown concept as message XP so spam does not generate unlimited coins.
 
 ---
 
-## 9. Economy
+## 11. ECONOMY
 
-The economy is persistent and stored in SQLite.
+Economy is persistent and stored in SQLite.
 
-There are two currencies:
+There are two currencies.
 
 ### Normal currency
 
-Regular server coins, currently represented as 🪙.
+Regular server coins, represented as 🪙.
 
-Sources include:
+Known sources:
 
 - XP-eligible messages;
 - daily reward;
@@ -360,41 +380,231 @@ Sources include:
 
 ### Rare currency
 
-There is also a rare special currency.
+Special rare currency, represented as 💎.
 
-Important decision:
+Binding decisions:
 
-- it has **no real-money purchase**;
-- it is intentionally difficult to obtain;
-- intended sources include every 5th level, achievements, daily quests and other special activities once those systems exist.
+- no real-money purchase;
+- intentionally difficult to obtain;
+- intended future sources include every 5th level, achievements, daily quests and other special activities.
 
 Do not add real-money monetization to the rare currency without an explicit new decision.
 
-### Current economy commands
+### Economy commands
 
 Implemented:
 
-- `/balance`
-- `/daily`
-- `/pay`
-- `/rich`
+```text
+/balance
+/daily
+/pay
+/rich
+```
 
 Behavior:
 
 - `/balance` shows normal and rare currency;
-- `/daily` awards the configured daily amount and enforces a cooldown;
-- `/pay` transfers normal coins between users;
+- `/daily` awards the configured daily amount and enforces cooldown;
+- `/pay` transfers normal coins;
 - bots cannot receive transfers;
 - users cannot pay themselves;
 - `/rich` shows a top-10 balance ranking.
 
-Economy can be disabled by the persistent server setting `economy_enabled`.
+Economy can be disabled with the persistent `economy_enabled` server setting.
 
 ---
 
-## 10. Profile
+## 12. ADMIN ECONOMY MANAGEMENT — CURRENT DEVELOPMENT
 
-Basic `/profile` has been implemented.
+Administrator balance management was added to `/admin_panel`.
+
+### Current intended UI
+
+The economy section now uses a real Discord `UserSelect` instead of a text field for the user.
+
+Flow:
+
+```text
+/admin_panel
+→ 💰 Экономика
+→ [ Выберите пользователя ▼ ]
+→ select a server member
+```
+
+After selection, the view displays:
+
+```text
+Выбран пользователь: @user
+Текущий баланс: N 🪙
+
+Теперь нажмите 💰 Изменить баланс и укажите сумму.
+```
+
+Then the modal contains only:
+
+```text
+Сумма (+ выдать / - снять)
+```
+
+Positive value gives coins.
+Negative value removes coins.
+Zero is rejected.
+
+The selected user ID is kept by the view, so no manual ID or `@mention` parsing is required.
+
+### Implementation history
+
+`989a7f654ae475612c99f0e8f2c22d8607de229d` — `Add economy balance management to admin panel`
+
+Added:
+
+- `show_economy()`;
+- `set_balance()`;
+- `AdminEconomyView`;
+- `EconomyBalanceModal`;
+- `💰 Экономика` button;
+- before/after balance logging.
+
+`b5ff3f19a8bfbe0b341c3f61d511e0684ea1fd73` — `Allow economy admin balance changes using @mention`
+
+Temporarily changed the user field to mention-style text input.
+
+`c9e0b11492bf4a60f4b5e7c107dcdc3a54cecc6a` — `Replace economy admin input with Discord user selector`
+
+Replaced the mention text field with `disnake.ui.user_select`, shows the selected member's current balance, and leaves only the amount in the modal.
+
+### Runtime status
+
+The old text-input UI was shown by the user before the UserSelect change.
+
+The latest UserSelect implementation has **not yet been runtime-tested after the final pull/restart**.
+
+---
+
+## 13. SHOP — CURRENT DEVELOPMENT AREA
+
+The shop is the main feature currently being stabilized.
+
+### Shop database
+
+`databases/shop.py` contains a persistent `shop_items` table with fields equivalent to:
+
+- `id`;
+- `guild_id`;
+- `name`;
+- `description`;
+- `price`;
+- `role_id`;
+- `enabled`.
+
+Database operations include:
+
+- initialize shop table;
+- get enabled items;
+- get a specific enabled item;
+- create item;
+- purchase item and deduct normal currency;
+- update item;
+- enable/disable item;
+- delete item;
+- list all items for administration.
+
+### Public shop
+
+`cogs.shop` provides:
+
+```text
+/shop
+/buy <item_id>
+```
+
+Role-item flow is intended to be:
+
+1. resolve the enabled item;
+2. validate the associated Discord role if configured;
+3. reject the purchase if the user already has the role;
+4. check available coins;
+5. process the purchase;
+6. grant the role;
+7. confirm the purchase.
+
+### Shop administration
+
+`/shop_admin` and the admin panel provide management for shop items.
+
+Intended controls include:
+
+- create item;
+- edit item;
+- enable/disable item;
+- delete item;
+- view item state;
+- configure name;
+- configure description;
+- configure price;
+- configure role.
+
+### Bug found during runtime testing
+
+The user created a test role item, initially lacked enough money, then reduced the price and bought the item twice.
+
+Observed old behavior:
+
+- the purchase was accepted twice;
+- no Discord role appeared;
+- money could therefore be spent without the expected role reward;
+- duplicate role purchases were possible.
+
+This exposed a critical flaw in the old purchase flow: money was deducted before the role assignment was safely validated, and there was no duplicate-role protection.
+
+### Shop fix
+
+`ad99f0a3cc880ec7ce781b7e4353ea712c0eb091` — `Fix shop role purchase validation`
+
+The current fix in `cogs/shop.py`:
+
+- imports `add_balance` for refunds;
+- imports `get_item`;
+- verifies the item exists/is available;
+- resolves the configured role from the current guild;
+- rejects a missing role before purchase;
+- rejects a user who already has the role;
+- performs the purchase after those checks;
+- attempts to assign the role;
+- on `disnake.Forbidden`, refunds the item price;
+- on `disnake.HTTPException`, logs the error and refunds the item price.
+
+The user-facing error explicitly tells the user when role assignment failed and that money was returned.
+
+### Important status
+
+The fix is committed, but **the post-fix role-assignment flow has not yet been verified by a fresh local test**.
+
+Therefore the shop remains **in end-to-end testing**, not fully stable.
+
+### Required shop tests
+
+After pulling the current `main`:
+
+1. verify the test item contains the correct Discord role ID;
+2. verify the bot's highest role is above the shop role;
+3. use admin economy management to give the test user enough coins;
+4. run `/shop`;
+5. run `/buy <item_id>`;
+6. verify exactly one deduction;
+7. verify the role appears on the user;
+8. repeat `/buy <item_id>` and verify duplicate purchase is rejected;
+9. test a missing/deleted role and verify no money is lost;
+10. test insufficient balance;
+11. test disabled item;
+12. test deleted/nonexistent item;
+13. test role hierarchy/permission failure and verify automatic refund.
+
+---
+
+## 14. PROFILE
+
+Basic `/profile` is implemented.
 
 It currently shows:
 
@@ -409,7 +619,7 @@ It currently shows:
 
 `/profile [member]` can show another member's profile.
 
-The profile uses the same persistent XP/economy data, so there should not be a separate duplicate profile database for these values.
+Profile values should use the existing XP/economy persistence rather than a duplicate profile database.
 
 Future work:
 
@@ -422,123 +632,43 @@ Future work:
 
 ---
 
-## 11. Shop — CURRENT DEVELOPMENT AREA
+## 15. ADMIN PANEL — CURRENT ARCHITECTURE
 
-The shop is the most recent feature being implemented.
+`/admin_panel` is intended to become the central configuration/management UI.
 
-### Shop database
+It is restricted by the current `_allowed()` admin/owner check.
 
-A new `databases/shop.py` was added.
+Current sections include/are being expanded around:
 
-It contains a persistent `shop_items` table with fields conceptually equivalent to:
-
-- `id`
-- `guild_id`
-- `name`
-- `description`
-- `price`
-- `role_id`
-- `enabled`
-
-Implemented database operations include:
-
-- initialize shop table;
-- get enabled items;
-- get a specific enabled item;
-- create an item;
-- purchase an item and deduct normal currency.
-
-The purchase logic checks balance before deduction.
-
-### Shop COG
-
-A `cogs.shop` module was added with the public shop/purchase functionality.
-
-The intended public commands are:
-
-- `/shop`
-- `/buy <item id>`
-
-When a shop item has an associated Discord role, successful purchase should grant that role.
-
-### Shop administration
-
-Shop administration was also added to the admin-panel direction, with the intended controls:
-
-- create item;
-- edit item;
-- enable/disable item;
-- delete item;
-- view item state;
-- configure item name/description/price/role.
-
-However, **the current local runtime has not yet verified this end-to-end**.
-
-The immediate goal is not to invent an RPG inventory. The shop is intended to sell community/server benefits such as roles or future explicitly approved cosmetic/social features.
-
-### Critical next verification
-
-After pulling the latest `main`:
-
-1. start the bot;
-2. verify `cogs.shop` loads without import errors;
-3. verify `/shop` and `/buy` are registered in TEST;
-4. open `/admin_panel`;
-5. verify the shop management section exists and opens;
-6. create a cheap test role item;
-7. run `/shop`;
-8. buy it with a test account;
-9. verify coins are deducted once;
-10. verify the role is granted;
-11. repeat purchase and verify the intended duplicate-purchase behavior;
-12. test disabled/deleted items;
-13. test insufficient balance;
-14. test permissions.
-
-Only after these tests should the shop be considered stable.
-
----
-
-## 12. Admin panel
-
-The admin panel is intended to become the central configuration/management UI so the user can control the bot without manually editing code/database values.
-
-Current command:
-
-```text
-/admin_panel
-```
-
-It is restricted to the owner/administrator according to the current implementation.
-
-Existing/targeted sections include:
-
-- ⚙️ Settings — XP/economy settings;
+- ⚙️ Settings — XP/economy/server settings;
 - 📋 Logging — logging destination configuration;
 - 🛒 Shop — shop management;
+- 💰 Экономика — administrator balance management;
 - future moderation/ticket/general controls.
 
-Persistent settings live in:
+Persistent server settings live in:
 
 ```text
 databases/settings.db
 ```
 
-Changes are recorded in a settings audit history (`settings_audit`).
+Settings changes are recorded in settings audit history (`settings_audit`).
 
-Important product principle:
+### Product principle
 
-> The admin panel should gradually become the central place to configure the bot. Do not hardcode values that are intended to be server-configurable.
+The admin panel should gradually become the central place to configure the bot without manually editing source code/database values.
+
+Do not hardcode values that are intended to be server-configurable.
 
 Do not create settings for systems that do not exist yet.
 
 ---
 
-## 13. Existing configuration philosophy
+## 16. CONFIGURATION PHILOSOPHY
 
-The bot uses a persistent settings database for server-level configuration.
+The bot uses persistent server-level settings rather than relying exclusively on constants.
 
-Already discussed/implemented settings include XP and economy controls such as:
+Known configurable areas include:
 
 - XP enabled/disabled;
 - message XP range;
@@ -549,62 +679,288 @@ Already discussed/implemented settings include XP and economy controls such as:
 - daily economy reward;
 - logging destinations.
 
-Exact current defaults should always be read from the actual repository/settings code before changing them.
+Exact current defaults must always be read from the actual repository/settings code before changing them.
 
-Do not assume an old default is still current if the repository has changed.
+Do not assume an old default remains current if the repository changed.
 
 ---
 
-## 14. Local startup test — IMPORTANT CURRENT STATE
+## 17. SERVER MAP / PERSISTENT CONFIG FILES
 
-The user ran the bot locally on 2026-08-31 around 02:56 and supplied the complete startup log.
+Current `config.py` supports:
 
-The bot successfully:
+### `.server_map.json`
 
-- loaded all listed COGs without startup exceptions;
-- connected to Discord;
-- became ready as `Insane#6907`;
-- found the TEST guild;
-- performed explicit TEST command synchronization;
-- registered 30 commands at that point;
-- activated Discord system logging;
-- recovered active voice sessions.
+Used in TEST mode to dynamically load server-specific role/channel IDs.
 
-Representative successful startup lines:
+Required role names:
 
 ```text
-[STARTUP] Все расширения успешно загружены
+Owner
+Administrator
+Moderator
+Helper
+Member
+Not verified
+```
+
+Required channel names:
+
+```text
+create_voice
+verification
+create_ticket
+tickets
+game_panel
+moderation_panel
+chat_logs
+guild_logs
+moderation_logs
+system_logs
+voice_logs
+logs
+```
+
+If the required map is incomplete, hardcoded fallback values remain in `BotConfig`.
+
+### `.logging_channels.json`
+
+Used for persisted logging destinations and forum/thread IDs.
+
+`config.py` can:
+
+- load logging destinations;
+- set all logging/forum mappings;
+- set a single logging channel;
+- retrieve a logging channel.
+
+---
+
+## 18. LOCAL STARTUP TEST — VERIFIED 2026-08-31 03:03
+
+The user ran the bot locally with Python 3.12 using `main.py`.
+
+The complete supplied startup log showed:
+
+```text
+[CONFIG] ENVIRONMENT=test
+[CONFIG] MAIN_GUILD_ID=1217530337664434246
+[CONFIG] TEST_GUILD_ID=519209364280573954
+[CONFIG] TEST_GUILDS=[519209364280573954]
+```
+
+All configured COGs loaded successfully, including:
+
+```text
+cogs.shop
+cogs.admin_panel
+```
+
+The bot connected successfully:
+
+```text
 Bot connected to Discord
 Bot Insane#6907 is ready
 Guilds: 1
+```
+
+TEST synchronization succeeded:
+
+```text
+[SYNC] Команд в памяти перед overwrite: 33
+[SYNC] Discord вернул зарегистрированных команд: 33
+```
+
+System logging was activated:
+
+```text
 [STARTUP] Discord system logging активирован
 ```
 
-The critical issue discovered from that run was that `cogs.shop` was not in the configured COG list, so shop commands could not load.
+XP and voice active sessions were recovered successfully.
 
-That was fixed in commit:
+Only startup warning:
 
-`77e0bd8` — `Load shop and admin panel cogs`
+```text
+Канал create_ticket не настроен для guild=519209364280573954
+```
 
-### Do not forget
+No startup exception was reported.
 
-The supplied log is from **before** that configuration fix. A future chat must not claim the fix is runtime-verified until the user runs the updated code.
+### What this proves
+
+- configuration loads;
+- bot connects;
+- all configured COGs load;
+- shop COG loads;
+- admin panel COG loads;
+- `/shop`, `/buy`, `/shop_admin` synchronize to TEST;
+- bot reaches ready state;
+- active voice sessions recover.
+
+### What this does not prove
+
+It does not prove every command works end-to-end.
+
+Specifically, after the later commits the following still require fresh runtime verification:
+
+- shop role assignment after `ad99f0a`;
+- duplicate shop purchase rejection;
+- admin economy UserSelect after `c9e0b114`;
+- `dev_runner.py` after `89e232ac`.
 
 ---
 
-## 15. Known current warnings/issues
+## 19. RECENT COMMIT HISTORY — EXACT HAND-OFF
 
-### ISSUE A — Shop runtime verification pending
+Recent development sequence:
 
-**Status:** configuration fix committed; runtime verification pending.
+### `77e0bd8...`
 
-Fix already committed:
+**Load shop and admin panel cogs**
 
-`77e0bd8` — add `cogs.shop` to loaded COG configuration.
+Added `cogs.shop` to the configured COG list after discovering that shop commands were not loading.
 
-Next action: `git pull`, restart, inspect COG and command lists.
+### `989a7f654ae475612c99f0e8f2c22d8607de229d`
 
-### ISSUE B — Ticket channel not configured in TEST
+**Add economy balance management to admin panel**
+
+Added administrator balance management.
+
+### `b5ff3f19a8bfbe0b341c3f61d511e0684ea1fd73`
+
+**Allow economy admin balance changes using @mention**
+
+Temporarily changed the economy user input to mention-style text.
+
+### `ad99f0a3cc880ec7ce781b7e4353ea712c0eb091`
+
+**Fix shop role purchase validation**
+
+Added role existence checks, duplicate-role checks and refunds when role assignment fails.
+
+### `c9e0b11492bf4a60f4b5e7c107dcdc3a54cecc6a`
+
+**Replace economy admin input with Discord user selector**
+
+Replaced manual user/mention input with Discord `UserSelect`, shows current balance, and leaves only the amount in the modal.
+
+### `89e232ac81b5075fd3a86ebddd5ecf609b2edded`
+
+**Add local development auto-pull runner**
+
+Added `dev_runner.py`.
+
+This is the current HEAD before the PROJECT_STATE refresh commit.
+
+---
+
+## 20. `dev_runner.py` — LOCAL AUTO-UPDATE / RESTART
+
+File:
+
+```text
+dev_runner.py
+```
+
+Purpose:
+
+- start `main.py`;
+- periodically execute `git pull`;
+- detect whether HEAD changed;
+- if a new commit was pulled, stop the current bot process and start it again;
+- allow Ctrl+C to stop both runner and child bot.
+
+Current polling interval:
+
+```text
+POLL_INTERVAL = 10
+```
+
+Current flow:
+
+```text
+start dev_runner.py
+        ↓
+start main.py
+        ↓
+wait 10 seconds
+        ↓
+git pull
+        ↓
+HEAD changed?
+   ┌────┴────┐
+  no        yes
+   ↓          ↓
+wait       stop bot
+              ↓
+           start bot
+```
+
+If `git pull` fails, the runner prints the output and keeps the existing bot process running.
+
+If the child bot exits by itself, the runner currently reports the exit code and returns rather than automatically restarting it.
+
+The runner uses `sys.executable`, so it launches `main.py` with the same Python interpreter used to launch the runner.
+
+### Important status
+
+The file is committed but **has not yet been runtime-tested by the user**.
+
+The intended local launcher is:
+
+```bash
+C:\Users\nik_s\AppData\Local\Programs\Python\Python312\python.exe dev_runner.py
+```
+
+Do not run a separate `main.py` at the same time, because the runner starts it itself.
+
+---
+
+## 21. CURRENT KNOWN ISSUES / TODO
+
+### CRITICAL — Shop role assignment must be retested
+
+The old behavior was broken and was fixed in `ad99f0a`.
+
+Need runtime proof that:
+
+- correct role ID is configured;
+- role is below the bot's highest role;
+- `/buy` deducts once;
+- role is assigned;
+- duplicate purchase is rejected;
+- role assignment failure refunds money.
+
+### CRITICAL — Economy UserSelect must be retested
+
+The new `c9e0b114` implementation needs to be pulled and tested in Discord.
+
+Expected flow:
+
+```text
+/admin_panel
+→ 💰 Экономика
+→ Выберите пользователя
+→ выбрать себя
+→ увидеть текущий баланс
+→ 💰 Изменить баланс
+→ ввести amount
+```
+
+### HIGH — Verify `dev_runner.py`
+
+Run it locally and verify:
+
+1. it starts `main.py`;
+2. it checks Git every 10 seconds;
+3. a new commit is pulled;
+4. old bot process stops cleanly;
+5. new bot starts;
+6. no duplicate bot process is created;
+7. Ctrl+C stops runner and child bot.
+
+### MEDIUM — Configure/test TEST ticket channel
 
 Current warning:
 
@@ -612,210 +968,104 @@ Current warning:
 Канал create_ticket не настроен для guild=519209364280573954
 ```
 
-**Status:** configuration issue, not startup failure.
+Configure the test server mapping/channel and test ticket creation/recovery.
 
-Needs to be configured/tested later.
+### MEDIUM — Finish shop administration testing
 
-### ISSUE C — Main guild not present in TEST environment
+Verify all CRUD operations and permission behavior.
 
-Current output:
+### FUTURE — Expand admin panel
 
-```text
-[MAIN] НЕ НАЙДЕН (ID: 1217530337664434246)
-[TEST] Insane TEST (ID: 519209364280573954)
+Move appropriate server configuration into the admin panel incrementally without creating unnecessary settings.
+
+### FUTURE — Profile card/customization
+
+Basic `/profile` exists. Visual customization is later.
+
+### FUTURE — Planned social/game systems
+
+Quests, PvP, mini-games, achievements, collecting, friends and relationships remain planned, but should be implemented incrementally after current systems are stable.
+
+---
+
+## 22. RECOMMENDED NEXT SESSION START
+
+Unless the user requests a different task, continue in this order.
+
+### Step 1 — Sync local repository
+
+```bash
+git pull
 ```
 
-**Status:** expected/acceptable for TEST environment unless the user later wants the main guild connected in this environment.
-
----
-
-## 16. Testing strategy agreed with the user
-
-The user explicitly asked when the bot should be launched and tested.
-
-Decision:
-
-**Do not wait until the entire project is finished.**
-
-Test in stages:
-
-1. implement a coherent feature block;
-2. validate code and obvious integration problems;
-3. run the bot locally on the TEST guild;
-4. manually test actual Discord interactions;
-5. fix real runtime/API/permission/state issues;
-6. continue development;
-7. later perform a full integrated test and stabilization pass;
-8. only then consider the current release production-ready.
-
-This is important because waiting until the end would make integration failures harder to isolate.
-
-The current project has now reached the point where local integrated testing is appropriate, especially for shop/admin/XP/economy/profile interactions.
-
----
-
-## 17. Suggested immediate development sequence
-
-Continue from the actual `main`, not from assumptions.
-
-### Step 1 — FIRST
-
-Verify the latest shop COG fix in the user's local environment.
-
-Expected after `git pull` + restart:
+The current code HEAD before this state-file refresh was:
 
 ```text
-[COG] Загружаем: cogs.shop
-[COG] OK: cogs.shop
+89e232ac81b5075fd3a86ebddd5ecf609b2edded
 ```
 
-and shop commands should appear in the application-command list/synchronization output.
+After this PROJECT_STATE update, the repository HEAD will additionally contain the state-file refresh commit. The exact new HEAD must be checked rather than guessed.
 
-### Step 2
+### Step 2 — Test the new local runner
 
-Test shop end-to-end on TEST guild.
+Run:
 
-### Step 3
+```bash
+C:\Users\nik_s\AppData\Local\Programs\Python\Python312\python.exe dev_runner.py
+```
 
-Fix any real shop/runtime issues found.
+Confirm startup is clean.
 
-### Step 4
+### Step 3 — Test admin economy
 
-Finish the admin panel around existing systems, especially:
+In TEST Discord:
 
-- shop;
-- moderation;
-- tickets;
-- XP/economy settings;
-- logging destinations.
+```text
+/admin_panel
+→ 💰 Экономика
+→ Выберите пользователя
+→ выбрать себя
+→ проверить текущий баланс
+→ 💰 Изменить баланс
+→ ввести 100
+```
 
-Do not add fake settings for future systems.
+Then run `/balance` and confirm the result.
 
-### Step 5
+### Step 4 — Test shop
 
-Perform a broader integrated test:
+Use the newly issued coins:
 
-- `/profile`
-- `/level`
-- `/xp_ranking`
-- `/balance`
-- `/daily`
-- `/pay`
-- `/rich`
-- `/shop`
-- `/buy`
-- `/admin_panel`
-- moderation commands;
-- ticket creation;
-- logging.
+```text
+/shop
+/buy <item_id>
+```
 
-### Step 6
+Confirm role assignment and one-time balance deduction.
 
-After the foundation is stable, continue with social/profile systems:
+Then repeat `/buy <item_id>` and confirm duplicate purchase is blocked.
 
-- profile cards/customization;
-- friends;
-- social interactions;
-- romantic relationships.
+### Step 5 — Continue development from actual results
 
-Then move into achievements/quests/mini-games/PvP/collections/cosmetics according to future design decisions.
+If a test fails, inspect the actual current code and fix the smallest necessary part. Do not blindly add workarounds.
 
 ---
 
-## 18. Historical implementation milestones
+## 23. IMPORTANT FACTS TO NOT FORGET
 
-The recent implementation sequence was approximately:
-
-1. XP/economy foundations were added.
-2. Message rewards were connected to XP eligibility/cooldown.
-3. `/profile` was added using XP + economy data.
-4. Economy commands `/balance`, `/daily`, `/pay`, `/rich` were expanded.
-5. Shop database was added.
-6. Public shop commands were added.
-7. Shop administration was integrated toward the admin panel.
-8. Runtime test revealed `cogs.shop` was missing from the configured COG list.
-9. Commit `77e0bd8` added `cogs.shop` to the COG loading list.
-10. Current state: **pull/restart/test that fix, then continue from actual results.**
-
-Do not repeat these implementation steps unless inspection shows they are missing or broken in the actual repository.
-
----
-
-## 19. Important user expectations about commits
-
-The user expects completed repository changes to actually be committed, not merely described.
-
-A previous situation occurred where a change was described but the GitHub update did not actually succeed. The user explicitly questioned why it was not committed and stated that local/user changes can be modified when necessary.
-
-Therefore:
-
-- after implementing a change, verify the GitHub write succeeded;
-- report the resulting commit;
-- do not say “готово/закоммичено” unless the repository operation actually succeeded;
-- if a write fails, say so clearly and retry correctly when possible.
-
----
-
-## 20. Repository/source-of-truth rule
-
-The actual GitHub repository is the source of truth for code.
-
-This file is the source of truth for project decisions and hand-off context, but it can become stale. Therefore a new chat should:
-
-1. read `PROJECT_STATE.md`;
-2. inspect the current `main` and relevant files;
-3. compare the current implementation against this state;
-4. continue from the actual code.
-
-Never blindly paste an old function over a newer repository version.
-
----
-
-## 21. Do not accidentally reintroduce removed concepts
-
-Never reintroduce:
-
-- talismans of luck;
-- energy drinks as an RPG resource;
-- RPG equipment;
-- arbitrary RPG consumables;
-- a generic RPG inventory just because a shop exists.
-
-The shop currently exists as a **server/community economy feature**, with Discord roles as one concrete purchasable benefit.
-
-A future collectible/cosmetic system may exist, but it must be designed separately and explicitly.
-
----
-
-## 22. Definition of “done” for the current foundation
-
-The current foundation should not be called production-ready yet.
-
-Before that claim, verify:
-
-- clean startup;
-- all intended COGs load;
-- all intended slash commands synchronize;
-- XP works after restart;
-- voice XP works and recovers correctly;
-- economy persists;
-- daily cooldown persists correctly;
-- transfers cannot create/lose money incorrectly;
-- shop purchases are atomic enough for the current SQLite design;
-- shop role grants work;
-- admin permissions work;
-- settings persist;
-- logging destinations work;
-- tickets work after configuration;
-- moderation commands work;
-- no stale references/imports remain;
-- no duplicate command registration occurs;
-- test guild behavior is stable.
-
-Only after that should a broader production/release pass be performed.
-
----
-
-## 23. Current one-line handoff
-
-**CURRENT POSITION:** The bot successfully starts in TEST and the XP/economy/profile/admin foundations are present; shop database/public/admin functionality has been added, but the first local test revealed `cogs.shop` was missing from the configured COG list, which was fixed in `77e0bd8`. The immediate next action is `git pull`, restart, verify `cogs.shop` and `/shop`/`/buy`, then perform the first real integrated shop/admin test and fix whatever runtime issues appear. Continue committing directly to `main`. No RPG mechanics. The user allows modifying their changes when necessary.
+- Current branch: `main`.
+- Before this state-file update, current HEAD was `89e232ac`.
+- Current local environment: TEST.
+- TEST guild: `519209364280573954` (`Insane TEST`).
+- Bot: `Insane#6907`.
+- `cogs.shop` is in `BotConfig.COGS` and was verified loading.
+- `/shop`, `/buy`, `/shop_admin` were verified synchronized in TEST in the supplied 03:03 startup.
+- Shop is under end-to-end testing, not declared fully stable.
+- A real shop bug was found: purchases could occur without role assignment and duplicate purchases were possible. This was fixed in `ad99f0a`, but the fix still needs runtime verification.
+- Admin economy management exists.
+- The admin economy UI now uses a Discord UserSelect instead of an ID/mention text field.
+- `dev_runner.py` exists and polls Git every 10 seconds, but it still needs local runtime verification.
+- TEST currently warns that `create_ticket` is not configured.
+- The bot is not an RPG project.
+- Do not undo the existing architecture or add unrelated libraries/refactors.
+- Always inspect current GitHub code before making the next change.
