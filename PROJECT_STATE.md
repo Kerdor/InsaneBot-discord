@@ -304,7 +304,7 @@ Next: configure/map the TEST `create_ticket` channel, then test ticket creation,
 
 `.server_map.json` provides TEST server-specific role/channel IDs.
 
-Required roles:
+Required roles and hierarchy:
 
 ```text
 Owner
@@ -314,6 +314,20 @@ Helper
 Member
 Not verified
 ```
+
+Discord hierarchy after rebuild must be, from highest to lowest:
+
+```text
+Owner
+Administrator
+Moderator
+Helper
+Member
+Not verified
+@everyone
+```
+
+The rebuild creates these roles in reverse creation order so Discord places them in the intended hierarchy. This was fixed in commit `edb35207f3ec901cf9a739450a6a63467fd129e1`.
 
 Required channels include:
 
@@ -395,10 +409,11 @@ Do not use destructive restore/reset/cleanup commands against these without expl
 - Runner test file removal.
 - Discord ticket/private-thread behavior fix verified: ticket channels no longer create unwanted Discord threads.
 - Logging `Parent channel not found` stale-thread crash fixed and verified gone.
+- Rebuild role hierarchy creation order fixed in `edb35207f3ec901cf9a739450a6a63467fd129e1`; runtime verification still required.
 
 ### NEXT
 
-1. **Run `/rebuild` again** to verify the new stale cached-channel fix and confirm there are no `Unknown Channel` logging errors.
+1. **Run `/rebuild` again** to verify the new stale cached-channel fix and confirm there are no `Unknown Channel` logging errors, and verify the role hierarchy is Owner → Administrator → Moderator → Helper → Member → Not verified.
 2. **Tickets:** configure TEST `create_ticket` and test the full lifecycle.
 3. **Admin panel:** fix only issues discovered during real testing.
 4. **Economy:** explicitly decide whether negative balances are allowed.
@@ -426,6 +441,7 @@ Do not use destructive restore/reset/cleanup commands against these without expl
 - Shop UI redesign is **planned, not current work**.
 - Tickets exist in code; Discord ticket-thread behavior has been corrected and needs lifecycle testing.
 - Logging stale-thread crash is verified fixed; stale cached-channel 404 fix is committed on `main` and needs runtime verification.
+- Rebuild role hierarchy is now created in the intended top-to-bottom Discord order; runtime verification is still pending.
 - **After every fix, update `PROJECT_STATE.md` before considering the work complete.**
 - Do not repeat completed shop/runner tests without a relevant code change.
 - Do not discard local runtime databases.
