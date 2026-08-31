@@ -8,7 +8,7 @@ from pathlib import Path
 
 PROJECT_DIR = Path(__file__).resolve().parent
 MAIN_FILE = PROJECT_DIR / "main.py"
-POLL_INTERVAL = 10
+POLL_INTERVAL = 5
 
 
 def run_git(*args: str) -> subprocess.CompletedProcess[str]:
