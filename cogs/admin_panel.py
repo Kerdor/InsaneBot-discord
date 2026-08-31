@@ -105,6 +105,19 @@ class AdminPanel(commands.Cog):
         embed = disnake.Embed(title="🛒 Управление магазином", description=description, color=disnake.Color.blurple())
         await interaction.response.send_message(embed=embed, view=AdminShopView(self), ephemeral=True)
 
+    async def show_economy(self, interaction: disnake.MessageInteraction) -> None:
+        if not await self._allowed(interaction):
+            return
+        await interaction.response.send_message(
+            embed=disnake.Embed(
+                title="💰 Управление экономикой",
+                description="Выдача и снятие обычных монет пользователям сервера.",
+                color=disnake.Color.blurple(),
+            ),
+            view=AdminEconomyView(self),
+            ephemeral=True,
+        )
+
     async def show_logging(self, interaction: disnake.MessageInteraction) -> None:
         if not await self._allowed(interaction):
             return
@@ -160,6 +173,33 @@ class AdminPanel(commands.Cog):
         label = SETTINGS_INFO.get(key, MODERATION_INFO.get(key, TICKET_INFO.get(key, key)))
         await interaction.response.send_message(f"✅ **{label}**: `{old_value}` → `{new_value}`", ephemeral=True)
 
+    async def set_balance(self, interaction: disnake.ModalInteraction, raw_user_id: str, raw_amount: str) -> None:
+        if not await self._allowed(interaction):
+            return
+        try:
+            user_id = int(raw_user_id.strip().replace("<@", "").replace("!", "").replace(">", ""))
+            amount = int(raw_amount.strip())
+            if amount == 0:
+                raise ValueError
+            member = interaction.guild.get_member(user_id)
+            if member is None:
+                raise ValueError
+        except ValueError:
+            await interaction.response.send_message("❌ Укажи корректного пользователя и ненулевую сумму.", ephemeral=True)
+            return
+
+        from databases.economy import add_balance, get_user
+
+        before = int(get_user(interaction.guild.id, user_id)["balance"])
+        row = add_balance(interaction.guild.id, user_id, amount)
+        after = int(row["balance"])
+        action = "выдано" if amount > 0 else "снято"
+        logger.info("[ECONOMY] %s %s %s coins for %s in guild %s: %s -> %s", interaction.user.id, action, abs(amount), user_id, interaction.guild.id, before, after)
+        await interaction.response.send_message(
+            f"✅ Пользователю {member.mention} {action} **{abs(amount)}** 🪙. Баланс: **{after}** 🪙.",
+            ephemeral=True,
+        )
+
     async def set_log_channel(self, interaction: disnake.ModalInteraction, log_type: str, raw_channel: str) -> None:
         if not await self._allowed(interaction):
             return
@@ -198,9 +238,25 @@ class AdminPanelView(disnake.ui.View):
     async def shop(self, button, interaction):
         await self.cog.show_shop(interaction)
 
-    @disnake.ui.button(label="📋 Логирование", style=disnake.ButtonStyle.secondary, custom_id="admin:logging")
+    @disnake.ui.button(label="📋 Логирование", style=disnake.ButtonStyle.secondary, custom_id="admin:logging", row=1)
     async def logging(self, button, interaction):
         await self.cog.show_logging(interaction)
+
+    @disnake.ui.button(label="💰 Экономика", style=disnake.ButtonStyle.success, custom_id="admin:economy", row=1)
+    async def economy(self, button, interaction):
+        await self.cog.show_economy(interaction)
+
+
+class AdminEconomyView(disnake.ui.View):
+    def __init__(self, cog):
+        super().__init__(timeout=None)
+        self.cog = cog
+
+    @disnake.ui.button(label="💰 Изменить баланс", style=disnake.ButtonStyle.success, custom_id="admin:economy:balance")
+    async def balance(self, button, interaction):
+        if not await self.cog._allowed(interaction):
+            return
+        await interaction.response.send_modal(EconomyBalanceModal(self.cog))
 
 
 class AdminShopView(disnake.ui.View):
@@ -270,6 +326,21 @@ class SettingModal(disnake.ui.Modal):
 
     async def callback(self, interaction):
         await self.cog.save_setting(interaction, self.key, interaction.text_values["value"])
+
+
+class EconomyBalanceModal(disnake.ui.Modal):
+    def __init__(self, cog):
+        self.cog = cog
+        super().__init__(
+            title="Изменить баланс",
+            components=[
+                disnake.ui.TextInput(label="ID пользователя", custom_id="user_id", required=True, max_length=25),
+                disnake.ui.TextInput(label="Сумма (+ выдать / - снять)", custom_id="amount", required=True, max_length=15),
+            ],
+        )
+
+    async def callback(self, interaction):
+        await self.cog.set_balance(interaction, interaction.text_values["user_id"], interaction.text_values["amount"])
 
 
 class LogChannelModal(disnake.ui.Modal):
