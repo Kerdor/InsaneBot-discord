@@ -5,8 +5,9 @@ import logging
 import disnake
 from disnake.ext import commands
 
+from databases.economy import add_balance
 from databases.settings import get_bool
-from databases.shop import create_item, delete_item, get_all_items, get_items, init_shop, purchase_item, set_item_enabled, update_item
+from databases.shop import create_item, delete_item, get_all_items, get_item, get_items, init_shop, purchase_item, set_item_enabled, update_item
 
 logger = logging.getLogger(__name__)
 
@@ -48,21 +49,40 @@ class Shop(commands.Cog):
         if not get_bool(inter.guild.id, "economy_enabled"):
             await inter.response.send_message("💰 Экономика сейчас отключена администрацией.", ephemeral=True)
             return
+
+        item = get_item(inter.guild.id, item_id)
+        if item is None:
+            await inter.response.send_message("❌ Товар не найден или больше недоступен.", ephemeral=True)
+            return
+
+        role = None
+        if item["role_id"]:
+            role = inter.guild.get_role(int(item["role_id"]))
+            if role is None:
+                await inter.response.send_message("❌ Роль товара не найдена на этом сервере. Покупка отменена.", ephemeral=True)
+                return
+            if role in inter.author.roles:
+                await inter.response.send_message("❌ У тебя уже есть эта роль. Повторная покупка невозможна.", ephemeral=True)
+                return
+
         success, message, row = purchase_item(inter.guild.id, inter.author.id, item_id)
         if not success:
             await inter.response.send_message(f"❌ {message}", ephemeral=True)
             return
-        item = next((item for item in get_items(inter.guild.id) if int(item["id"]) == item_id), None)
-        if item and item["role_id"]:
-            role = inter.guild.get_role(int(item["role_id"]))
-            if role:
-                try:
-                    await inter.author.add_roles(role, reason=f"Shop purchase #{item_id}")
-                except disnake.Forbidden:
-                    await inter.response.send_message("⚠️ Покупка оплачена, но бот не смог выдать роль. Проверьте иерархию ролей.", ephemeral=True)
-                    return
-                except disnake.HTTPException:
-                    logger.exception("Failed to assign shop role %s to %s", role.id, inter.author.id)
+
+        if role:
+            try:
+                await inter.author.add_roles(role, reason=f"Shop purchase #{item_id}")
+            except disnake.Forbidden:
+                add_balance(inter.guild.id, inter.author.id, int(item["price"]))
+                await inter.response.send_message("⚠️ Бот не смог выдать роль, поэтому деньги возвращены. Проверьте иерархию ролей.", ephemeral=True)
+                return
+            except disnake.HTTPException:
+                logger.exception("Failed to assign shop role %s to %s", role.id, inter.author.id)
+                add_balance(inter.guild.id, inter.author.id, int(item["price"]))
+                await inter.response.send_message("⚠️ Не удалось выдать роль, поэтому деньги возвращены. Попробуйте позже.", ephemeral=True)
+                return
+
         await inter.response.send_message(f"🛍️ {message} Баланс: **{row['balance']}** 🪙.", ephemeral=True)
 
     @commands.slash_command(name="shop_admin", description="Управление товарами магазина")
