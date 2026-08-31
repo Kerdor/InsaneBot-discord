@@ -44,14 +44,14 @@ def init_tickets() -> None:
         connection.commit()
 
 
-def create_ticket(guild_id: int, author_id: int, thread_id: int, category: str = "Другое") -> int:
+def create_ticket(guild_id: int, author_id: int, thread_id: int) -> int:
     created_at = datetime.now(timezone.utc).isoformat()
     with _connect() as connection:
         cursor = connection.execute(
             "INSERT INTO tickets "
             "(guild_id, author_id, thread_id, status, category, created_at) "
-            "VALUES (?, ?, ?, 'open', ?, ?)",
-            (guild_id, author_id, thread_id, category, created_at),
+            "VALUES (?, ?, ?, 'open', NULL, ?)",
+            (guild_id, author_id, thread_id, created_at),
         )
         connection.commit()
         return int(cursor.lastrowid)
