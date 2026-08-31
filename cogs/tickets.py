@@ -26,7 +26,7 @@ async def build_transcript(thread: disnake.Thread) -> io.BytesIO:
         if message.attachments:
             content += " | Вложения: " + ", ".join(attachment.filename for attachment in message.attachments)
         lines.append(f"[{timestamp}] {message.author} ({message.author.id}): {content}")
-    return io.BytesIO("\n".join(lines).encode("utf-8"))
+    return io.BytesIO(b"\xef\xbb\xbf" + "\n".join(lines).encode("utf-8"))
 
 
 class TicketModal(disnake.ui.Modal):
