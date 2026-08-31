@@ -256,18 +256,23 @@ Groups: messages, members/server, moderation, setup, voice, system.
 
 Reaction logging is disabled by default because it is noisy. Do not redesign logging into a forum/thread architecture unless explicitly requested.
 
-### 2026-09-01 rebuild/logging fix
+### 2026-09-01 rebuild/logging fixes
 
-During `/rebuild`, deletion/recreation of channels and roles generated repeated `ClientException: Parent channel not found` errors in `GuildLogs.get_log_channel()` because a cached log `Thread` could remain after its parent channel was deleted.
+Initial `/rebuild` runs produced repeated `ClientException: Parent channel not found` errors in `GuildLogs.get_log_channel()` because cached log `Thread` objects could survive after their parent channel was deleted.
 
-Fixed in commit `4daa1cf72811b9fa4ffc92d5170171ba6a1376e2`:
+The first stale-thread fix was committed on `main` before the 02:02 runtime test. That test confirmed the `Parent channel not found` exception no longer occurs.
 
-- stale cached threads are no longer trusted when their parent is unavailable;
-- invalid log-channel cache entries are invalidated instead of being used;
-- fetched channels are validated before being accepted as the logging destination;
-- normal logging architecture and behavior were preserved.
+The 2026-09-01 02:02 runtime test then exposed a second cache problem: after the configured log forum/thread was deleted during rebuild, a stale cached logging destination was still returned and `.send()` produced `404 Not Found: Unknown Channel`.
 
-This fix specifically addresses the errors shown during the 2026-09-01 `/rebuild` run. A new `/rebuild` runtime test is still required to verify the fix end-to-end.
+Fixed in commit `a0a515d24b81f3340bfb231e81513a5602068f8f`:
+
+- cached logging destinations are now checked against the current guild cache before reuse;
+- deleted cached text channels are invalidated;
+- cached threads are invalidated when their parent is missing from the guild cache;
+- fetched thread destinations receive the same parent-existence validation;
+- existing logging architecture and normal behavior are preserved.
+
+**Verification status:** the `Parent channel not found` error is verified gone. The new stale-channel fix still requires another `/rebuild` runtime test.
 
 ## 13. Moderation
 
@@ -388,11 +393,12 @@ Do not use destructive restore/reset/cleanup commands against these without expl
 - Dev runner 5-second polling.
 - Full live auto-pull/restart cycle.
 - Runner test file removal.
-- Logging stale-thread fix committed directly to `main`.
+- Discord ticket/private-thread behavior fix verified: ticket channels no longer create unwanted Discord threads.
+- Logging `Parent channel not found` stale-thread crash fixed and verified gone.
 
 ### NEXT
 
-1. **Verify the logging fix:** run `/rebuild` on TEST and confirm there are no `Parent channel not found` errors.
+1. **Run `/rebuild` again** to verify the new stale cached-channel fix and confirm there are no `Unknown Channel` logging errors.
 2. **Tickets:** configure TEST `create_ticket` and test the full lifecycle.
 3. **Admin panel:** fix only issues discovered during real testing.
 4. **Economy:** explicitly decide whether negative balances are allowed.
@@ -418,8 +424,8 @@ Do not use destructive restore/reset/cleanup commands against these without expl
 - Admin Economy UserSelect: **verified**.
 - `/shop`, `/buy`, `/shop_admin`, `/admin_panel`: synchronized and available in TEST.
 - Shop UI redesign is **planned, not current work**.
-- Tickets exist in code but TEST `create_ticket` mapping still needs configuration/testing.
-- Logging stale-thread fix is committed on `main`; end-to-end rebuild verification remains.
+- Tickets exist in code; Discord ticket-thread behavior has been corrected and needs lifecycle testing.
+- Logging stale-thread crash is verified fixed; stale cached-channel 404 fix is committed on `main` and needs runtime verification.
 - **After every fix, update `PROJECT_STATE.md` before considering the work complete.**
 - Do not repeat completed shop/runner tests without a relevant code change.
 - Do not discard local runtime databases.
