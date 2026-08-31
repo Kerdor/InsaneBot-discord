@@ -2,8 +2,8 @@
 
 Repository: https://github.com/Kerdor/InsaneBot-discord
 Branch: `main`
-Current HEAD: `89e232ac81b5075fd3a86ebddd5ecf609b2edded`
-Current HEAD message: `Add local development auto-pull runner`
+Current code HEAD before this state refresh: `54b1bd4`
+Current code HEAD message: `fix: restore admin panel and UserSelect fix`
 State date: 2026-08-31
 
 > **Purpose:** persistent hand-off/context document for future chats. A new chat must read this file first and then inspect the actual current repository before making changes. This document records product decisions, architecture, implemented systems, exact recent changes, runtime verification, known issues, and the next development steps. Do not silently undo decisions marked as agreed.
@@ -131,7 +131,7 @@ Insane TEST
 ID: 519209364280573954
 ```
 
-The configured MAIN guild ID was not found during the TEST run. This was not a crash and is expected for the current TEST environment.
+The configured MAIN guild ID was not found during the TEST run. This is expected for the current TEST environment.
 
 The current `config.py` confirms:
 
@@ -182,11 +182,9 @@ The bot explicitly synchronizes/overwrites commands for the TEST guild.
 
 Before `cogs.shop` was loaded, the runtime had 30 commands and `/shop` + `/buy` were absent.
 
-### Current verified state
+### Verified state
 
-The user subsequently ran the bot and supplied a complete startup log at approximately 03:03 on 2026-08-31.
-
-All configured COGs loaded successfully, including `cogs.shop` and `cogs.admin_panel`.
+A supplied startup log showed all configured COGs loading, including `cogs.shop` and `cogs.admin_panel`.
 
 The runtime had **33 application commands in memory** and Discord returned **33 registered TEST commands** after overwrite.
 
@@ -253,7 +251,7 @@ Private-thread ticket system exists with:
 Known TEST warning:
 
 ```text
-2026-08-31 03:03:03,023 - cogs.tickets - WARNING - Канал create_ticket не настроен для guild=519209364280573954
+Канал create_ticket не настроен для guild=519209364280573954
 ```
 
 This is a configuration warning, not a startup crash.
@@ -414,13 +412,13 @@ Economy can be disabled with the persistent `economy_enabled` server setting.
 
 ---
 
-## 12. ADMIN ECONOMY MANAGEMENT — CURRENT DEVELOPMENT
+## 12. ADMIN ECONOMY MANAGEMENT — TESTED
 
-Administrator balance management was added to `/admin_panel`.
+Administrator balance management is part of `/admin_panel`.
 
-### Current intended UI
+### Current UI
 
-The economy section now uses a real Discord `UserSelect` instead of a text field for the user.
+The economy section uses a real Discord `UserSelect` instead of a text field for the user.
 
 Flow:
 
@@ -431,16 +429,9 @@ Flow:
 → select a server member
 ```
 
-After selection, the view displays:
+After selection, the view displays the selected user and current balance.
 
-```text
-Выбран пользователь: @user
-Текущий баланс: N 🪙
-
-Теперь нажмите 💰 Изменить баланс и укажите сумму.
-```
-
-Then the modal contains only:
+The modal contains:
 
 ```text
 Сумма (+ выдать / - снять)
@@ -451,6 +442,26 @@ Negative value removes coins.
 Zero is rejected.
 
 The selected user ID is kept by the view, so no manual ID or `@mention` parsing is required.
+
+### Runtime tests completed 2026-08-31
+
+The UserSelect flow was tested after the final repair.
+
+Verified:
+
+- selecting a user works;
+- giving coins works;
+- removing coins works;
+- zero amount is rejected;
+- balance changes are applied correctly.
+
+The user confirmed that money was successfully issued and removed through the admin economy panel.
+
+### Important remaining economy question
+
+The current admin balance logic may allow a negative balance if an administrator removes more coins than the user has. This has **not** yet been tested/decided as a required rule.
+
+If economy design requires balances to be non-negative, add that as a separate explicit change rather than silently changing behavior during unrelated testing.
 
 ### Implementation history
 
@@ -473,11 +484,9 @@ Temporarily changed the user field to mention-style text input.
 
 Replaced the mention text field with `disnake.ui.user_select`, shows the selected member's current balance, and leaves only the amount in the modal.
 
-### Runtime status
+`118e653` — `fix: handle disnake UserSelect member value`
 
-The old text-input UI was shown by the user before the UserSelect change.
-
-The latest UserSelect implementation has **not yet been runtime-tested after the final pull/restart**.
+Fixed the UserSelect handler so it correctly handles the selected Discord member object instead of assuming the select value is a raw integer ID.
 
 ---
 
@@ -544,24 +553,17 @@ Intended controls include:
 - configure price;
 - configure role.
 
-### Bug found during runtime testing
+### Previous shop bug
 
-The user created a test role item, initially lacked enough money, then reduced the price and bought the item twice.
+The old purchase flow allowed purchases to be accepted without the expected role and allowed duplicate purchases.
 
-Observed old behavior:
-
-- the purchase was accepted twice;
-- no Discord role appeared;
-- money could therefore be spent without the expected role reward;
-- duplicate role purchases were possible.
-
-This exposed a critical flaw in the old purchase flow: money was deducted before the role assignment was safely validated, and there was no duplicate-role protection.
+The critical flaw was that money could be deducted before role assignment was safely validated, and there was no duplicate-role protection.
 
 ### Shop fix
 
 `ad99f0a3cc880ec7ce781b7e4353ea712c0eb091` — `Fix shop role purchase validation`
 
-The current fix in `cogs/shop.py`:
+The fix in `cogs/shop.py`:
 
 - imports `add_balance` for refunds;
 - imports `get_item`;
@@ -574,31 +576,54 @@ The current fix in `cogs/shop.py`:
 - on `disnake.Forbidden`, refunds the item price;
 - on `disnake.HTTPException`, logs the error and refunds the item price.
 
-The user-facing error explicitly tells the user when role assignment failed and that money was returned.
+### Runtime tests completed 2026-08-31
 
-### Important status
+The current TEST shop was opened with `/shop` and showed:
 
-The fix is committed, but **the post-fix role-assignment flow has not yet been verified by a fresh local test**.
+```text
+#1 · Тестовая роль — 1 🪙
+```
 
-Therefore the shop remains **in end-to-end testing**, not fully stable.
+The user then executed `/buy 1`.
 
-### Required shop tests
+Observed:
 
-After pulling the current `main`:
+- purchase was accepted;
+- balance decreased from 499 to 498;
+- bot reported successful purchase;
+- the role initially appeared not to be present, but after checking the server role setup the user confirmed that **the role is actually being granted**;
+- role hierarchy was correct: the shop role is below the bot role.
 
-1. verify the test item contains the correct Discord role ID;
-2. verify the bot's highest role is above the shop role;
-3. use admin economy management to give the test user enough coins;
-4. run `/shop`;
-5. run `/buy <item_id>`;
-6. verify exactly one deduction;
-7. verify the role appears on the user;
-8. repeat `/buy <item_id>` and verify duplicate purchase is rejected;
-9. test a missing/deleted role and verify no money is lost;
-10. test insufficient balance;
-11. test disabled item;
-12. test deleted/nonexistent item;
-13. test role hierarchy/permission failure and verify automatic refund.
+Therefore the normal role purchase path is now **verified working**.
+
+### Current next shop test
+
+The role is currently already owned by the test user.
+
+Next test must be:
+
+```text
+/buy 1
+```
+
+again, without manually removing the role.
+
+Expected:
+
+- purchase rejected because the user already has the role;
+- balance remains unchanged;
+- no duplicate charge occurs.
+
+After that, test:
+
+1. insufficient balance;
+2. disabled item;
+3. deleted/nonexistent item;
+4. missing/deleted Discord role and verify no money is lost;
+5. role hierarchy/permission failure and verify automatic refund;
+6. shop admin CRUD and permission behavior.
+
+Shop remains **under end-to-end testing**, not declared fully stable.
 
 ---
 
@@ -736,229 +761,134 @@ Used for persisted logging destinations and forum/thread IDs.
 
 ---
 
-## 18. LOCAL STARTUP TEST — VERIFIED 2026-08-31 03:03
+## 18. LOCAL STARTUP / RUNNER TESTING — VERIFIED 2026-08-31
 
-The user ran the bot locally with Python 3.12 using `main.py`.
-
-The complete supplied startup log showed:
+The user launched:
 
 ```text
-[CONFIG] ENVIRONMENT=test
-[CONFIG] MAIN_GUILD_ID=1217530337664434246
-[CONFIG] TEST_GUILD_ID=519209364280573954
-[CONFIG] TEST_GUILDS=[519209364280573954]
-```
-
-All configured COGs loaded successfully, including:
-
-```text
-cogs.shop
-cogs.admin_panel
-```
-
-The bot connected successfully:
-
-```text
-Bot connected to Discord
-Bot Insane#6907 is ready
-Guilds: 1
-```
-
-TEST synchronization succeeded:
-
-```text
-[SYNC] Команд в памяти перед overwrite: 33
-[SYNC] Discord вернул зарегистрированных команд: 33
-```
-
-System logging was activated:
-
-```text
-[STARTUP] Discord system logging активирован
-```
-
-XP and voice active sessions were recovered successfully.
-
-Only startup warning:
-
-```text
-Канал create_ticket не настроен для guild=519209364280573954
-```
-
-No startup exception was reported.
-
-### What this proves
-
-- configuration loads;
-- bot connects;
-- all configured COGs load;
-- shop COG loads;
-- admin panel COG loads;
-- `/shop`, `/buy`, `/shop_admin` synchronize to TEST;
-- bot reaches ready state;
-- active voice sessions recover.
-
-### What this does not prove
-
-It does not prove every command works end-to-end.
-
-Specifically, after the later commits the following still require fresh runtime verification:
-
-- shop role assignment after `ad99f0a`;
-- duplicate shop purchase rejection;
-- admin economy UserSelect after `c9e0b114`;
-- `dev_runner.py` after `89e232ac`.
-
----
-
-## 19. RECENT COMMIT HISTORY — EXACT HAND-OFF
-
-Recent development sequence:
-
-### `77e0bd8...`
-
-**Load shop and admin panel cogs**
-
-Added `cogs.shop` to the configured COG list after discovering that shop commands were not loading.
-
-### `989a7f654ae475612c99f0e8f2c22d8607de229d`
-
-**Add economy balance management to admin panel**
-
-Added administrator balance management.
-
-### `b5ff3f19a8bfbe0b341c3f61d511e0684ea1fd73`
-
-**Allow economy admin balance changes using @mention**
-
-Temporarily changed the economy user input to mention-style text.
-
-### `ad99f0a3cc880ec7ce781b7e4353ea712c0eb091`
-
-**Fix shop role purchase validation**
-
-Added role existence checks, duplicate-role checks and refunds when role assignment fails.
-
-### `c9e0b11492bf4a60f4b5e7c107dcdc3a54cecc6a`
-
-**Replace economy admin input with Discord user selector**
-
-Replaced manual user/mention input with Discord `UserSelect`, shows current balance, and leaves only the amount in the modal.
-
-### `89e232ac81b5075fd3a86ebddd5ecf609b2edded`
-
-**Add local development auto-pull runner**
-
-Added `dev_runner.py`.
-
-This is the current HEAD before the PROJECT_STATE refresh commit.
-
----
-
-## 20. `dev_runner.py` — LOCAL AUTO-UPDATE / RESTART
-
-File:
-
-```text
-dev_runner.py
-```
-
-Purpose:
-
-- start `main.py`;
-- periodically execute `git pull`;
-- detect whether HEAD changed;
-- if a new commit was pulled, stop the current bot process and start it again;
-- allow Ctrl+C to stop both runner and child bot.
-
-Current polling interval:
-
-```text
-POLL_INTERVAL = 10
-```
-
-Current flow:
-
-```text
-start dev_runner.py
-        ↓
-start main.py
-        ↓
-wait 10 seconds
-        ↓
-git pull
-        ↓
-HEAD changed?
-   ┌────┴────┐
-  no        yes
-   ↓          ↓
-wait       stop bot
-              ↓
-           start bot
-```
-
-If `git pull` fails, the runner prints the output and keeps the existing bot process running.
-
-If the child bot exits by itself, the runner currently reports the exit code and returns rather than automatically restarting it.
-
-The runner uses `sys.executable`, so it launches `main.py` with the same Python interpreter used to launch the runner.
-
-### Important status
-
-The file is committed but **has not yet been runtime-tested by the user**.
-
-The intended local launcher is:
-
-```bash
 C:\Users\nik_s\AppData\Local\Programs\Python\Python312\python.exe dev_runner.py
 ```
 
-Do not run a separate `main.py` at the same time, because the runner starts it itself.
+The runner printed:
+
+```text
+[RUNNER] Автообновление включено. Проверка Git каждые 10 сек.
+[RUNNER] Для остановки нажмите Ctrl+C.
+[RUNNER] Запуск бота...
+```
+
+The first restart after commit `54b1bd4` exposed a regression caused by an earlier bad edit: `cogs.admin_panel` was missing its `setup()` function and the bot aborted startup.
+
+This was immediately repaired in:
+
+`54b1bd4` — `fix: restore admin panel and UserSelect fix`
+
+After the repair the bot was able to run far enough for the user to successfully test Admin Economy and Shop in Discord.
+
+Therefore:
+
+- `dev_runner.py` exists;
+- it launches the bot;
+- the repaired bot starts successfully enough for Discord testing;
+- auto-pull polling is configured for 10 seconds.
+
+### Still not fully proven
+
+The complete automatic update cycle itself has not yet been deliberately tested end-to-end with a new commit while the runner is already running.
+
+Required dedicated runner test:
+
+1. start `dev_runner.py`;
+2. make/commit a harmless test change on GitHub;
+3. wait for the 10-second poll;
+4. verify `git pull` detects the new commit;
+5. verify the child bot is stopped;
+6. verify the child bot is started again exactly once;
+7. verify no duplicate bot process exists;
+8. verify Ctrl+C stops runner and child bot.
+
+Do not run a separate `main.py` at the same time as the runner.
 
 ---
 
-## 21. CURRENT KNOWN ISSUES / TODO
+## 19. LOCAL GIT STATE OBSERVED 2026-08-31
 
-### CRITICAL — Shop role assignment must be retested
-
-The old behavior was broken and was fixed in `ad99f0a`.
-
-Need runtime proof that:
-
-- correct role ID is configured;
-- role is below the bot's highest role;
-- `/buy` deducts once;
-- role is assigned;
-- duplicate purchase is rejected;
-- role assignment failure refunds money.
-
-### CRITICAL — Economy UserSelect must be retested
-
-The new `c9e0b114` implementation needs to be pulled and tested in Discord.
-
-Expected flow:
+The user ran:
 
 ```text
-/admin_panel
-→ 💰 Экономика
-→ Выберите пользователя
-→ выбрать себя
-→ увидеть текущий баланс
-→ 💰 Изменить баланс
-→ ввести amount
+git status
+git branch -vv
+git log --oneline --decorate -5
+git remote -v
 ```
 
-### HIGH — Verify `dev_runner.py`
+The local branch reported:
 
-Run it locally and verify:
+```text
+* main 54b1bd4 [origin/main] fix: restore admin panel and UserSelect fix
+```
 
-1. it starts `main.py`;
-2. it checks Git every 10 seconds;
-3. a new commit is pulled;
-4. old bot process stops cleanly;
-5. new bot starts;
-6. no duplicate bot process is created;
-7. Ctrl+C stops runner and child bot.
+and:
+
+```text
+Your branch is up to date with 'origin/main'.
+```
+
+Recent local log:
+
+```text
+54b1bd4 (HEAD -> main, origin/main, origin/HEAD) fix: restore admin panel and UserSelect fix
+118e653 fix: handle disnake UserSelect member value
+0ec71e9 Update PROJECT_STATE with current development state
+89e232a Add local development auto-pull runner
+c9e0b11 Replace economy admin input with Discord user selector
+```
+
+Local working tree contained runtime-generated/local changes:
+
+```text
+modified:   databases/Insane.sqlite3
+modified:   dev_runner.py
+
+Untracked files:
+    databases/economy.db
+    databases/moderation.db
+    databases/settings.db
+    databases/tickets.db
+    databases/xp.db
+```
+
+These are local runtime/database changes and **must not be discarded blindly**.
+
+GitHub Desktop displayed a message saying there were 172 commits to pull, but command-line Git simultaneously reported `main` was up to date with `origin/main`. Therefore the user was explicitly told **not to press Pull Origin or discard local changes** until the discrepancy is understood. Treat the command-line Git state as the authoritative local check unless GitHub Desktop is separately investigated.
+
+---
+
+## 20. CURRENT KNOWN ISSUES / TODO
+
+### CRITICAL — Finish shop end-to-end testing
+
+Normal role purchase is now verified.
+
+Next immediate test:
+
+```text
+/buy 1
+```
+
+while the user already owns the role.
+
+Expected: purchase rejected and balance unchanged.
+
+Then test insufficient balance, disabled item, nonexistent item, missing role, role hierarchy failure/refund, and shop admin CRUD.
+
+### HIGH — Verify `dev_runner.py` automatic update cycle
+
+Startup and normal Discord testing are working after the admin panel repair, but the automatic **pull → detect changed HEAD → restart child bot** cycle still needs a deliberate end-to-end test.
+
+### MEDIUM — Decide/verify negative balances
+
+The user asked whether the balance can go negative when an administrator removes more coins than available. Current behavior has not been changed. Decide whether balances should be clamped at zero or whether negative balances are intentionally allowed.
 
 ### MEDIUM — Configure/test TEST ticket channel
 
@@ -988,84 +918,71 @@ Quests, PvP, mini-games, achievements, collecting, friends and relationships rem
 
 ---
 
-## 22. RECOMMENDED NEXT SESSION START
+## 21. RECOMMENDED NEXT SESSION START
 
 Unless the user requests a different task, continue in this order.
 
-### Step 1 — Sync local repository
+### Step 1 — Confirm local sync
 
 ```bash
-git pull
+git status
+git branch -vv
+git log --oneline --decorate -5
 ```
 
-The current code HEAD before this state-file refresh was:
+Do not discard runtime database changes.
+
+### Step 2 — Continue shop testing
+
+The immediate next action is:
 
 ```text
-89e232ac81b5075fd3a86ebddd5ecf609b2edded
+/buy 1
 ```
 
-After this PROJECT_STATE update, the repository HEAD will additionally contain the state-file refresh commit. The exact new HEAD must be checked rather than guessed.
+with the test role already owned.
 
-### Step 2 — Test the new local runner
+### Step 3 — Finish shop negative/error cases
 
-Run:
+Test:
 
-```bash
-C:\Users\nik_s\AppData\Local\Programs\Python\Python312\python.exe dev_runner.py
-```
+- insufficient balance;
+- disabled item;
+- nonexistent item;
+- missing/deleted Discord role;
+- role hierarchy/permission failure with refund;
+- shop admin CRUD.
 
-Confirm startup is clean.
+### Step 4 — Deliberately test `dev_runner.py` auto-restart
 
-### Step 3 — Test admin economy
+Use a harmless commit while the runner is already running and verify the complete automatic update cycle.
 
-In TEST Discord:
+### Step 5 — Test tickets
 
-```text
-/admin_panel
-→ 💰 Экономика
-→ Выберите пользователя
-→ выбрать себя
-→ проверить текущий баланс
-→ 💰 Изменить баланс
-→ ввести 100
-```
+Resolve the `create_ticket` TEST configuration warning and test ticket creation/recovery.
 
-Then run `/balance` and confirm the result.
-
-### Step 4 — Test shop
-
-Use the newly issued coins:
-
-```text
-/shop
-/buy <item_id>
-```
-
-Confirm role assignment and one-time balance deduction.
-
-Then repeat `/buy <item_id>` and confirm duplicate purchase is blocked.
-
-### Step 5 — Continue development from actual results
+### Step 6 — Continue development from actual results
 
 If a test fails, inspect the actual current code and fix the smallest necessary part. Do not blindly add workarounds.
 
 ---
 
-## 23. IMPORTANT FACTS TO NOT FORGET
+## 22. IMPORTANT FACTS TO NOT FORGET
 
 - Current branch: `main`.
-- Before this state-file update, current HEAD was `89e232ac`.
+- Before this state-file refresh, current code HEAD was `54b1bd4`.
 - Current local environment: TEST.
 - TEST guild: `519209364280573954` (`Insane TEST`).
 - Bot: `Insane#6907`.
 - `cogs.shop` is in `BotConfig.COGS` and was verified loading.
-- `/shop`, `/buy`, `/shop_admin` were verified synchronized in TEST in the supplied 03:03 startup.
-- Shop is under end-to-end testing, not declared fully stable.
-- A real shop bug was found: purchases could occur without role assignment and duplicate purchases were possible. This was fixed in `ad99f0a`, but the fix still needs runtime verification.
-- Admin economy management exists.
-- The admin economy UI now uses a Discord UserSelect instead of an ID/mention text field.
-- `dev_runner.py` exists and polls Git every 10 seconds, but it still needs local runtime verification.
-- TEST currently warns that `create_ticket` is not configured.
+- `/shop`, `/buy`, `/shop_admin` were verified synchronized in TEST.
+- Admin Economy UserSelect is now runtime-tested and works for selecting users, adding money, removing money, and rejecting zero.
+- A shop test item `#1 · Тестовая роль` costs 1 🪙.
+- Normal shop role purchase is runtime-tested and the role is confirmed to be granted.
+- The immediate next shop test is duplicate purchase rejection while the role is already owned.
+- Shop is still under end-to-end testing and is not declared fully stable.
+- `dev_runner.py` polls Git every 10 seconds and launches the bot, but its full automatic pull/restart cycle still needs a deliberate test.
 - The bot is not an RPG project.
 - Do not undo the existing architecture or add unrelated libraries/refactors.
+- Local runtime databases are present and must not be discarded blindly.
 - Always inspect current GitHub code before making the next change.
