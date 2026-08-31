@@ -30,8 +30,11 @@ class BaseLogger(commands.Cog):
 
         cached = self._log_channels.get(guild.id)
         if cached and cached.id == channel_id:
-            return cached
-        if cached:
+            if isinstance(cached, disnake.Thread) and cached.parent is None:
+                self._log_channels.pop(guild.id, None)
+            else:
+                return cached
+        elif cached:
             self._log_channels.pop(guild.id, None)
 
         channel = guild.get_channel(channel_id)
@@ -46,6 +49,9 @@ class BaseLogger(commands.Cog):
             return None
 
         if not isinstance(channel, (disnake.TextChannel, disnake.Thread)):
+            return None
+
+        if isinstance(channel, disnake.Thread) and channel.parent is None:
             return None
 
         self._log_channels[guild.id] = channel
