@@ -150,6 +150,16 @@ class Verification(commands.Cog):
             logger.exception("[VERIFY] Не удалось выдать роль ожидания: user=%s", member.id)
 
     @commands.Cog.listener()
+    async def on_guild_role_create(self, role: disnake.Role) -> None:
+        if role.guild.id != BotConfig.TEST_GUILD_ID:
+            return
+        if role.name != ROLE_NAMES["owner"]:
+            return
+
+        logger.info("[VERIFY] Rebuild создал роль владельца, синхронизируем роли пользователей")
+        await self._sync_existing_members()
+
+    @commands.Cog.listener()
     async def on_ready(self) -> None:
         self.bot.add_view(VerificationPanelView(self))
         await self._sync_existing_members()
@@ -161,10 +171,13 @@ class Verification(commands.Cog):
                 continue
 
             member_role = guild.get_role(BotConfig.MEMBER_ROLE_ID) if BotConfig.MEMBER_ROLE_ID else None
+            member_role = member_role or disnake.utils.get(guild.roles, name=ROLE_NAMES["member"])
             not_verified_id = BotConfig.OTHER_ROLES.get("Not verified")
             not_verified_role = guild.get_role(not_verified_id) if not_verified_id else None
+            not_verified_role = not_verified_role or disnake.utils.get(guild.roles, name=ROLE_NAMES["not_verified"])
             owner_role_id = BotConfig.MODERATION_ROLES.get("owner")
             owner_role = guild.get_role(owner_role_id) if owner_role_id else None
+            owner_role = owner_role or disnake.utils.get(guild.roles, name=ROLE_NAMES["owner"])
 
             if not_verified_role is None:
                 continue
