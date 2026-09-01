@@ -64,7 +64,7 @@ cogs/
 databases/
   xp.py economy.py shop.py quests.py achievements.py
   profile_customization.py moderation.py tickets.py voice_stats.py voice_rooms.py social.py activities.py
-utils/profile_card.py activity_registry.py
+utils/profile_card.py activity_registry.py activity_rewards.py
 ```
 
 Legacy `get_roles.py` remains unloaded. `reaction_logs.py` remains intentionally disabled.
@@ -285,7 +285,7 @@ received_at
 
 `result_id` is the primary key and duplicate results are ignored, providing the persistence/idempotency layer needed before rewards are applied.
 
-The Activity persistence layer now also exposes:
+The Activity persistence layer exposes:
 
 ```text
 has_result(result_id)
@@ -294,11 +294,13 @@ get_result(result_id)
 get_user_results(guild_id, user_id, activity_key=None, limit=100)
 ```
 
-`get_result` and `get_user_results` provide read access to accepted Activity results while keeping persistence behind the database module. `record_result` remains idempotent through `INSERT OR IGNORE` on the primary `result_id` key.
+A static Activity registry exists in `utils/activity_registry.py`. It defines the initial release games and agreed future expansion list without assigning unapproved reward balances or pretending that external Activities already exist.
 
-A static Activity registry exists in `utils/activity_registry.py`. It defines the initial release games and the agreed future expansion list without assigning unapproved reward balances or pretending that external Activities already exist.
+A trusted-result application layer now exists in `utils/activity_rewards.py`. It accepts a `TrustedActivityResult`, validates the Activity identity, IDs and non-negative reward values, persists the result through the idempotent Activity ledger, and only then applies the supplied XP and coin rewards through the existing XP/Economy database APIs. A duplicate `result_id` is rejected before any second reward application.
 
-This is **not** a complete Discord Activity integration. There is currently no external Activity/backend endpoint, signature verification, identity verification, anti-cheat validation, reward application pipeline, retry protocol or real Activity client.
+Important boundary: this layer accepts **already trusted** results only. It does not claim to verify an external Discord Activity. External signature verification, identity/guild verification, anti-cheat validation and a real Activity client/backend remain outside the current implementation.
+
+The reward amounts are supplied by the trusted caller; no new reward balance has been invented here.
 
 ### Planned Activity games
 
@@ -360,6 +362,7 @@ Additional:
 - mini-game reward integration/concurrency;
 - social command and relationship concurrency/edge cases;
 - Activity signature/identity/guild verification and reward integration;
+- Activity reward atomicity across the separate XP/Economy/Activity SQLite databases;
 - Activity registry validation and initial-game implementation details.
 
 Do not fix speculative issues without inspecting source/behavior first.
@@ -395,7 +398,7 @@ Current checkpoint:
 Core community/progression systems → IMPLEMENTED
 Mini-games → IMPLEMENTED / QA PENDING
 Social / Friends / Romantic → IMPLEMENTED / QA PENDING
-Discord Activities → FOUNDATION / result persistence expanded / initial games planned: Snake, Sudoku, Wordle
+Discord Activities → FOUNDATION / trusted-result pipeline implemented / initial games planned: Snake, Sudoku, Wordle
 Activity registry → IMPLEMENTED / QA PENDING
 Future Activities → 2048, Minesweeper, Tetris, Flappy Bird, Connect Four, Chess, Checkers
 Full QA → NOT STARTED
@@ -411,7 +414,8 @@ e90ab1944b3d93ca091b7ac2ccac964df9d532d4 → social commands/COG
 5946224802115e94940c5f2ab87f7bc6729731ab → Activity roadmap expanded with initial and future games
 9e584c6d80add5497c118db0aec0d5a23b0bc2da → Activity registry
 a5d8bf9c138f5cb28e231b5d565572a479e9ca3d → Activity result lookup/history layer
-CURRENT STATE UPDATE → Activity persistence checkpoint
+0f1f501f4cab242453f88fd390d74312b36cfade → trusted Activity reward pipeline
+CURRENT STATE UPDATE → trusted Activity pipeline checkpoint
 ```
 
 ## 24. NEW-CHAT CONTINUATION
