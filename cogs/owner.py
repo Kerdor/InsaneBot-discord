@@ -1,3 +1,5 @@
+"""Owner-only lifecycle commands for the Discord bot."""
+
 from __future__ import annotations
 
 import asyncio
@@ -12,6 +14,8 @@ logger = logging.getLogger(__name__)
 
 
 class OwnerCommands(commands.Cog):
+    """Expose privileged process-level bot controls to the configured owner."""
+
     def __init__(self, bot: commands.Bot) -> None:
         self.bot = bot
         self._restart_lock = asyncio.Lock()
@@ -22,6 +26,7 @@ class OwnerCommands(commands.Cog):
     )
     @commands.is_owner()
     async def restart(self, ctx: disnake.ApplicationCommandInteraction) -> None:
+        """Restart the current process while preventing duplicate restart requests."""
         if self._restart_lock.locked():
             await ctx.send("Бот уже перезагружается...", ephemeral=True)
             return
@@ -40,4 +45,5 @@ class OwnerCommands(commands.Cog):
 
 
 def setup(bot: commands.Bot) -> None:
+    """Register the owner command cog with the bot."""
     bot.add_cog(OwnerCommands(bot))
