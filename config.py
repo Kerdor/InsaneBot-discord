@@ -146,6 +146,7 @@ class BotConfig:
         "cogs.logging.system_logs",
         "cogs.shop",
         "cogs.quests",
+        "cogs.achievements",
         "cogs.admin_panel",
     )
 
