@@ -1,5 +1,7 @@
 from __future__ import annotations
 
+"""Server shop commands, purchases, and administrator item management."""
+
 import logging
 
 import disnake
@@ -16,11 +18,13 @@ class Shop(commands.Cog):
     """Public server shop and administrator shop management."""
 
     def __init__(self, bot: commands.Bot) -> None:
+        """Initialize the cog and ensure the shop database schema exists."""
         self.bot = bot
         init_shop()
 
     @staticmethod
     def _admin(member: disnake.Member) -> bool:
+        """Return whether the member has one of the configured administrator roles."""
         from config import BotConfig
 
         roles = {BotConfig.MODERATION_ROLES.get("owner"), BotConfig.MODERATION_ROLES.get("administrator")}
@@ -28,6 +32,7 @@ class Shop(commands.Cog):
 
     @commands.slash_command(name="shop", description="Открыть магазин сервера")
     async def shop(self, inter: disnake.ApplicationCommandInteraction) -> None:
+        """Display enabled shop items for the current server."""
         if not get_bool(inter.guild.id, "economy_enabled"):
             await inter.response.send_message("💰 Экономика сейчас отключена администрацией.", ephemeral=True)
             return
@@ -46,6 +51,7 @@ class Shop(commands.Cog):
 
     @commands.slash_command(name="buy", description="Купить товар в магазине")
     async def buy(self, inter: disnake.ApplicationCommandInteraction, item_id: int) -> None:
+        """Purchase an item and grant its configured role when applicable."""
         if not get_bool(inter.guild.id, "economy_enabled"):
             await inter.response.send_message("💰 Экономика сейчас отключена администрацией.", ephemeral=True)
             return
@@ -88,6 +94,7 @@ class Shop(commands.Cog):
 
     @commands.slash_command(name="shop_admin", description="Управление товарами магазина")
     async def shop_admin(self, inter: disnake.ApplicationCommandInteraction) -> None:
+        """Open the administrator interface for managing shop items."""
         if not inter.guild or not self._admin(inter.author):
             await inter.response.send_message("⛔ Доступ только для владельца и администратора.", ephemeral=True)
             return
@@ -98,18 +105,23 @@ class Shop(commands.Cog):
         await inter.response.send_message(embed=embed, view=ShopAdminView(self), ephemeral=True)
 
     async def create(self, interaction: disnake.MessageInteraction) -> None:
+        """Open the modal used to create a shop item."""
         await interaction.response.send_modal(ShopItemModal(self, mode="create"))
 
     async def edit(self, interaction: disnake.MessageInteraction) -> None:
+        """Open the modal used to edit a shop item."""
         await interaction.response.send_modal(ShopItemModal(self, mode="edit"))
 
     async def toggle(self, interaction: disnake.MessageInteraction) -> None:
+        """Open the modal used to enable or disable a shop item."""
         await interaction.response.send_modal(ShopToggleModal(self))
 
     async def remove(self, interaction: disnake.MessageInteraction) -> None:
+        """Open the modal used to delete a shop item."""
         await interaction.response.send_modal(ShopDeleteModal(self))
 
     async def save_item(self, interaction: disnake.ModalInteraction, mode: str) -> None:
+        """Validate modal data and create or update the requested item."""
         try:
             values = interaction.text_values
             name = values["name"].strip()
@@ -133,6 +145,7 @@ class Shop(commands.Cog):
             await interaction.response.send_message("❌ Некорректные данные товара.", ephemeral=True)
 
     async def toggle_item(self, interaction: disnake.ModalInteraction) -> None:
+        """Apply the enabled/disabled state submitted by the administrator."""
         try:
             item_id = int(interaction.text_values["item_id"].strip())
             enabled = interaction.text_values["enabled"].strip().lower() in {"1", "true", "да", "on", "вкл"}
@@ -143,6 +156,7 @@ class Shop(commands.Cog):
             await interaction.response.send_message("❌ Некорректные данные.", ephemeral=True)
 
     async def delete_item(self, interaction: disnake.ModalInteraction) -> None:
+        """Delete the item identified by the administrator."""
         try:
             item_id = int(interaction.text_values["item_id"].strip())
             if not delete_item(interaction.guild.id, item_id):
@@ -153,28 +167,36 @@ class Shop(commands.Cog):
 
 
 class ShopAdminView(disnake.ui.View):
+    """Persistent controls for the administrator shop interface."""
+
     def __init__(self, cog: Shop):
-        super().__init__(timeout=None)
         self.cog = cog
+        super().__init__(timeout=None)
 
     @disnake.ui.button(label="➕ Создать", style=disnake.ButtonStyle.success, custom_id="shop_admin:create")
     async def create(self, button, interaction):
+        """Route the create button to the shop cog."""
         await self.cog.create(interaction)
 
     @disnake.ui.button(label="✏️ Изменить", style=disnake.ButtonStyle.primary, custom_id="shop_admin:edit")
     async def edit(self, button, interaction):
+        """Route the edit button to the shop cog."""
         await self.cog.edit(interaction)
 
     @disnake.ui.button(label="🔄 Вкл/выкл", style=disnake.ButtonStyle.secondary, custom_id="shop_admin:toggle")
     async def toggle(self, button, interaction):
+        """Route the enable/disable button to the shop cog."""
         await self.cog.toggle(interaction)
 
     @disnake.ui.button(label="🗑️ Удалить", style=disnake.ButtonStyle.danger, custom_id="shop_admin:delete")
     async def remove(self, button, interaction):
+        """Route the delete button to the shop cog."""
         await self.cog.remove(interaction)
 
 
 class ShopItemModal(disnake.ui.Modal):
+    """Modal for creating or editing a shop item."""
+
     def __init__(self, cog: Shop, mode: str):
         self.cog = cog
         self.mode = mode
@@ -190,10 +212,13 @@ class ShopItemModal(disnake.ui.Modal):
         super().__init__(title="Создать товар" if mode == "create" else "Изменить товар", components=components)
 
     async def callback(self, interaction):
+        """Pass submitted item data to the owning cog."""
         await self.cog.save_item(interaction, self.mode)
 
 
 class ShopToggleModal(disnake.ui.Modal):
+    """Modal for changing whether a shop item is enabled."""
+
     def __init__(self, cog: Shop):
         self.cog = cog
         super().__init__(title="Включить / выключить товар", components=[
@@ -202,18 +227,23 @@ class ShopToggleModal(disnake.ui.Modal):
         ])
 
     async def callback(self, interaction):
+        """Pass the submitted state to the owning cog."""
         await self.cog.toggle_item(interaction)
 
 
 class ShopDeleteModal(disnake.ui.Modal):
+    """Modal for deleting a shop item by ID."""
+
     def __init__(self, cog: Shop):
         self.cog = cog
         super().__init__(title="Удалить товар", components=[disnake.ui.TextInput(label="ID товара", custom_id="item_id", required=True, max_length=10)])
 
     async def callback(self, interaction):
+        """Pass the requested deletion to the owning cog."""
         await self.cog.delete_item(interaction)
 
 
 def setup(bot: commands.Bot) -> None:
+    """Register the shop cog with the bot."""
     bot.add_cog(Shop(bot))
     logger.info("Shop cog loaded")
