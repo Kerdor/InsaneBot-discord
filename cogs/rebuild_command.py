@@ -23,6 +23,8 @@ class RebuildCommand(commands.Cog):
     )
     @commands.is_owner()
     async def rebuild_test_server(self, inter: disnake.ApplicationCommandInteraction) -> None:
+        await inter.response.defer(ephemeral=True)
+
         logger.info(
             "[REBUILD] Команда вызвана: user=%s (%s), guild=%s (%s)",
             inter.author,
@@ -38,14 +40,14 @@ class RebuildCommand(commands.Cog):
                 inter.guild.id if inter.guild else None,
                 BotConfig.TEST_GUILD_ID,
             )
-            await inter.response.send_message(
+            await inter.followup.send(
                 "Эта команда доступна только на тестовом сервере при ENVIRONMENT=test.",
                 ephemeral=True,
             )
             return
 
         logger.info("[REBUILD] Показываем подтверждение пользователю %s", inter.author.id)
-        await inter.response.send_message(
+        await inter.followup.send(
             "⚠️ **ВНИМАНИЕ**\n\n"
             "Будут удалены все обычные каналы и роли, которые бот сможет удалить, "
             "после чего будет создана новая структура.\n\n"
