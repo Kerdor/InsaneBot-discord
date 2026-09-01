@@ -1,3 +1,5 @@
+"""Persistent per-guild configuration storage and settings audit history."""
+
 from __future__ import annotations
 
 import sqlite3
@@ -8,6 +10,7 @@ from config import BotConfig
 
 DB_PATH = Path(BotConfig.DATABASE_DIR) / "settings.db"
 
+# These values are the fallback configuration used until a guild-specific value is saved.
 DEFAULTS = {
     "xp_message_min": 15,
     "xp_message_max": 25,
@@ -35,12 +38,14 @@ DEFAULTS = {
 
 
 def _connect() -> sqlite3.Connection:
+    """Open a settings database connection with named-column row access."""
     connection = sqlite3.connect(DB_PATH)
     connection.row_factory = sqlite3.Row
     return connection
 
 
 def init_settings() -> None:
+    """Create settings and audit tables without modifying existing values."""
     with _connect() as connection:
         connection.execute("CREATE TABLE IF NOT EXISTS settings (guild_id INTEGER NOT NULL, key TEXT NOT NULL, value TEXT NOT NULL, PRIMARY KEY (guild_id, key))")
         connection.execute("CREATE TABLE IF NOT EXISTS settings_audit (id INTEGER PRIMARY KEY AUTOINCREMENT, guild_id INTEGER NOT NULL, user_id INTEGER NOT NULL, key TEXT NOT NULL, old_value TEXT, new_value TEXT NOT NULL, created_at TEXT NOT NULL)")
@@ -48,6 +53,7 @@ def init_settings() -> None:
 
 
 def get_setting(guild_id: int, key: str):
+    """Return a saved guild setting or its configured default."""
     init_settings()
     with _connect() as connection:
         row = connection.execute("SELECT value FROM settings WHERE guild_id = ? AND key = ?", (guild_id, key)).fetchone()
@@ -57,14 +63,17 @@ def get_setting(guild_id: int, key: str):
 
 
 def get_int(guild_id: int, key: str) -> int:
+    """Read a setting as an integer for numeric configuration consumers."""
     return int(get_setting(guild_id, key) or 0)
 
 
 def get_bool(guild_id: int, key: str) -> bool:
+    """Read a numeric setting as a boolean toggle."""
     return bool(get_int(guild_id, key))
 
 
 def set_setting(guild_id: int, user_id: int, key: str, value) -> tuple[bool, str, str]:
+    """Persist a known setting and record the change in the audit table."""
     if key not in DEFAULTS:
         raise KeyError(key)
     init_settings()
@@ -79,6 +88,7 @@ def set_setting(guild_id: int, user_id: int, key: str, value) -> tuple[bool, str
 
 
 def get_all(guild_id: int) -> dict[str, str | int]:
+    """Return all known defaults overlaid with explicitly saved guild values."""
     init_settings()
     with _connect() as connection:
         rows = connection.execute("SELECT key, value FROM settings WHERE guild_id = ?", (guild_id,)).fetchall()
