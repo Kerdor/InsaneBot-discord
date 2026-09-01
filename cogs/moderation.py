@@ -135,7 +135,8 @@ class ModerationTargetModal(disnake.ui.Modal):
         super().__init__(title=f"Модерация: {action}", components=components, custom_id=f"moderation:modal:{action}")
 
     async def callback(self, inter: disnake.ModalInteraction) -> None:
-        if not inter.guild or not isinstance(inter.author, disnake.Member) or not Moderation(inter.client)._is_staff(inter.author):
+        cog = inter.client.get_cog("Moderation")
+        if not inter.guild or not isinstance(inter.author, disnake.Member) or not isinstance(cog, Moderation) or not cog._is_staff(inter.author):
             await inter.response.send_message("Недостаточно прав.", ephemeral=True)
             return
         await inter.response.defer(ephemeral=True)
