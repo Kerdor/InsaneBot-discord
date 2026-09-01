@@ -7,6 +7,7 @@ from disnake.ext import commands
 
 from databases.achievements import ACHIEVEMENTS, add_progress, get_progress, init_achievements, record_activity_day, update_progress
 from databases.economy import get_user as get_economy_user, init_economy
+from databases.voice_stats import get_total_seconds
 from databases.xp import get_user as get_xp_user, init_xp
 
 logger = logging.getLogger(__name__)
@@ -30,7 +31,8 @@ class Achievements(commands.Cog):
         economy = get_economy_user(guild.id, user_id)
         if xp:
             update_progress(guild.id, user_id, "messages_1000", int(xp["message_count"]))
-            update_progress(guild.id, user_id, "voice_10h", int(xp["voice_xp"]) // 5)
+        voice_minutes = get_total_seconds(guild.id, user_id) // 60
+        update_progress(guild.id, user_id, "voice_10h", int(voice_minutes))
         if economy:
             update_progress(guild.id, user_id, "rich_10000", int(economy["balance"]))
 
