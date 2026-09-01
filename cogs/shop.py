@@ -83,6 +83,7 @@ class Shop(commands.Cog):
                 await inter.response.send_message("⚠️ Не удалось выдать роль, поэтому деньги возвращены. Попробуйте позже.", ephemeral=True)
                 return
 
+        self.bot.dispatch("shop_purchase", inter.guild.id, inter.author.id)
         await inter.response.send_message(f"🛍️ {message} Баланс: **{row['balance']}** 🪙.", ephemeral=True)
 
     @commands.slash_command(name="shop_admin", description="Управление товарами магазина")
