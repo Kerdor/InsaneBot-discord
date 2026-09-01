@@ -1,3 +1,5 @@
+"""Achievement tracking for persistent server activity and progression."""
+
 from __future__ import annotations
 
 import logging
@@ -18,15 +20,19 @@ class Achievements(commands.Cog):
 
     def __init__(self, bot: commands.Bot) -> None:
         self.bot = bot
+        # Achievements read progression from the XP/economy systems and keep
+        # their own persistent unlock/progress state in the achievements DB.
         init_achievements()
         init_economy()
         init_xp()
 
     async def _activity(self, guild: disnake.Guild, user_id: int) -> None:
+        """Record activity for the calendar-based active-days achievement."""
         days = record_activity_day(guild.id, user_id)
         update_progress(guild.id, user_id, "active_7_days", days)
 
     async def _check(self, guild: disnake.Guild, user_id: int) -> None:
+        """Synchronize achievement progress with the current persistent stats."""
         xp = get_xp_user(guild.id, user_id)
         economy = get_economy_user(guild.id, user_id)
         if xp:
@@ -38,6 +44,7 @@ class Achievements(commands.Cog):
 
     @commands.Cog.listener()
     async def on_message(self, message: disnake.Message) -> None:
+        """Use eligible messages to record activity and refresh achievements."""
         if not message.guild or message.author.bot or message.webhook_id is not None:
             return
         await self._activity(message.guild, message.author.id)
@@ -45,15 +52,19 @@ class Achievements(commands.Cog):
 
     @commands.Cog.listener()
     async def on_voice_state_update(self, member: disnake.Member, before: disnake.VoiceState, after: disnake.VoiceState) -> None:
+        """Record voice activity and refresh voice-dependent achievements."""
         if member.bot:
             return
         if before.channel is None and after.channel is not None:
             await self._activity(member.guild, member.id)
         if before.channel is not None and after.channel is None:
+            # Persistent voice duration is finalized by the voice-stats system;
+            # the achievement check therefore runs when the session ends.
             await self._check(member.guild, member.id)
 
     @commands.Cog.listener()
     async def on_shop_purchase(self, guild_id: int, user_id: int) -> None:
+        """Advance the shop-purchase achievement after a successful purchase event."""
         add_progress(guild_id, user_id, "shop_purchase", 1)
         guild = self.bot.get_guild(guild_id)
         if guild:
@@ -61,6 +72,7 @@ class Achievements(commands.Cog):
 
     @commands.slash_command(name="achievements", description="Показать достижения пользователя")
     async def achievements(self, inter: disnake.ApplicationCommandInteraction, member: disnake.Member | None = None) -> None:
+        """Display achievement progress and unlocked achievements for a member."""
         target = member or inter.author
         progress = get_progress(inter.guild.id, target.id)
         lines = []
@@ -80,5 +92,6 @@ class Achievements(commands.Cog):
 
 
 def setup(bot: commands.Bot) -> None:
+    """Register the achievements cog with the Discord bot."""
     bot.add_cog(Achievements(bot))
     logger.info("Achievements cog loaded")
