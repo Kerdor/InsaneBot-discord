@@ -1,5 +1,7 @@
 from __future__ import annotations
 
+"""SQLite persistence and atomic operations for the server economy."""
+
 import sqlite3
 from datetime import datetime, timezone
 from pathlib import Path
@@ -11,30 +13,35 @@ DB_PATH = Path(BotConfig.DATABASE_DIR) / "economy.db"
 
 
 def _connect() -> sqlite3.Connection:
+    """Open the economy database with dictionary-like row access."""
     connection = sqlite3.connect(DB_PATH)
     connection.row_factory = sqlite3.Row
     return connection
 
 
 def init_economy() -> None:
+    """Create the economy table when the database is initialized."""
     with _connect() as connection:
         connection.execute("""CREATE TABLE IF NOT EXISTS economy (guild_id INTEGER NOT NULL, user_id INTEGER NOT NULL, balance INTEGER NOT NULL DEFAULT 0, rare_currency INTEGER NOT NULL DEFAULT 0, daily_claimed_at TEXT, PRIMARY KEY (guild_id, user_id))""")
         connection.commit()
 
 
 def ensure_user(guild_id: int, user_id: int) -> None:
+    """Ensure a guild/user economy row exists before reading or modifying it."""
     with _connect() as connection:
         connection.execute("INSERT OR IGNORE INTO economy (guild_id, user_id) VALUES (?, ?)", (guild_id, user_id))
         connection.commit()
 
 
 def get_user(guild_id: int, user_id: int) -> sqlite3.Row:
+    """Return the persistent economy row for a guild member."""
     ensure_user(guild_id, user_id)
     with _connect() as connection:
         return connection.execute("SELECT * FROM economy WHERE guild_id = ? AND user_id = ?", (guild_id, user_id)).fetchone()
 
 
 def add_balance(guild_id: int, user_id: int, amount: int) -> sqlite3.Row:
+    """Add or subtract the requested amount and return the resulting balance row."""
     ensure_user(guild_id, user_id)
     with _connect() as connection:
         connection.execute("UPDATE economy SET balance = balance + ? WHERE guild_id = ? AND user_id = ?", (amount, guild_id, user_id))
@@ -43,6 +50,7 @@ def add_balance(guild_id: int, user_id: int, amount: int) -> sqlite3.Row:
 
 
 def transfer_balance(guild_id: int, sender_id: int, receiver_id: int, amount: int) -> tuple[bool, str, sqlite3.Row]:
+    """Transfer coins between two users while checking sender balance and amount."""
     if sender_id == receiver_id:
         return False, "Нельзя переводить монеты самому себе.", get_user(guild_id, sender_id)
     if amount < 1:
@@ -62,6 +70,7 @@ def transfer_balance(guild_id: int, sender_id: int, receiver_id: int, amount: in
 
 
 def claim_daily(guild_id: int, user_id: int) -> tuple[bool, sqlite3.Row, int]:
+    """Claim the daily reward if the 24-hour cooldown has expired."""
     row = get_user(guild_id, user_id)
     now = datetime.now(timezone.utc)
     if row["daily_claimed_at"]:
@@ -78,6 +87,7 @@ def claim_daily(guild_id: int, user_id: int) -> tuple[bool, sqlite3.Row, int]:
 
 
 def reward_message(guild_id: int, user_id: int) -> sqlite3.Row | None:
+    """Apply the configured message reward when the economy is enabled."""
     if not get_bool(guild_id, "economy_enabled"):
         return None
     reward = get_int(guild_id, "economy_message_reward")
