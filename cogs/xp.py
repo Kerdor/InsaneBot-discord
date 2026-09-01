@@ -10,6 +10,12 @@ from disnake.ext import commands
 
 from databases.achievements import get_unlocked, init_achievements
 from databases.economy import get_user as get_economy_user, init_economy, reward_message
+from databases.profile_customization import (
+    get_profile_customization,
+    init_profile_customization,
+    reset_profile_customization,
+    set_profile_customization,
+)
 from databases.settings import get_bool, get_int, init_settings
 from databases.voice_stats import get_session
 from databases.xp import add_message_xp, add_voice_xp, get_ranking, get_user, init_xp, set_level
@@ -29,6 +35,7 @@ class XP(commands.Cog):
         init_settings()
         init_economy()
         init_achievements()
+        init_profile_customization()
 
     @staticmethod
     def _level_for_xp(xp: int) -> int:
@@ -41,6 +48,17 @@ class XP(commands.Cog):
     @staticmethod
     def _now() -> datetime:
         return datetime.now(timezone.utc)
+
+    @staticmethod
+    def _normalize_hex_color(value: str) -> str | None:
+        value = value.strip().lstrip("#")
+        if len(value) != 6:
+            return None
+        try:
+            int(value, 16)
+        except ValueError:
+            return None
+        return f"#{value.upper()}"
 
     async def _apply_level(self, guild: disnake.Guild, user_id: int, row: object) -> bool:
         xp = int(row["xp"])
@@ -166,6 +184,9 @@ class XP(commands.Cog):
         required = max(1, next_floor - current_floor)
         achievements = len(get_unlocked(inter.guild.id, target.id))
 
+        customization_row = get_profile_customization(inter.guild.id, target.id)
+        customization = dict(customization_row) if customization_row else {}
+
         card = await generate_profile_card(target, {
             "level": level,
             "progress": progress,
@@ -176,8 +197,64 @@ class XP(commands.Cog):
             "messages": messages,
             "voice_xp": voice_xp,
             "achievements": achievements,
-        })
+        }, customization)
         await inter.response.send_message(file=disnake.File(card, filename="profile.png"))
+
+    @commands.slash_command(name="profile_customize", description="Настроить свою карточку профиля")
+    async def profile_customize(
+        self,
+        inter: disnake.ApplicationCommandInteraction,
+        background_color: str | None = None,
+        accent_color: str | None = None,
+        bio: str | None = None,
+        reset: bool = False,
+    ) -> None:
+        if reset:
+            reset_profile_customization(inter.guild.id, inter.author.id)
+            await inter.response.send_message("✅ Настройки карточки профиля сброшены.", ephemeral=True)
+            return
+
+        current = get_profile_customization(inter.guild.id, inter.author.id)
+        current_background = current["background_color"] if current else "#181B23"
+        current_accent = current["accent_color"] if current else "#FFD75A"
+        current_bio = current["bio"] if current else ""
+
+        normalized_background = current_background
+        if background_color is not None:
+            normalized_background = self._normalize_hex_color(background_color)
+            if normalized_background is None:
+                await inter.response.send_message(
+                    "❌ Цвет фона должен быть в формате `#RRGGBB`, например `#181B23`.",
+                    ephemeral=True,
+                )
+                return
+
+        normalized_accent = current_accent
+        if accent_color is not None:
+            normalized_accent = self._normalize_hex_color(accent_color)
+            if normalized_accent is None:
+                await inter.response.send_message(
+                    "❌ Акцентный цвет должен быть в формате `#RRGGBB`, например `#FFD75A`.",
+                    ephemeral=True,
+                )
+                return
+
+        normalized_bio = current_bio if bio is None else bio.strip()
+        if len(normalized_bio) > 70:
+            await inter.response.send_message("❌ Описание профиля должно содержать не более 70 символов.", ephemeral=True)
+            return
+
+        set_profile_customization(
+            inter.guild.id,
+            inter.author.id,
+            normalized_background,
+            normalized_accent,
+            normalized_bio,
+        )
+        await inter.response.send_message(
+            "✅ Настройки профиля сохранены. Используй `/profile`, чтобы увидеть изменения.",
+            ephemeral=True,
+        )
 
     @commands.slash_command(name="xp_ranking", description="Показать рейтинг по XP")
     async def xp_ranking(self, inter: disnake.ApplicationCommandInteraction) -> None:
