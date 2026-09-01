@@ -110,6 +110,7 @@ class BotConfig:
         "chat_logs": None,
         "guild_logs": None,
         "moderation_logs": None,
+        "setup_logs": None,
         "system_logs": None,
         "voice_logs": None,
         "reaction_logs": None,
@@ -145,6 +146,7 @@ class BotConfig:
         "cogs.logging.voice_stats",
         "cogs.logging.system_logs",
         "cogs.shop",
+        "cogs.quests",
         "cogs.admin_panel",
     )
 
@@ -214,6 +216,7 @@ class BotConfig:
             "chat_logs": channels.get("chat_logs"),
             "guild_logs": channels.get("guild_logs"),
             "moderation_logs": channels.get("moderation_logs"),
+            "setup_logs": channels.get("setup_logs"),
             "system_logs": channels.get("system_logs"),
             "voice_logs": channels.get("voice_logs"),
             "reaction_logs": channels.get("reaction_logs"),
@@ -243,6 +246,7 @@ class BotConfig:
                 "chat_logs": thread_ids.get("chat_logs"),
                 "guild_logs": thread_ids.get("guild_logs"),
                 "moderation_logs": thread_ids.get("moderation_logs"),
+                "setup_logs": thread_ids.get("setup_logs"),
                 "system_logs": thread_ids.get("system_logs"),
                 "voice_logs": thread_ids.get("voice_logs"),
                 "reaction_logs": thread_ids.get("reaction_logs"),
