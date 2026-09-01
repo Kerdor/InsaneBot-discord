@@ -8,10 +8,12 @@ from datetime import datetime, timezone
 import disnake
 from disnake.ext import commands
 
+from databases.achievements import get_unlocked, init_achievements
 from databases.economy import get_user as get_economy_user, init_economy, reward_message
 from databases.settings import get_bool, get_int, init_settings
 from databases.voice_stats import get_session
 from databases.xp import add_message_xp, add_voice_xp, get_ranking, get_user, init_xp, set_level
+from utils.profile_card import generate_profile_card
 
 logger = logging.getLogger(__name__)
 
@@ -26,6 +28,7 @@ class XP(commands.Cog):
         init_xp()
         init_settings()
         init_economy()
+        init_achievements()
 
     @staticmethod
     def _level_for_xp(xp: int) -> int:
@@ -157,21 +160,24 @@ class XP(commands.Cog):
         voice_xp = int(xp_row["voice_xp"])
         balance = int(economy_row["balance"])
         rare_currency = int(economy_row["rare_currency"])
-
         current_floor = (level - 1) ** 2 * 100
         next_floor = level ** 2 * 100
         progress = max(0, xp - current_floor)
         required = max(1, next_floor - current_floor)
+        achievements = len(get_unlocked(inter.guild.id, target.id))
 
-        embed = disnake.Embed(title=f"👤 Профиль — {target.display_name}", color=disnake.Color.blurple())
-        embed.set_thumbnail(url=target.display_avatar.url)
-        embed.add_field(name="⭐ Уровень", value=f"**{level}**\n{progress}/{required} XP", inline=True)
-        embed.add_field(name="💰 Баланс", value=f"**{balance:,}** 🪙".replace(",", " "), inline=True)
-        embed.add_field(name="💎 Редкая валюта", value=f"**{rare_currency}**", inline=True)
-        embed.add_field(name="💬 Сообщения", value=f"**{messages}**", inline=True)
-        embed.add_field(name="🔊 XP за голос", value=f"**{voice_xp}**", inline=True)
-        embed.add_field(name="📊 Всего XP", value=f"**{xp}**", inline=True)
-        await inter.response.send_message(embed=embed)
+        card = await generate_profile_card(target, {
+            "level": level,
+            "progress": progress,
+            "required": required,
+            "xp": xp,
+            "balance": balance,
+            "rare_currency": rare_currency,
+            "messages": messages,
+            "voice_xp": voice_xp,
+            "achievements": achievements,
+        })
+        await inter.response.send_message(file=disnake.File(card, filename="profile.png"))
 
     @commands.slash_command(name="xp_ranking", description="Показать рейтинг по XP")
     async def xp_ranking(self, inter: disnake.ApplicationCommandInteraction) -> None:
