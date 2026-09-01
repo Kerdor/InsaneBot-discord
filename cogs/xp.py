@@ -1,3 +1,5 @@
+"""XP, levels, voice progression, profile display, and profile customization."""
+
 from __future__ import annotations
 
 import logging
@@ -29,8 +31,13 @@ class XP(commands.Cog):
 
     def __init__(self, bot: commands.Bot) -> None:
         self.bot = bot
+        # These in-memory timestamps cover the active process. Persistent XP
+        # itself stays in the XP database, so reconnects do not reset progress.
         self._message_cooldowns: dict[tuple[int, int], datetime] = {}
         self._voice_started: dict[tuple[int, int], datetime] = {}
+
+        # XP depends on several persistent systems; initialize their schemas
+        # here because this cog writes to them during normal progression.
         init_xp()
         init_settings()
         init_economy()
@@ -39,18 +46,22 @@ class XP(commands.Cog):
 
     @staticmethod
     def _level_for_xp(xp: int) -> int:
+        """Convert total XP to the project's quadratic level progression."""
         return max(1, int(math.sqrt(max(0, xp) / 100)) + 1)
 
     @staticmethod
     def _counted_voice(channel: disnake.abc.GuildChannel | None, guild: disnake.Guild) -> bool:
+        """Return whether a voice channel should contribute to voice XP."""
         return isinstance(channel, disnake.VoiceChannel) and channel.id != getattr(guild.afk_channel, "id", None)
 
     @staticmethod
     def _now() -> datetime:
+        """Return an aware UTC timestamp used for progression intervals."""
         return datetime.now(timezone.utc)
 
     @staticmethod
     def _normalize_hex_color(value: str) -> str | None:
+        """Normalize a six-digit profile color and reject invalid input."""
         value = value.strip().lstrip("#")
         if len(value) != 6:
             return None
@@ -61,11 +72,15 @@ class XP(commands.Cog):
         return f"#{value.upper()}"
 
     async def _apply_level(self, guild: disnake.Guild, user_id: int, row: object) -> bool:
+        """Persist a newly reached level and notify the member by DM."""
         xp = int(row["xp"])
         old_level = int(row["level"])
         new_level = self._level_for_xp(xp)
         if new_level <= old_level:
             return False
+
+        # The database remains the source of truth; the DM is only a user-facing
+        # notification and therefore must not prevent the level from being saved.
         set_level(guild.id, user_id, new_level)
         member = guild.get_member(user_id)
         if member:
@@ -78,6 +93,7 @@ class XP(commands.Cog):
 
     @commands.Cog.listener()
     async def on_ready(self) -> None:
+        """Recover active counted voice sessions after a Discord reconnect."""
         now = self._now()
         for guild in self.bot.guilds:
             for channel in guild.voice_channels:
@@ -88,6 +104,8 @@ class XP(commands.Cog):
                         continue
                     session = get_session(guild.id, member.id)
                     if session:
+                        # Reuse the persistent voice-session start when available
+                        # so a reconnect does not discard already accrued time.
                         self._voice_started[(guild.id, member.id)] = datetime.fromisoformat(session["joined_at"])
                     else:
                         self._voice_started[(guild.id, member.id)] = now
@@ -95,16 +113,19 @@ class XP(commands.Cog):
 
     @commands.Cog.listener()
     async def on_message(self, message: disnake.Message) -> None:
+        """Award randomized message XP subject to the per-user cooldown."""
         if not message.guild or message.author.bot or message.webhook_id is not None:
             return
         if not get_bool(message.guild.id, "xp_enabled"):
             return
+
         now = self._now()
         key = (message.guild.id, message.author.id)
         last = self._message_cooldowns.get(key)
         cooldown = get_int(message.guild.id, "xp_message_cooldown")
         if last and (now - last).total_seconds() < cooldown:
             return
+
         self._message_cooldowns[key] = now
         xp_min = get_int(message.guild.id, "xp_message_min")
         xp_max = get_int(message.guild.id, "xp_message_max")
@@ -113,6 +134,7 @@ class XP(commands.Cog):
         await self._apply_level(message.guild, message.author.id, row)
 
     async def _finish_voice(self, member: disnake.Member, started: datetime, ended: datetime) -> None:
+        """Convert a completed counted voice interval into persistent XP."""
         if not get_bool(member.guild.id, "xp_enabled"):
             return
         minutes = int(max(0, (ended - started).total_seconds()) // 60)
@@ -123,12 +145,15 @@ class XP(commands.Cog):
 
     @commands.Cog.listener()
     async def on_voice_state_update(self, member: disnake.Member, before: disnake.VoiceState, after: disnake.VoiceState) -> None:
+        """Track counted voice intervals and settle XP when they end."""
         if member.bot:
             return
+
         before_counted = self._counted_voice(before.channel, member.guild)
         after_counted = self._counted_voice(after.channel, member.guild)
         key = (member.guild.id, member.id)
         now = self._now()
+
         if not before_counted and after_counted:
             self._voice_started[key] = now
             return
@@ -137,12 +162,15 @@ class XP(commands.Cog):
             await self._finish_voice(member, started, now)
             return
         if before_counted and after_counted and before.channel.id != after.channel.id:
+            # Moving between counted channels ends one interval and starts another;
+            # this keeps channel transitions aligned with the existing session model.
             started = self._voice_started.pop(key, now)
             await self._finish_voice(member, started, now)
             self._voice_started[key] = now
 
     @commands.slash_command(name="level", description="Показать уровень и XP")
     async def level(self, inter: disnake.ApplicationCommandInteraction, member: disnake.Member | None = None) -> None:
+        """Show level, XP, message count, and voice XP for a member."""
         target = member or inter.author
         row = get_user(inter.guild.id, target.id)
         if row is None:
@@ -168,6 +196,7 @@ class XP(commands.Cog):
 
     @commands.slash_command(name="profile", description="Показать профиль пользователя")
     async def profile(self, inter: disnake.ApplicationCommandInteraction, member: disnake.Member | None = None) -> None:
+        """Generate the user's profile card from progression, economy, and customization data."""
         target = member or inter.author
         xp_row = get_user(inter.guild.id, target.id)
         economy_row = get_economy_user(inter.guild.id, target.id)
@@ -191,6 +220,8 @@ class XP(commands.Cog):
         required = max(1, next_floor - current_floor)
         achievements = len(get_unlocked(inter.guild.id, target.id))
 
+        # Customization is optional; the renderer applies its own defaults when
+        # no saved row exists for the member.
         customization_row = get_profile_customization(inter.guild.id, target.id)
         customization = dict(customization_row) if customization_row else {}
 
@@ -216,6 +247,7 @@ class XP(commands.Cog):
         bio: str | None = None,
         reset: bool = False,
     ) -> None:
+        """Validate and persist visual profile-card customization."""
         if reset:
             reset_profile_customization(inter.guild.id, inter.author.id)
             await inter.response.send_message("✅ Настройки карточки профиля сброшены.", ephemeral=True)
@@ -265,6 +297,7 @@ class XP(commands.Cog):
 
     @commands.slash_command(name="xp_ranking", description="Показать рейтинг по XP")
     async def xp_ranking(self, inter: disnake.ApplicationCommandInteraction) -> None:
+        """Show the top ten members ordered by persistent XP."""
         rows = get_ranking(inter.guild.id, 10)
         if not rows:
             await inter.response.send_message("Пока нет XP-статистики.", ephemeral=True)
@@ -279,5 +312,6 @@ class XP(commands.Cog):
 
 
 def setup(bot: commands.Bot) -> None:
+    """Register the XP cog with the Discord bot."""
     bot.add_cog(XP(bot))
     logger.info("XP cog loaded")
