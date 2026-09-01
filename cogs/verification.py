@@ -68,6 +68,7 @@ class Verification(commands.Cog):
     def __init__(self, bot: commands.Bot) -> None:
         self.bot = bot
         self._panel_message_id: int | None = None
+        self._panel_view_registered = False
 
     async def start_verification(self, interaction: disnake.MessageInteraction) -> None:
         if not interaction.guild or not isinstance(interaction.author, disnake.Member):
@@ -161,7 +162,9 @@ class Verification(commands.Cog):
 
     @commands.Cog.listener()
     async def on_ready(self) -> None:
-        self.bot.add_view(VerificationPanelView(self))
+        if not self._panel_view_registered:
+            self.bot.add_view(VerificationPanelView(self))
+            self._panel_view_registered = True
         await self._sync_existing_members()
         await self._ensure_panel()
 
