@@ -1,3 +1,5 @@
+"""SQLite persistence for user-owned temporary voice room configuration."""
+
 from __future__ import annotations
 
 import sqlite3
@@ -9,6 +11,7 @@ DB_PATH = BotConfig.DATABASE_DIR / "Insane.sqlite3"
 
 
 def _connect() -> sqlite3.Connection:
+    """Open the shared voice-room database and ensure its directory exists."""
     BotConfig.DATABASE_DIR.mkdir(parents=True, exist_ok=True)
     connection = sqlite3.connect(DB_PATH)
     connection.row_factory = sqlite3.Row
@@ -16,6 +19,7 @@ def _connect() -> sqlite3.Connection:
 
 
 def init_voice_rooms() -> None:
+    """Create room, member/co-owner and per-user preference tables."""
     with _connect() as connection:
         connection.execute(
             """
@@ -59,6 +63,7 @@ def init_voice_rooms() -> None:
 
 
 def get_room(guild_id: int, owner_id: int) -> sqlite3.Row | None:
+    """Return a user's room configuration in the guild, if it exists."""
     with _connect() as connection:
         return connection.execute(
             "SELECT * FROM voice_rooms WHERE guild_id = ? AND owner_id = ?",
@@ -67,6 +72,7 @@ def get_room(guild_id: int, owner_id: int) -> sqlite3.Row | None:
 
 
 def get_rooms_for_user(guild_id: int, user_id: int) -> list[sqlite3.Row]:
+    """Return rooms owned by or shared with a user."""
     with _connect() as connection:
         return connection.execute(
             """
@@ -85,6 +91,7 @@ def get_rooms_for_user(guild_id: int, user_id: int) -> list[sqlite3.Row]:
 
 
 def get_room_members(guild_id: int, owner_id: int) -> list[sqlite3.Row]:
+    """Return members and co-owner flags for a room."""
     with _connect() as connection:
         return connection.execute(
             """
@@ -98,6 +105,7 @@ def get_room_members(guild_id: int, owner_id: int) -> list[sqlite3.Row]:
 
 
 def get_room_by_channel(guild_id: int, channel_id: int) -> sqlite3.Row | None:
+    """Find a room by either its voice channel or control channel."""
     with _connect() as connection:
         return connection.execute(
             """
@@ -117,6 +125,7 @@ def save_room(
     user_limit: int,
     friends_only: bool,
 ) -> None:
+    """Create or replace the persisted room configuration."""
     with _connect() as connection:
         connection.execute(
             """
@@ -150,6 +159,7 @@ def update_room_channels(
     voice_channel_id: int | None,
     control_channel_id: int | None,
 ) -> None:
+    """Persist the Discord channel IDs associated with a room."""
     with _connect() as connection:
         connection.execute(
             """
@@ -169,6 +179,7 @@ def update_room_settings(
     user_limit: int,
     friends_only: bool,
 ) -> None:
+    """Persist room name, user limit and friends-only setting."""
     with _connect() as connection:
         connection.execute(
             """
@@ -182,6 +193,7 @@ def update_room_settings(
 
 
 def set_main_room(guild_id: int, user_id: int, owner_id: int) -> None:
+    """Set the user's preferred room owner for the guild."""
     with _connect() as connection:
         connection.execute(
             """
@@ -195,6 +207,7 @@ def set_main_room(guild_id: int, user_id: int, owner_id: int) -> None:
 
 
 def get_main_room(guild_id: int, user_id: int) -> sqlite3.Row | None:
+    """Return the user's preferred room if its owner still has a room."""
     with _connect() as connection:
         return connection.execute(
             """
@@ -209,6 +222,7 @@ def get_main_room(guild_id: int, user_id: int) -> sqlite3.Row | None:
 
 
 def add_member(guild_id: int, owner_id: int, user_id: int, coowner: bool = False) -> None:
+    """Add a room member or update their co-owner flag."""
     with _connect() as connection:
         connection.execute(
             """
@@ -222,6 +236,7 @@ def add_member(guild_id: int, owner_id: int, user_id: int, coowner: bool = False
 
 
 def remove_member(guild_id: int, owner_id: int, user_id: int) -> None:
+    """Remove a user from a room's member list."""
     with _connect() as connection:
         connection.execute(
             """
@@ -234,14 +249,17 @@ def remove_member(guild_id: int, owner_id: int, user_id: int) -> None:
 
 
 def add_coowner(guild_id: int, owner_id: int, user_id: int) -> None:
+    """Add a user as a room co-owner."""
     add_member(guild_id, owner_id, user_id, coowner=True)
 
 
 def remove_coowner(guild_id: int, owner_id: int, user_id: int) -> None:
+    """Remove a user from the room's co-owner/member list."""
     remove_member(guild_id, owner_id, user_id)
 
 
 def get_coowners(guild_id: int, owner_id: int) -> list[int]:
+    """Return IDs of users marked as room co-owners."""
     with _connect() as connection:
         rows = connection.execute(
             """
@@ -255,6 +273,7 @@ def get_coowners(guild_id: int, owner_id: int) -> list[int]:
 
 
 def is_room_manager(guild_id: int, owner_id: int, user_id: int) -> bool:
+    """Return whether a user is the owner or a co-owner of a room."""
     if owner_id == user_id:
         return True
     with _connect() as connection:
