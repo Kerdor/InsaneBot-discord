@@ -70,3 +70,45 @@ def record_result(
         )
         connection.commit()
     return cursor.rowcount == 1
+
+
+def get_result(result_id: str) -> sqlite3.Row | None:
+    """Return one previously accepted Activity result."""
+    with _connect() as connection:
+        return connection.execute(
+            "SELECT * FROM activity_results WHERE result_id = ?",
+            (result_id,),
+        ).fetchone()
+
+
+def get_user_results(
+    guild_id: int,
+    user_id: int,
+    activity_key: str | None = None,
+    limit: int = 100,
+) -> list[sqlite3.Row]:
+    """Return a member's accepted Activity results, newest first."""
+    if limit < 1:
+        return []
+
+    with _connect() as connection:
+        if activity_key is None:
+            return connection.execute(
+                """
+                SELECT * FROM activity_results
+                WHERE guild_id = ? AND user_id = ?
+                ORDER BY received_at DESC
+                LIMIT ?
+                """,
+                (guild_id, user_id, limit),
+            ).fetchall()
+
+        return connection.execute(
+            """
+            SELECT * FROM activity_results
+            WHERE guild_id = ? AND user_id = ? AND activity_key = ?
+            ORDER BY received_at DESC
+            LIMIT ?
+            """,
+            (guild_id, user_id, activity_key, limit),
+        ).fetchall()
