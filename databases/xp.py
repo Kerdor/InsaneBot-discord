@@ -87,6 +87,23 @@ def add_voice_xp(guild_id: int, user_id: int, amount: int) -> sqlite3.Row:
         ).fetchone()
 
 
+def add_xp(guild_id: int, user_id: int, amount: int) -> sqlite3.Row:
+    """Add generic progression XP without altering message or voice counters."""
+    if amount <= 0:
+        raise ValueError("XP amount must be positive")
+    ensure_user(guild_id, user_id)
+    with _connect() as connection:
+        connection.execute(
+            "UPDATE user_xp SET xp = xp + ? WHERE guild_id = ? AND user_id = ?",
+            (amount, guild_id, user_id),
+        )
+        connection.commit()
+        return connection.execute(
+            "SELECT * FROM user_xp WHERE guild_id = ? AND user_id = ?",
+            (guild_id, user_id),
+        ).fetchone()
+
+
 def set_level(guild_id: int, user_id: int, level: int) -> None:
     """Persist a calculated level for an existing member row."""
     with _connect() as connection:
