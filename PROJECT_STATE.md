@@ -288,6 +288,32 @@ received_at
 
 This is **not** a complete Discord Activity integration. There is currently no external Activity/backend endpoint, signature verification, identity verification, anti-cheat validation, reward application pipeline, retry protocol or real Activity client.
 
+### Planned Activity games
+
+**Initial release:**
+
+```text
+Snake (Змейка)
+Sudoku (Судоку)
+Wordle
+```
+
+These three are the first planned Activities and are intentionally kept as the initial scope.
+
+**Future expansion:**
+
+```text
+2048
+Minesweeper (Сапёр)
+Tetris
+Flappy Bird
+Connect Four (Четыре в ряд)
+Chess (Шахматы)
+Checkers (Шашки)
+```
+
+These are future Activities, not part of the initial implementation scope. They can be added later using the same trusted-result architecture.
+
 Required final architecture remains:
 
 ```text
@@ -356,7 +382,8 @@ Current checkpoint:
 Core community/progression systems → IMPLEMENTED
 Mini-games → IMPLEMENTED / QA PENDING
 Social / Friends / Romantic → IMPLEMENTED / QA PENDING
-Discord Activities → FOUNDATION / real external boundary still required
+Discord Activities → FOUNDATION / initial games planned: Snake, Sudoku, Wordle
+Future Activities → 2048, Minesweeper, Tetris, Flappy Bird, Connect Four, Chess, Checkers
 Full QA → NOT STARTED
 ```
 
@@ -367,7 +394,7 @@ Full QA → NOT STARTED
  e90ab1944b3d93ca091b7ac2ccac964df9d532d4 → social commands/COG
 89b002e7ee6f19570393cecf012837a70bb11f72 → load social COG
 1fd67f7fbb319a61b691022c6e7c1801c57e5a9c → Activity result ledger
-CURRENT STATE UPDATE → this commit
+CURRENT STATE UPDATE → Activity roadmap expanded with initial and future games
 ```
 
 ## 24. NEW-CHAT CONTINUATION
