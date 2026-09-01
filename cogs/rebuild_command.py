@@ -1,3 +1,5 @@
+"""Owner-only command that starts the test-server rebuild workflow."""
+
 from __future__ import annotations
 
 import logging
@@ -12,6 +14,8 @@ logger = logging.getLogger(__name__)
 
 
 class RebuildCommand(commands.Cog):
+    """Expose the guarded test-server rebuild entry point."""
+
     def __init__(self, bot: commands.Bot) -> None:
         self.bot = bot
         self.rebuilder = RebuildTestServer(bot)
@@ -23,6 +27,7 @@ class RebuildCommand(commands.Cog):
     )
     @commands.is_owner()
     async def rebuild_test_server(self, inter: disnake.ApplicationCommandInteraction) -> None:
+        """Validate the test environment and present the rebuild confirmation UI."""
         await inter.response.defer(ephemeral=True)
 
         logger.info(
@@ -59,5 +64,6 @@ class RebuildCommand(commands.Cog):
 
 
 def setup(bot: commands.Bot) -> None:
+    """Register the rebuild command cog with the bot."""
     bot.add_cog(RebuildCommand(bot))
     logger.info("[REBUILD] RebuildCommand cog loaded")
