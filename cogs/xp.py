@@ -172,10 +172,17 @@ class XP(commands.Cog):
         xp_row = get_user(inter.guild.id, target.id)
         economy_row = get_economy_user(inter.guild.id, target.id)
 
-        xp = int(xp_row["xp"])
-        level = int(xp_row["level"])
-        messages = int(xp_row["message_count"])
-        voice_xp = int(xp_row["voice_xp"])
+        if xp_row is None:
+            xp = 0
+            level = 1
+            messages = 0
+            voice_xp = 0
+        else:
+            xp = int(xp_row["xp"])
+            level = int(xp_row["level"])
+            messages = int(xp_row["message_count"])
+            voice_xp = int(xp_row["voice_xp"])
+
         balance = int(economy_row["balance"])
         rare_currency = int(economy_row["rare_currency"])
         current_floor = (level - 1) ** 2 * 100
