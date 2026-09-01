@@ -1,3 +1,5 @@
+"""Moderation commands, persistent punishment history and moderation UI."""
+
 from __future__ import annotations
 
 import logging
@@ -14,12 +16,15 @@ logger = logging.getLogger(__name__)
 
 
 class Moderation(commands.Cog):
+    """Provide staff moderation commands and a persistent moderation panel."""
+
     def __init__(self, bot: commands.Bot) -> None:
         self.bot = bot
         init_moderation()
         bot.add_view(ModerationView())
 
     def _is_staff(self, member: disnake.Member) -> bool:
+        """Check whether a member has one of the configured moderation roles."""
         role_ids = {
             get_int(member.guild.id, "moderation_owner_role") if get_int(member.guild.id, "moderation_owner_role") else BotConfig.MODERATION_ROLES["owner"],
             get_int(member.guild.id, "moderation_administrator_role") if get_int(member.guild.id, "moderation_administrator_role") else BotConfig.MODERATION_ROLES["administrator"],
@@ -29,6 +34,7 @@ class Moderation(commands.Cog):
         return any(role.id in role_ids for role in member.roles)
 
     async def _check_staff(self, inter: disnake.ApplicationCommandInteraction | disnake.MessageInteraction) -> bool:
+        """Validate that an interaction is on a guild and comes from staff."""
         if not inter.guild or not isinstance(inter.author, disnake.Member) or not self._is_staff(inter.author):
             if not inter.response.is_done():
                 await inter.response.send_message("Недостаточно прав.", ephemeral=True)
@@ -36,6 +42,7 @@ class Moderation(commands.Cog):
         return True
 
     async def _log_action(self, guild, user, moderator, action: str, reason: str) -> None:
+        """Persist a moderation action and send it to the configured log thread."""
         add_punishment(guild.id, user.id, moderator.id, action, reason)
         channel_id = BotConfig.get_logging_channel(guild.id, "moderation_logs")
         channel = guild.get_channel(channel_id) if channel_id else None
@@ -44,6 +51,7 @@ class Moderation(commands.Cog):
 
     @commands.slash_command(name="warn", description="Выдать предупреждение пользователю")
     async def warn(self, inter, member: disnake.Member, reason: str = "Не указана") -> None:
+        """Issue a warning when the warning system is enabled."""
         if not await self._check_staff(inter):
             return
         if not get_bool(inter.guild.id, "moderation_warn_enabled"):
@@ -55,6 +63,7 @@ class Moderation(commands.Cog):
 
     @commands.slash_command(name="timeout", description="Выдать timeout пользователю")
     async def timeout(self, inter, member: disnake.Member, minutes: int, reason: str = "Не указана") -> None:
+        """Apply a bounded Discord timeout and persist its expiration."""
         if not await self._check_staff(inter):
             return
         if not get_bool(inter.guild.id, "moderation_timeout_enabled"):
@@ -72,6 +81,7 @@ class Moderation(commands.Cog):
 
     @commands.slash_command(name="kick", description="Кикнуть пользователя")
     async def kick(self, inter, member: disnake.Member, reason: str = "Не указана") -> None:
+        """Kick a member when the kick system is enabled."""
         if not await self._check_staff(inter):
             return
         if not get_bool(inter.guild.id, "moderation_kick_enabled"):
@@ -84,6 +94,7 @@ class Moderation(commands.Cog):
 
     @commands.slash_command(name="ban", description="Заблокировать пользователя")
     async def ban(self, inter, member: disnake.Member, reason: str = "Не указана") -> None:
+        """Ban a member when the ban system is enabled."""
         if not await self._check_staff(inter):
             return
         if not get_bool(inter.guild.id, "moderation_ban_enabled"):
@@ -96,6 +107,7 @@ class Moderation(commands.Cog):
 
     @commands.slash_command(name="unban", description="Разблокировать пользователя")
     async def unban(self, inter, user_id: str, reason: str = "Не указана") -> None:
+        """Unban a user by ID and persist the moderation action."""
         if not await self._check_staff(inter):
             return
         await inter.response.defer(ephemeral=True)
@@ -110,6 +122,7 @@ class Moderation(commands.Cog):
 
     @commands.slash_command(name="history", description="Показать историю наказаний пользователя")
     async def history(self, inter, member: disnake.Member) -> None:
+        """Display recent persistent punishment history to staff."""
         if not await self._check_staff(inter):
             return
         await inter.response.defer(ephemeral=True)
@@ -124,6 +137,8 @@ class Moderation(commands.Cog):
 
 
 class ModerationTargetModal(disnake.ui.Modal):
+    """Collect a target, optional reason and timeout duration from staff."""
+
     def __init__(self, action: str) -> None:
         self.action = action
         components = [
@@ -135,6 +150,7 @@ class ModerationTargetModal(disnake.ui.Modal):
         super().__init__(title=f"Модерация: {action}", components=components, custom_id=f"moderation:modal:{action}")
 
     async def callback(self, inter: disnake.ModalInteraction) -> None:
+        """Resolve the target and execute the selected moderation action."""
         cog = inter.client.get_cog("Moderation")
         if not inter.guild or not isinstance(inter.author, disnake.Member) or not isinstance(cog, Moderation) or not cog._is_staff(inter.author):
             await inter.response.send_message("Недостаточно прав.", ephemeral=True)
@@ -185,29 +201,37 @@ class ModerationTargetModal(disnake.ui.Modal):
 
 
 class ModerationView(disnake.ui.View):
+    """Persistent moderation action panel registered during cog startup."""
+
     def __init__(self) -> None:
         super().__init__(timeout=None)
 
     @disnake.ui.button(label="⚠️ Warn", style=disnake.ButtonStyle.secondary, custom_id="moderation:user")
     async def user(self, button, interaction):
+        """Open the warning modal."""
         await interaction.response.send_modal(ModerationTargetModal("warn"))
 
     @disnake.ui.button(label="⏱️ Timeout", style=disnake.ButtonStyle.secondary, custom_id="moderation:punishments")
     async def punishments(self, button, interaction):
+        """Open the timeout modal."""
         await interaction.response.send_modal(ModerationTargetModal("timeout"))
 
     @disnake.ui.button(label="👢 Kick", style=disnake.ButtonStyle.secondary, custom_id="moderation:kick")
     async def kick(self, button, interaction):
+        """Open the kick modal."""
         await interaction.response.send_modal(ModerationTargetModal("kick"))
 
     @disnake.ui.button(label="🔨 Ban", style=disnake.ButtonStyle.danger, custom_id="moderation:ban")
     async def ban(self, button, interaction):
+        """Open the ban modal."""
         await interaction.response.send_modal(ModerationTargetModal("ban"))
 
     @disnake.ui.button(label="📋 История", style=disnake.ButtonStyle.secondary, custom_id="moderation:history")
     async def history(self, button, interaction):
+        """Point staff to the history slash command."""
         await interaction.response.send_message("Используйте `/history @пользователь`.", ephemeral=True)
 
 
 def setup(bot: commands.Bot) -> None:
+    """Register the moderation cog with the Discord bot."""
     bot.add_cog(Moderation(bot))
