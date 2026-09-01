@@ -43,25 +43,27 @@ class TicketModal(disnake.ui.Modal):
         if not interaction.guild:
             await interaction.response.send_message("Тикеты доступны только на сервере.", ephemeral=True)
             return
+
+        await interaction.response.defer(ephemeral=True)
+
         if not get_bool(interaction.guild.id, "tickets_enabled"):
-            await interaction.response.send_message("🎫 Система тикетов сейчас отключена.", ephemeral=True)
+            await interaction.followup.send("🎫 Система тикетов сейчас отключена.", ephemeral=True)
             return
 
         existing = get_open_ticket(interaction.guild.id, interaction.author.id)
         if existing:
             thread = interaction.guild.get_thread(existing["thread_id"])
             if thread:
-                await interaction.response.send_message(f"У вас уже есть открытый тикет: {thread.mention}", ephemeral=True)
+                await interaction.followup.send(f"У вас уже есть открытый тикет: {thread.mention}", ephemeral=True)
                 return
             close_ticket(interaction.guild.id, existing["thread_id"])
 
         channel_id = get_int(interaction.guild.id, "tickets_channel") or BotConfig.CHANNELS.get("tickets", 0)
         channel = interaction.guild.get_channel(channel_id)
         if not isinstance(channel, disnake.TextChannel):
-            await interaction.response.send_message("Канал тикетов сейчас недоступен.", ephemeral=True)
+            await interaction.followup.send("Канал тикетов сейчас недоступен.", ephemeral=True)
             return
 
-        await interaction.response.defer(ephemeral=True)
         thread = await channel.create_thread(name=f"ticket-{interaction.author.name}", type=disnake.ChannelType.private_thread, reason="Ticket created")
         await thread.add_user(interaction.author)
 
@@ -127,15 +129,17 @@ class ConfirmCloseTicketView(disnake.ui.View):
         if not interaction.guild or not isinstance(interaction.channel, disnake.Thread):
             await interaction.response.send_message("Эта кнопка работает только внутри тикета.", ephemeral=True)
             return
-        ticket = get_ticket_by_thread(interaction.guild.id, interaction.channel.id)
-        if not ticket or ticket["status"] != "open":
-            await interaction.response.edit_message(content="Тикет уже закрыт.", view=None)
-            return
-        if not _is_moderator(interaction.author):
-            await interaction.response.send_message("Закрыть тикет может только администрация.", ephemeral=True)
-            return
 
         await interaction.response.defer()
+
+        ticket = get_ticket_by_thread(interaction.guild.id, interaction.channel.id)
+        if not ticket or ticket["status"] != "open":
+            await interaction.followup.send("Тикет уже закрыт.")
+            return
+        if not _is_moderator(interaction.author):
+            await interaction.followup.send("Закрыть тикет может только администрация.", ephemeral=True)
+            return
+
         transcript = await build_transcript(interaction.channel) if get_bool(interaction.guild.id, "tickets_transcript_enabled") else None
         close_ticket(interaction.guild.id, interaction.channel.id, interaction.author.id)
         parent = interaction.channel.parent
@@ -165,14 +169,17 @@ class CloseTicketView(disnake.ui.View):
         if not interaction.guild or not isinstance(interaction.channel, disnake.Thread):
             await interaction.response.send_message("Эта кнопка работает только внутри тикета.", ephemeral=True)
             return
+
+        await interaction.response.defer(ephemeral=True)
+
         ticket = get_ticket_by_thread(interaction.guild.id, interaction.channel.id)
         if not ticket or ticket["status"] != "open":
-            await interaction.response.send_message("Тикет уже закрыт.", ephemeral=True)
+            await interaction.followup.send("Тикет уже закрыт.", ephemeral=True)
             return
         if not _is_moderator(interaction.author):
-            await interaction.response.send_message("Закрыть тикет может только администрация.", ephemeral=True)
+            await interaction.followup.send("Закрыть тикет может только администрация.", ephemeral=True)
             return
-        await interaction.response.send_message("🔒 **Закрытие тикета**\n\nВы действительно хотите закрыть этот тикет?", ephemeral=True, view=ConfirmCloseTicketView(ticket["id"]))
+        await interaction.followup.send("🔒 **Закрытие тикета**\n\nВы действительно хотите закрыть этот тикет?", ephemeral=True, view=ConfirmCloseTicketView(ticket["id"]))
 
 
 class Tickets(commands.Cog):
@@ -210,14 +217,17 @@ class Tickets(commands.Cog):
         if not inter.guild or not isinstance(inter.channel, disnake.Thread):
             await inter.response.send_message("Команда доступна только внутри тикета.", ephemeral=True)
             return
+
+        await inter.response.defer(ephemeral=True)
+
         ticket = get_ticket_by_thread(inter.guild.id, inter.channel.id)
         if not ticket or ticket["status"] != "open":
-            await inter.response.send_message("Тикет уже закрыт.", ephemeral=True)
+            await inter.followup.send("Тикет уже закрыт.", ephemeral=True)
             return
         if not _is_moderator(inter.author):
-            await inter.response.send_message("Закрыть тикет может только администрация.", ephemeral=True)
+            await inter.followup.send("Закрыть тикет может только администрация.", ephemeral=True)
             return
-        await inter.response.send_message("🔒 **Закрытие тикета**\n\nВы действительно хотите закрыть этот тикет?", ephemeral=True, view=ConfirmCloseTicketView(ticket["id"]))
+        await inter.followup.send("🔒 **Закрытие тикета**\n\nВы действительно хотите закрыть этот тикет?", ephemeral=True, view=ConfirmCloseTicketView(ticket["id"]))
 
     @commands.Cog.listener()
     async def on_ready(self) -> None:
