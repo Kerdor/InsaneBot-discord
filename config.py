@@ -89,19 +89,19 @@ class BotConfig:
         "administrator": 519209661535223808,
         "moderator": 519209662181277726,
         "helper": 519209663519129600,
-    }
+    } if ENVIRONMENT == "test" else {}
 
     MEMBER_ROLE_ID = None
 
     OTHER_ROLES = {
         "Not verified": 1334302190625361994,
-    }
+    } if ENVIRONMENT == "test" else {}
 
     @staticmethod
     def iter_role_ids(role_dict: dict):
         return (role_id for role_id in role_dict.values() if isinstance(role_id, int))
 
-    CHANNELS = {"create_voice": 1336547276059050004}
+    CHANNELS = {"create_voice": 1336547276059050004} if ENVIRONMENT == "test" else {}
     LOGGING_FORUM_ID = None
 
     ASSETS = {"rules_image": ASSETS_DIR / "RULES.png"}
@@ -152,10 +152,18 @@ class BotConfig:
 
     @staticmethod
     def load_server_map() -> None:
-        if BotConfig.ENVIRONMENT != "test":
+        data = _load_server_map()
+        if not data:
             return
 
-        data = _load_server_map()
+        target_guild_id = BotConfig.TEST_GUILD_ID if BotConfig.ENVIRONMENT == "test" else BotConfig.MAIN_GUILD_ID
+        mapped_guild_id = data.get("guild_id")
+
+        if BotConfig.ENVIRONMENT == "production" and mapped_guild_id != target_guild_id:
+            return
+        if BotConfig.ENVIRONMENT == "test" and mapped_guild_id is not None and mapped_guild_id != target_guild_id:
+            return
+
         roles = data.get("roles", {})
         channels = data.get("channels", {})
 
