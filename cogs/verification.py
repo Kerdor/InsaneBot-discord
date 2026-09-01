@@ -1,3 +1,5 @@
+"""Member verification flow with persistent panel and role synchronization."""
+
 from __future__ import annotations
 
 import logging
@@ -13,6 +15,8 @@ logger = logging.getLogger(__name__)
 
 
 class VerificationAnswerView(disnake.ui.View):
+    """Short-lived answer buttons for the generated arithmetic challenge."""
+
     def __init__(self, cog: "Verification", expected: int) -> None:
         super().__init__(timeout=60)
         self.cog = cog
@@ -34,7 +38,9 @@ class VerificationAnswerView(disnake.ui.View):
             self.add_item(button)
 
     def _make_callback(self, value: int):
+        """Create the callback bound to one candidate answer."""
         async def callback(interaction: disnake.MessageInteraction) -> None:
+            """Validate the selected answer and finish verification when correct."""
             if value != self.expected:
                 await interaction.response.send_message(
                     "❌ Неверный ответ. Запусти проверку ещё раз.",
@@ -50,6 +56,8 @@ class VerificationAnswerView(disnake.ui.View):
 
 
 class VerificationPanelView(disnake.ui.View):
+    """Persistent entry panel that starts the verification challenge."""
+
     def __init__(self, cog: "Verification") -> None:
         super().__init__(timeout=None)
         self.cog = cog
@@ -61,16 +69,20 @@ class VerificationPanelView(disnake.ui.View):
         custom_id="verification:start",
     )
     async def start(self, _: disnake.ui.Button, interaction: disnake.MessageInteraction) -> None:
+        """Start a verification challenge for the interacting member."""
         await self.cog.start_verification(interaction)
 
 
 class Verification(commands.Cog):
+    """Manage verification challenges, member roles and the verification panel."""
+
     def __init__(self, bot: commands.Bot) -> None:
         self.bot = bot
         self._panel_message_id: int | None = None
         self._panel_view_registered = False
 
     async def start_verification(self, interaction: disnake.MessageInteraction) -> None:
+        """Generate and present an arithmetic verification challenge."""
         if not interaction.guild or not isinstance(interaction.author, disnake.Member):
             await interaction.response.send_message("❌ Проверка доступна только на сервере.", ephemeral=True)
             return
@@ -100,6 +112,7 @@ class Verification(commands.Cog):
         )
 
     async def complete_verification(self, interaction: disnake.MessageInteraction) -> None:
+        """Replace the pending-verification role with the member role."""
         if not interaction.guild or not isinstance(interaction.author, disnake.Member):
             await interaction.response.send_message("❌ Проверка доступна только на сервере.", ephemeral=True)
             return
@@ -139,6 +152,7 @@ class Verification(commands.Cog):
 
     @commands.Cog.listener()
     async def on_member_join(self, member: disnake.Member) -> None:
+        """Assign the pending-verification role to a new non-bot member."""
         if member.bot:
             return
         not_verified_role_id = BotConfig.OTHER_ROLES.get("Not verified")
@@ -152,6 +166,7 @@ class Verification(commands.Cog):
 
     @commands.Cog.listener()
     async def on_guild_role_create(self, role: disnake.Role) -> None:
+        """Re-sync member roles after the rebuild recreates the owner role."""
         if role.guild.id != BotConfig.TEST_GUILD_ID:
             return
         if role.name != ROLE_NAMES["owner"]:
@@ -162,6 +177,7 @@ class Verification(commands.Cog):
 
     @commands.Cog.listener()
     async def on_ready(self) -> None:
+        """Register the persistent panel view and reconcile existing member roles."""
         if not self._panel_view_registered:
             self.bot.add_view(VerificationPanelView(self))
             self._panel_view_registered = True
@@ -169,6 +185,7 @@ class Verification(commands.Cog):
         await self._ensure_panel()
 
     async def _sync_existing_members(self) -> None:
+        """Repair verification roles for members already present at startup."""
         for guild in self.bot.guilds:
             if BotConfig.ENVIRONMENT == "test" and guild.id != BotConfig.TEST_GUILD_ID:
                 continue
@@ -209,6 +226,7 @@ class Verification(commands.Cog):
                     logger.exception("[VERIFY] Не удалось синхронизировать роль: %s", member.id)
 
     async def _ensure_panel(self) -> None:
+        """Find the existing verification panel or create it in the configured channel."""
         for guild in self.bot.guilds:
             if BotConfig.ENVIRONMENT == "test" and guild.id != BotConfig.TEST_GUILD_ID:
                 continue
@@ -235,5 +253,6 @@ class Verification(commands.Cog):
 
 
 def setup(bot: commands.Bot) -> None:
+    """Register the verification cog with the Discord bot."""
     bot.add_cog(Verification(bot))
     logger.info("Verification cog loaded")
