@@ -1,3 +1,5 @@
+"""SQLite persistence for voice sessions, totals, per-channel stats and rankings."""
+
 from __future__ import annotations
 
 import sqlite3
@@ -10,6 +12,7 @@ DB_PATH = BotConfig.DATABASE_DIR / "Insane.sqlite3"
 
 
 def _connect() -> sqlite3.Connection:
+    """Open the voice statistics database and ensure its directory exists."""
     BotConfig.DATABASE_DIR.mkdir(parents=True, exist_ok=True)
     connection = sqlite3.connect(DB_PATH)
     connection.row_factory = sqlite3.Row
@@ -17,6 +20,7 @@ def _connect() -> sqlite3.Connection:
 
 
 def init_voice_stats() -> None:
+    """Create persistent voice totals, channel totals and active-session tables."""
     with _connect() as connection:
         connection.execute(
             """
@@ -54,6 +58,7 @@ def init_voice_stats() -> None:
 
 
 def start_session(guild_id: int, user_id: int, channel_id: int, joined_at: datetime) -> None:
+    """Persist or replace the member's currently active voice session."""
     with _connect() as connection:
         connection.execute(
             """
@@ -69,6 +74,7 @@ def start_session(guild_id: int, user_id: int, channel_id: int, joined_at: datet
 
 
 def get_session(guild_id: int, user_id: int) -> sqlite3.Row | None:
+    """Return one member's persisted active voice session, if present."""
     with _connect() as connection:
         return connection.execute(
             """
@@ -80,6 +86,7 @@ def get_session(guild_id: int, user_id: int) -> sqlite3.Row | None:
 
 
 def get_sessions(guild_id: int) -> list[sqlite3.Row]:
+    """Return all persisted active voice sessions for a guild."""
     with _connect() as connection:
         return connection.execute(
             """
@@ -91,6 +98,7 @@ def get_sessions(guild_id: int) -> list[sqlite3.Row]:
 
 
 def finish_session(guild_id: int, user_id: int, left_at: datetime) -> tuple[int, int] | None:
+    """Finalize a session, add elapsed time to totals, then remove the session."""
     with _connect() as connection:
         row = connection.execute(
             """
@@ -133,6 +141,7 @@ def finish_session(guild_id: int, user_id: int, left_at: datetime) -> tuple[int,
 
 
 def get_total_seconds(guild_id: int, user_id: int) -> int:
+    """Return a member's accumulated voice time in seconds."""
     with _connect() as connection:
         row = connection.execute(
             "SELECT total_seconds FROM voice_stats WHERE guild_id = ? AND user_id = ?",
@@ -142,6 +151,7 @@ def get_total_seconds(guild_id: int, user_id: int) -> int:
 
 
 def get_channel_seconds(guild_id: int, user_id: int) -> list[sqlite3.Row]:
+    """Return accumulated voice time grouped by channel."""
     with _connect() as connection:
         return connection.execute(
             """
@@ -155,6 +165,7 @@ def get_channel_seconds(guild_id: int, user_id: int) -> list[sqlite3.Row]:
 
 
 def get_ranking(guild_id: int, limit: int = 10) -> list[sqlite3.Row]:
+    """Return the guild's top voice-time members."""
     with _connect() as connection:
         return connection.execute(
             """
