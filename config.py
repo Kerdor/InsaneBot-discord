@@ -8,11 +8,20 @@ import disnake
 from dotenv import load_dotenv
 
 
+"""Central configuration for environment, guild targets, channels and COG loading.
+
+This module intentionally keeps deployment-sensitive IDs out of the normal production
+configuration. TEST may use generated server mappings, while production accepts only
+a mapping belonging to MAIN_GUILD_ID. Runtime logging channel mappings are stored
+separately in .logging_channels.json.
+"""
+
 PROJECT_DIR = Path(__file__).resolve().parent
 load_dotenv(PROJECT_DIR / ".env")
 
 
 def _required_env(name: str) -> str:
+    """Return a required environment variable or fail fast during startup."""
     value = os.getenv(name, "").strip()
     if not value:
         raise RuntimeError(f"Переменная {name} не задана в .env")
@@ -20,6 +29,7 @@ def _required_env(name: str) -> str:
 
 
 def _optional_int_env(name: str) -> int | None:
+    """Parse an optional integer environment variable without silently accepting bad data."""
     value = os.getenv(name, "").strip()
     if not value:
         return None
@@ -30,6 +40,7 @@ def _optional_int_env(name: str) -> int | None:
 
 
 def _load_server_map() -> dict:
+    """Load generated server IDs; invalid or missing files are treated as no mapping."""
     path = PROJECT_DIR / ".server_map.json"
     if not path.exists():
         return {}
@@ -40,6 +51,7 @@ def _load_server_map() -> dict:
 
 
 def _load_logging_channels() -> dict:
+    """Load persistent logging-channel IDs from the local runtime mapping file."""
     path = PROJECT_DIR / ".logging_channels.json"
     if not path.exists():
         return {}
@@ -50,6 +62,12 @@ def _load_logging_channels() -> dict:
 
 
 class BotConfig:
+    """Runtime configuration shared by every cog.
+
+    The active guild is selected by ENVIRONMENT. In TEST, generated server mappings
+    can replace placeholder IDs. In production, TEST-specific mappings are rejected.
+    """
+
     PROJECT_DIR = PROJECT_DIR
     TOKEN = _required_env("BOT_TOKEN")
     PREFIX = os.getenv("BOT_PREFIX", "!").strip() or "!"
@@ -77,6 +95,7 @@ class BotConfig:
 
     @staticmethod
     def ensure_asset(filename: str | Path) -> Path:
+        """Resolve an asset path and fail if the requested asset does not exist."""
         file_path = Path(filename)
         if not file_path.is_absolute():
             file_path = BotConfig.ASSETS_DIR / file_path
@@ -84,6 +103,8 @@ class BotConfig:
             raise FileNotFoundError(f"Asset file not found: {file_path}")
         return file_path
 
+    # Role/channel defaults are TEST-only placeholders. Rebuild/server mapping can
+    # replace them with IDs generated for the active guild.
     MODERATION_ROLES = {
         "owner": 519209664748191759,
         "administrator": 519209661535223808,
@@ -99,6 +120,7 @@ class BotConfig:
 
     @staticmethod
     def iter_role_ids(role_dict: dict):
+        """Yield integer role IDs from a role mapping."""
         return (role_id for role_id in role_dict.values() if isinstance(role_id, int))
 
     CHANNELS = {"create_voice": 1336547276059050004} if ENVIRONMENT == "test" else {}
@@ -127,6 +149,8 @@ class BotConfig:
         "BLUE": 0x3498DB,
     }
 
+    # Load order matters for some cross-cog integrations. admin_panel is also
+    # explicitly loaded by main.py for compatibility with the current architecture.
     COGS = (
         "cogs.owner",
         "cogs.owner_dump",
@@ -152,6 +176,11 @@ class BotConfig:
 
     @staticmethod
     def load_server_map() -> None:
+        """Apply a generated server map only when it belongs to the active guild.
+
+        This is the main TEST/MAIN isolation point: a TEST map must never silently
+        overwrite production IDs, and incomplete maps are ignored rather than partially applied.
+        """
         data = _load_server_map()
         if not data:
             return
@@ -216,6 +245,7 @@ class BotConfig:
 
     @staticmethod
     def load_logging_channels() -> None:
+        """Load log thread/channel IDs for the active guild, including old key compatibility."""
         data = _load_logging_channels()
         guild_id = str(BotConfig.TEST_GUILD_ID if BotConfig.ENVIRONMENT == "test" else BotConfig.MAIN_GUILD_ID)
         channels = data.get(guild_id, {})
@@ -236,6 +266,7 @@ class BotConfig:
 
     @staticmethod
     def set_logging_channels(guild_id: int, forum_id: int, thread_ids: dict[str, int]) -> None:
+        """Persist the logging forum/thread mapping and refresh the active runtime values."""
         data = _load_logging_channels()
         data[str(guild_id)] = {
             "forum_id": forum_id,
@@ -264,6 +295,7 @@ class BotConfig:
 
     @staticmethod
     def set_logging_channel(guild_id: int, log_type: str, channel_id: int) -> None:
+        """Persist one log destination and update the active in-memory value."""
         data = _load_logging_channels()
         guild_data = data.setdefault(str(guild_id), {})
         guild_data[log_type] = channel_id
@@ -286,6 +318,7 @@ class BotConfig:
 
     @staticmethod
     def get_logging_channel(guild_id: int | None, log_type: str) -> int | None:
+        """Return a guild-specific logging destination, falling back to runtime config."""
         data = _load_logging_channels()
         if guild_id is not None:
             channel_id = data.get(str(guild_id), {}).get(log_type)
@@ -296,6 +329,7 @@ class BotConfig:
 
     @staticmethod
     def validate() -> None:
+        """Validate required startup configuration and create runtime directories."""
         if not BotConfig.TOKEN:
             raise ValueError("BOT_TOKEN не задан в .env")
         if not BotConfig.COGS:
@@ -304,6 +338,7 @@ class BotConfig:
             directory.mkdir(parents=True, exist_ok=True)
 
 
+# Load persisted mappings before the bot imports/uses the cogs that depend on them.
 BotConfig.load_server_map()
 BotConfig.load_logging_channels()
 BotConfig.validate()
