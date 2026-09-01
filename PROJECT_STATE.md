@@ -38,15 +38,15 @@ Shop is primarily for server/community benefits such as Discord roles, not RPG i
 1. Levels/XP — implemented
 2. Economy — implemented/expanding
 3. Shop — implemented and runtime-tested; UI redesign postponed
-4. Profiles — basic `/profile` implemented; **next profile step is generated profile-card image**
+4. Profiles — generated profile-card image implemented; customization comes next
 5. Daily rewards — implemented
-6. **Quests — implemented MVP; runtime QA next**
+6. Quests — MVP implemented; detailed QA later
 7. PvP — **removed from current roadmap**
 8. Mini-games — future; Discord Activities are an accepted direction
 9. Rankings — XP/economy/voice implemented
-10. **Achievements — planned next after quests/profile-card work**
+10. Achievements — MVP implemented; detailed QA later
 11. Collecting — **removed from current roadmap for now**
-12. Profile customization — planned after generated profile card
+12. Profile customization — planned on top of generated profile-card architecture
 13. Social interactions — planned
 14. Voice-time rankings — implemented
 15. Friends — planned
@@ -57,13 +57,14 @@ Shop is primarily for server/community benefits such as Discord roles, not RPG i
 
 ### Agreed development order before full QA
 
-Finish currently selected functionality first:
+Finish all currently selected functionality first:
 1. Quests
 2. Achievements
-3. Profile card (replace current `/profile` Embed with generated image)
-4. Then perform detailed QA **one system at a time**.
+3. Generated profile card for `/profile`
+4. Profile customization on top of the card architecture
+5. Only then begin detailed QA, strictly one system at a time.
 
-Mini-games are a later feature and may include Discord Activities integrated with the main bot systems: XP, economy, quests, achievements and rankings.
+Mini-games are a later feature and may include Discord Activities integrated with XP, economy, quests, achievements and rankings.
 
 ## 4. TEST runtime
 
@@ -79,7 +80,7 @@ Bot: `Insane#6907`.
 
 MAIN guild is not connected during TEST runs; expected.
 
-`config.py` separates TEST/production, loads `.server_map.json` and `.logging_channels.json`, validates/creates required directories, and now loads `cogs.quests`.
+`config.py` separates TEST/production, loads `.server_map.json` and `.logging_channels.json`, validates/creates required directories, and loads the quests and achievements COGs.
 
 ## 5. Current COGs
 
@@ -102,16 +103,17 @@ cogs.logging.voice_stats
 cogs.logging.system_logs
 cogs.shop
 cogs.quests
+cogs.achievements
 cogs.admin_panel
 ```
 
-Before quests, all configured COGs loaded successfully and startup reached Discord normally.
+Before the latest feature commits, all configured COGs loaded successfully and startup reached Discord normally. Runtime verification of the newly added COGs remains part of the later QA phase.
 
 ## 6. Command sync
 
 Latest previously verified startup had 33 application commands in memory and Discord returned 33 registered TEST commands. `/shop`, `/buy`, `/shop_admin`, `/admin_panel` were available.
 
-After adding quests, command sync must be runtime-verified again. Expected new command: `/quests`.
+After adding quests and achievements, command sync must be runtime-verified again. Expected new commands: `/quests` and `/achievements`.
 
 ## 7. XP / Levels
 
@@ -164,13 +166,19 @@ Runtime tests completed 2026-08-31: display, CRUD/edit, disable/delete, nonexist
 
 Later redesign: more visual presentation, pagination, 5 or 10 items per page, bottom navigation and `◀ 1/2 ▶`. Do not implement until explicitly requested.
 
-## 10. Profile
+## 10. Profile / Profile Card
 
-Basic `/profile` currently uses XP/economy persistence and returns an Embed.
+`/profile` now uses the existing XP/economy persistence and generates a PNG profile card instead of returning the old Embed.
 
-**Agreed next step:** replace the Embed presentation with a generated profile-card image. Customization should be built on top of the card architecture, not before it.
+New renderer: `utils/profile_card.py`.
 
-## 11. Quests — MVP IMPLEMENTED, QA PENDING
+The card currently includes display name, level, XP progress, total XP, coins, rare currency, message count, voice XP and unlocked achievement count, plus the user's Discord avatar.
+
+Pillow was added to `requirements.txt` because actual PNG rendering is required for the profile-card feature.
+
+**Runtime QA remains pending.** Profile customization is intentionally not implemented yet; it should be built on top of this card architecture.
+
+## 11. Quests
 
 New persistent database: `databases/quests.py`, SQLite file `databases/quests.db`.
 
@@ -188,37 +196,47 @@ Current daily quests:
 
 Progress is stored per guild/user/quest/date. The date is UTC, so a new UTC day creates fresh progress without destructive cleanup.
 
-Completion is automatic: when a target is reached, the quest is atomically marked completed and the coin reward is granted. This prevents the same quest completion from paying twice under concurrent events.
+Completion is automatically marked once the target is reached and the reward is granted once. Bot/webhook messages and AFK voice channels are excluded. Existing persistent voice-session information is used for recovery after restart when available.
 
-Bot/webhook messages are excluded from the message quest. AFK voice channels are excluded. Voice sessions are recovered on `on_ready` using the existing persistent voice-session information when available.
+No new library was needed for quests. Existing economy storage is reused for rewards.
 
-No new libraries were added. Existing economy storage is reused for rewards.
+**Detailed runtime QA is intentionally postponed until all currently selected functionality is implemented.**
 
-### Quest verification still required
+## 12. Achievements — MVP IMPLEMENTED
 
-After runner pulls the commits, verify:
-- cog loads without errors;
-- `/quests` appears after command sync;
-- fresh user sees 0 progress;
-- each normal message increments only the message quest;
-- bot/webhook messages do not increment it;
-- exactly 10 messages completes once and pays 50 🪙;
-- repeated messages after completion do not pay again;
-- entering/leaving counted voice updates session quest and minutes correctly;
-- AFK channel does not count;
-- channel switching preserves accumulated voice minutes;
-- restart while in voice does not lose recoverable session time;
-- daily date boundary starts fresh progress;
-- DB persistence survives restart;
-- insufficient/failed economy scenarios do not silently duplicate rewards.
+New persistent database: `databases/achievements.py`, SQLite file `databases/achievements.db`.
 
-## 12. Admin panel
+New COG: `cogs/achievements.py`.
+
+Public command:
+```text
+/achievements
+```
+
+Current achievements:
+- `messages_1000`: 1000 messages
+- `voice_10h`: 10 hours of counted voice activity
+- `rich_10000`: 10 000 🪙 balance
+- `shop_purchase`: first successful shop purchase
+- `active_7_days`: activity on 7 different UTC dates
+
+Progress is persistent per guild/user. Achievement unlocks are permanent and are not reset with daily quests.
+
+Activity days are stored separately so repeated activity on one date does not inflate the count.
+
+Shop integration: a successful purchase dispatches `shop_purchase`, allowing the achievements COG to increment the purchase achievement without changing the shop's purchase logic.
+
+The achievements COG also derives message, voice and balance progress from the existing XP/economy persistence, avoiding duplicate statistic storage.
+
+**Detailed runtime QA is intentionally postponed until the current functionality-build stage is complete.**
+
+## 13. Admin panel
 
 `/admin_panel` is admin/owner restricted. Current areas: settings, logging, shop and economy balance management. Persistent server settings use `databases/settings.db` with audit history.
 
 Full QA remains pending.
 
-## 13. Logging
+## 14. Logging
 
 COGs:
 ```text
@@ -242,7 +260,7 @@ Fixed in `a0a515d24b81f3340bfb231e81513a5602068f8f`: cached destinations are val
 
 **Verification:** full `/rebuild` on 2026-09-01 completed without `Unknown Channel` / 404 logging errors.
 
-## 14. Moderation
+## 15. Moderation
 
 Implemented persistent moderation DB, slash commands, moderation panel and moderation logging:
 ```text
@@ -262,7 +280,7 @@ Fixed in commit `64c80fb3ab96fcb954ae7524d799a57feaa0247f`:
 
 Runtime QA remains: `/warn`, `/timeout`, `/kick`, `/ban`, `/unban`, `/history` and moderation-panel modals multiple times, plus logs/history correctness.
 
-## 15. Tickets
+## 16. Tickets
 
 Private-thread ticket system exists with creation, transcripts, recovery and persistent state.
 
@@ -284,7 +302,7 @@ After pulling/rebuilding or `/sync_server`, verify ordinary users cannot see `�
 - `cogs/tickets.py`: commit `1755d209f4bacf859a9da3396fef94e252140f6` — ticket modal, close button/command and close confirmation defer before DB/transcript work.
 - `cogs/rebuild_command.py`: commit `a6257712676522a2e31d4bf20ea773a8f4d0ca5e` — `/rebuild_test_server` defers immediately and uses followup.
 
-## 16. Verification — LIVE VERIFIED
+## 17. Verification — LIVE VERIFIED
 
 Current role hierarchy:
 ```text
@@ -296,7 +314,7 @@ Live verification already completed after `/rebuild`:
 - owner gets `Owner` without `Not verified`;
 - verification changes `Not verified → Member`.
 
-## 17. Server Manager / Rebuild
+## 18. Server Manager / Rebuild
 
 Role hierarchy fix commit: `4dea2a9d80e05672af8c5fd77dad12a1732db0f0`.
 
@@ -304,17 +322,15 @@ Rebuild/logging cache fix commit: `a0a515d24b81f3340bfb231e81513a5602068f8f`.
 
 Full rebuild previously completed successfully without Unknown Channel/404 logging errors.
 
-## 18. Runner
+## 19. Runner
 
 `dev_runner.py` polls every 5 seconds.
 
 Previously verified full pull → detect → stop child → restart child cycle.
 
-No separate `main.py` replacement is planned; the repository currently has `main.py` as the bot entrypoint and `dev_runner.py` as the development runner.
+The repository currently has `main.py` as the bot entrypoint and `dev_runner.py` as the development runner. Runner self-update is not implemented.
 
-Runner self-update is not implemented.
-
-## 19. Local DB caution
+## 20. Local DB caution
 
 Do not destructively reset/restore runtime DBs.
 
@@ -327,9 +343,10 @@ databases/settings.db
 databases/tickets.db
 databases/xp.db
 databases/quests.db
+databases/achievements.db
 ```
 
-## 20. QA strategy after functionality build
+## 21. QA strategy after functionality build
 
 User decision: **finish all currently selected functionality first, then test one system at a time in detail.**
 
@@ -347,7 +364,7 @@ For each system test at minimum:
 - rebuild/sync interactions;
 - race/concurrency-sensitive paths.
 
-Suggested QA order:
+Suggested QA order after the functionality stage:
 1. Tickets and recent timeout/privacy fixes
 2. Moderation
 3. Verification
@@ -355,18 +372,38 @@ Suggested QA order:
 5. Economy/daily/pay/rich
 6. Shop
 7. Quests
-8. Profile/profile card
-9. Rankings/voice stats
-10. Admin panel
-11. Rebuild/server manager
-12. Logging groups
-13. Runner
-14. Full regression
+8. Achievements
+9. Profile/profile card
+10. Rankings/voice stats
+11. Admin panel
+12. Rebuild/server manager
+13. Logging groups
+14. Runner
+15. Full regression
 
 After system-by-system QA, perform a final technical audit covering dead code, stale references, async correctness, interaction acknowledgement, permissions, role hierarchy, channels/threads, config, DB, runner, COG architecture, exceptions and race conditions.
 
-## 21. Next action
+## 22. Future roadmap after current functionality stage
 
-Quests MVP has been added directly to `main`. The next step is to pull/restart the TEST runner and verify startup plus `/quests` before proceeding to achievements.
+- Profile customization
+- Mini-games
+- Discord Activities integrated with XP/economy/quests/achievements/rankings
+- Social interactions
+- Friends
+- Romantic relationships
 
-Do not start the detailed full QA phase until quests, achievements and the generated profile-card step are finished.
+PvP and Collecting are not part of the current roadmap unless explicitly reconsidered later.
+
+## 23. Current development status
+
+The project is in the **functionality-build stage**, not the final QA stage.
+
+Recently added directly to `main`:
+- quests MVP;
+- achievements MVP;
+- generated PNG profile card;
+- Pillow dependency for profile rendering;
+- shop purchase event integration for achievements;
+- corresponding COG/config/state updates.
+
+Next development task: finish any remaining agreed functionality, especially profile customization on top of the generated card architecture. **Do not begin the detailed one-system-at-a-time QA phase until the current functionality stage is complete.**
