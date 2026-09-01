@@ -222,7 +222,7 @@ class BotConfig:
 
         BotConfig.CHANNEL_LOGS = {
             "chat_logs": channels.get("chat_logs"),
-            "guild_logs": channels.get("guild_logs"),
+            "guild_logs": channels.get("guild_logs") or channels.get("server_logs"),
             "moderation_logs": channels.get("moderation_logs"),
             "system_logs": channels.get("system_logs"),
             "voice_logs": channels.get("voice_logs"),
