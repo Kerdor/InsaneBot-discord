@@ -1,3 +1,5 @@
+"""SQLite persistence for support ticket threads and their lifecycle."""
+
 from __future__ import annotations
 
 import sqlite3
@@ -10,12 +12,14 @@ DB_PATH = Path(BotConfig.DATABASE_DIR) / "tickets.db"
 
 
 def _connect() -> sqlite3.Connection:
+    """Open the ticket database with named-column row access."""
     connection = sqlite3.connect(DB_PATH)
     connection.row_factory = sqlite3.Row
     return connection
 
 
 def init_tickets() -> None:
+    """Create the ticket schema and migrate older installations when needed."""
     with _connect() as connection:
         connection.execute(
             """
@@ -45,6 +49,7 @@ def init_tickets() -> None:
 
 
 def create_ticket(guild_id: int, author_id: int, thread_id: int) -> int:
+    """Persist a newly created open ticket and return its ID."""
     created_at = datetime.now(timezone.utc).isoformat()
     with _connect() as connection:
         cursor = connection.execute(
@@ -58,6 +63,7 @@ def create_ticket(guild_id: int, author_id: int, thread_id: int) -> int:
 
 
 def get_open_ticket(guild_id: int, author_id: int) -> sqlite3.Row | None:
+    """Return the newest open ticket belonging to a member."""
     with _connect() as connection:
         return connection.execute(
             "SELECT * FROM tickets WHERE guild_id = ? AND author_id = ? AND status = 'open' "
@@ -67,6 +73,7 @@ def get_open_ticket(guild_id: int, author_id: int) -> sqlite3.Row | None:
 
 
 def get_ticket_by_thread(guild_id: int, thread_id: int) -> sqlite3.Row | None:
+    """Return the ticket record associated with a Discord thread."""
     with _connect() as connection:
         return connection.execute(
             "SELECT * FROM tickets WHERE guild_id = ? AND thread_id = ? LIMIT 1",
@@ -75,6 +82,7 @@ def get_ticket_by_thread(guild_id: int, thread_id: int) -> sqlite3.Row | None:
 
 
 def close_ticket(guild_id: int, thread_id: int, closed_by: int | None = None) -> bool:
+    """Mark an open ticket closed and record its UTC close time and actor."""
     closed_at = datetime.now(timezone.utc).isoformat()
     with _connect() as connection:
         cursor = connection.execute(
@@ -87,6 +95,7 @@ def close_ticket(guild_id: int, thread_id: int, closed_by: int | None = None) ->
 
 
 def get_open_tickets(guild_id: int) -> list[sqlite3.Row]:
+    """Return all currently open tickets for a guild."""
     with _connect() as connection:
         return connection.execute(
             "SELECT * FROM tickets WHERE guild_id = ? AND status = 'open' ORDER BY id",
