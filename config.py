@@ -172,6 +172,7 @@ class BotConfig:
         "cogs.quests",
         "cogs.achievements",
         "cogs.minigames",
+        "cogs.social",
         "cogs.admin_panel",
     )
 
