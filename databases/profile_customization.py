@@ -1,5 +1,7 @@
 from __future__ import annotations
 
+"""SQLite persistence for per-server profile card customization."""
+
 import sqlite3
 from pathlib import Path
 
@@ -8,6 +10,7 @@ DB_PATH = Path(__file__).resolve().parent / "profile_customization.db"
 
 
 def init_profile_customization() -> None:
+    """Create the profile customization table when it does not exist."""
     with sqlite3.connect(DB_PATH) as connection:
         connection.execute(
             """
@@ -25,6 +28,7 @@ def init_profile_customization() -> None:
 
 
 def get_profile_customization(guild_id: int, user_id: int) -> sqlite3.Row | None:
+    """Return saved customization for one user on one guild, if present."""
     init_profile_customization()
     with sqlite3.connect(DB_PATH) as connection:
         connection.row_factory = sqlite3.Row
@@ -45,6 +49,7 @@ def set_profile_customization(
     accent_color: str,
     bio: str,
 ) -> None:
+    """Insert or replace the saved profile card customization."""
     init_profile_customization()
     with sqlite3.connect(DB_PATH) as connection:
         connection.execute(
@@ -67,6 +72,7 @@ def set_profile_customization(
 
 
 def reset_profile_customization(guild_id: int, user_id: int) -> None:
+    """Remove saved customization so profile rendering falls back to defaults."""
     init_profile_customization()
     with sqlite3.connect(DB_PATH) as connection:
         connection.execute(
