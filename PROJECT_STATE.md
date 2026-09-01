@@ -3,168 +3,74 @@
 Repository: https://github.com/Kerdor/InsaneBot-discord  
 Branch: `main`  
 State date: 2026-09-02  
-Current source branch: `main`
+Current phase: **IMPLEMENTATION FIRST**
 
-> This file is the authoritative hand-off document. GitHub `main` source is the final authority when source and this document disagree.
+> This file is the authoritative hand-off document. GitHub `main` is the final source of truth when source and this document disagree.
 
----
-
-# 1. BINDING DEVELOPMENT RULES
+## 1. BINDING DEVELOPMENT RULES
 
 - Inspect current `main` and this file before serious changes.
 - Preserve architecture and existing behavior unless a change is required.
 - Make the smallest correct change.
-- Do not add dependencies without a real requirement.
-- Never use `...` as omitted code in replacement code.
-- Changed functions must be provided completely when manual replacement is required.
+- No unnecessary dependencies.
+- Never use `...` as omitted code.
+- Changed functions must be complete when manual replacement is required.
 - Never delete/reset runtime databases.
 - Normal changes go directly to `main`.
-- After every project action/change, update this file with the current checkpoint.
+- **Update PROJECT_STATE.md after every project action/change.**
 - `IMPLEMENTED` does not mean `QA PASSED`.
 - CI success is not runtime QA.
 
-User development priority (binding):
+### User development priority
 
-1. Continue implementing all agreed/planned systems first.
-2. Do NOT start the full system-by-system QA phase until implementation of the planned systems is complete.
-3. After all planned implementation is complete, perform QA sequentially, one system at a time, updating this file after every QA action/result.
+1. Implement all agreed/planned systems first.
+2. Do not start full system-by-system QA until planned implementation is complete.
+3. Then perform integration cleanup, sequential QA, regression and technical cleanup.
+4. Update this file after every implementation/QA action.
 
----
-
-# 2. PRODUCT CONCEPT
+## 2. PRODUCT CONCEPT
 
 InsaneBot is a Discord **community/progression bot**, not a traditional RPG.
 
 Core loop:
 
 ```text
-Discord activity
- ├─ messages
- ├─ voice
- ├─ daily
- ├─ quests
- ├─ shop
- └─ mini-games / future Activities
-        ↓
- XP / Economy
-        ↓
- Levels / Rankings / Quests / Achievements / Profile
+Discord activity → XP / Economy → Levels / Rankings / Quests / Achievements / Profile
+messages / voice / daily / quests / shop / mini-games / future Activities
 ```
 
-Do not add without explicit approval:
+Do not add without explicit approval: talismans, combat items, loot boxes, RPG equipment/inventory, meaningless RPG stats, combat systems without community purpose, PvP, collecting.
 
-- talismans;
-- combat items;
-- loot boxes;
-- RPG equipment/inventory;
-- meaningless RPG stats;
-- combat systems without community purpose;
-- PvP;
-- collecting.
+Planned product directions: mini-games, Discord Activities, social interactions, Friends, Romantic relationships, richer profile cosmetics.
 
-Future product directions:
+## 3. TECHNOLOGY / ARCHITECTURE
 
-- mini-games;
-- Discord Activities;
-- social interactions;
-- Friends;
-- Romantic relationships;
-- richer profile cosmetics.
+Python; `disnake>=2.12.1,<3`; Pillow `>=11,<13`; built-in `sqlite3`.
 
----
-
-# 3. STATUS DEFINITIONS
-
-- `PLANNED` — agreed, not implemented.
-- `IN PROGRESS` — currently being implemented.
-- `IMPLEMENTED` — source implementation exists.
-- `INTEGRATION CHECK` — implementation exists and cross-system checks are required.
-- `RUNTIME TESTED` — manually tested for listed scenarios.
-- `QA PASSED` — detailed QA/regression completed.
-- `QA PENDING` — implementation exists but detailed QA is incomplete.
-- `POSTPONED` — deliberately postponed.
-- `REMOVED` — removed from roadmap.
-- `BLOCKED` — blocked by dependency/decision.
-
----
-
-# 4. CURRENT ARCHITECTURE
+Main structure:
 
 ```text
-.
-├── .env.example
-├── .gitattributes
-├── .gitignore
-├── .python-version
-├── PROJECT_STATE.md
-├── config.py
-├── dev_runner.py
-├── logs.py
-├── main.py
-├── requirements.txt
-├── server_structure.py
-├── cogs/
-│   ├── achievements.py
-│   ├── admin_panel.py
-│   ├── economy.py
-│   ├── minigames.py
-│   ├── moderation.py
-│   ├── owner.py
-│   ├── owner_dump.py
-│   ├── quests.py
-│   ├── rebuild_command.py
-│   ├── rebuild_test_server.py
-│   ├── server_manager.py
-│   ├── shop.py
-│   ├── tickets.py
-│   ├── verification.py
-│   ├── xp.py
-│   ├── logging/
-│   │   ├── __init__.py
-│   │   ├── base_logger.py
-│   │   ├── chat_logs.py
-│   │   ├── guild_logs.py
-│   │   ├── moderation_logs.py
-│   │   ├── reaction_logs.py
-│   │   ├── setup_logs.py
-│   │   ├── system_logs.py
-│   │   └── voice_stats.py
-│   └── user_cmd/
-│       ├── create_voice.py
-│       └── get_roles.py
-├── databases/
-│   ├── Insane.sqlite3
-│   ├── achievements.py
-│   ├── economy.py
-│   ├── moderation.py
-│   ├── profile_customization.py
-│   ├── quests.py
-│   ├── settings.py
-│   ├── shop.py
-│   ├── tickets.py
-│   ├── voice_rooms.py
-│   ├── voice_stats.py
-│   └── xp.py
-└── utils/
-    └── profile_card.py
+config.py
+main.py
+dev_runner.py
+server_structure.py
+logs.py
+cogs/
+  owner.py owner_dump.py rebuild_command.py rebuild_test_server.py
+  server_manager.py verification.py moderation.py tickets.py
+  xp.py economy.py shop.py quests.py achievements.py minigames.py social.py admin_panel.py
+  user_cmd/create_voice.py
+  logging/{chat_logs,guild_logs,moderation_logs,setup_logs,system_logs,voice_stats}.py
+  logging/reaction_logs.py (disabled)
+databases/
+  xp.py economy.py shop.py quests.py achievements.py
+  profile_customization.py moderation.py tickets.py voice_stats.py voice_rooms.py social.py
+utils/profile_card.py
 ```
 
-`README.md` is absent.
-`get_roles.py` is legacy/dead and unloaded.
-`reaction_logs.py` is intentionally disabled/unloaded.
+Legacy `get_roles.py` remains unloaded. `reaction_logs.py` remains intentionally disabled.
 
-Technology:
-
-- Python from `.python-version`.
-- `disnake>=2.12.1,<3`.
-- `Pillow>=11,<13`.
-- built-in `sqlite3`.
-
----
-
-# 5. TEST / MAIN
-
-Current development configuration:
+## 4. TEST / MAIN
 
 ```text
 ENVIRONMENT=test
@@ -174,23 +80,16 @@ TEST_GUILDS=[519209364280573954]
 ```
 
 TEST guild: `Insane TEST` / `519209364280573954`.
+Production must not silently consume TEST mappings.
 
-Production must never silently consume TEST server mappings.
-
-Relevant fixes:
+Historical isolation/logging fixes:
 
 ```text
 f4321d9aa022b7085c19b510cf965d073d4ed544 → TEST/MAIN isolation
 f19eedcf4f3bbc1476aabc9f17f6f355602e5590 → logging map compatibility
 ```
 
----
-
-# 6. STARTUP / COGS
-
-`main.py` loads `BotConfig.COGS`, explicitly ensures `cogs.admin_panel`, synchronizes TEST commands and runs the Discord lifecycle.
-
-Active COG order now includes:
+## 5. ACTIVE COG LOAD ORDER
 
 ```text
 cogs.owner
@@ -213,360 +112,224 @@ cogs.shop
 cogs.quests
 cogs.achievements
 cogs.minigames
+cogs.social
 cogs.admin_panel
 ```
 
-Expected progression commands now include `/minigame` in addition to:
+## 6. DATABASE MAP
 
 ```text
-/level /xp_ranking /balance /daily /pay /rich
-/shop /buy /profile /profile_customize /quests /achievements
-/voice /voice_ranking
-```
-
----
-
-# 7. DATABASES
-
-Persistent databases are real user/server state. Never reset them.
-
-```text
-xp.py                  → xp.db
-economy.py             → economy.db
-shop.py                → economy.db
-settings.py            → settings.db
-moderation.py          → moderation.db
-tickets.py             → tickets.db
-quests.py              → quests.db
-achievements.py        → achievements.db
+xp.py → xp.db
+economy.py → economy.db
+shop.py → economy.db
+settings.py → settings.db
+moderation.py → moderation.db
+tickets.py → tickets.db
+quests.py → quests.db
+achievements.py → achievements.db
 profile_customization.py → profile_customization.db
-voice_stats.py         → Insane.sqlite3
-voice_rooms.py         → configured persistence
+social.py → social.db
+voice_stats.py → Insane.sqlite3
+voice_rooms.py → configured persistence
 ```
 
-`databases/xp.py` now also has `add_xp(guild_id, user_id, amount)`. It adds generic XP without modifying message/voice counters and preserves existing rows.
+Runtime databases are real state and must never be reset.
 
----
+## 7. MASTER SYSTEM STATUS
 
-# 8. MASTER SYSTEM STATUS
+| System | Implementation | Runtime | QA |
+|---|---|---|---|
+| Configuration / TEST-MAIN | DONE | PARTIAL | PENDING |
+| COG loading / startup | DONE | HISTORICALLY VERIFIED | PENDING |
+| Owner/admin | DONE | PARTIAL | PENDING |
+| Server Manager | DONE | PARTIAL | PENDING |
+| Rebuild | DONE | PARTIAL | PENDING |
+| Verification | DONE | LIVE VERIFIED | PENDING |
+| Moderation | DONE | PARTIAL | PENDING |
+| Tickets | DONE | PARTIAL | PENDING |
+| Logging | DONE | PARTIAL | PENDING |
+| Voice statistics | DONE | PARTIAL | PENDING |
+| Voice rooms | DONE | PARTIAL | PENDING |
+| XP / Levels | DONE | PARTIAL | PENDING |
+| Economy / Daily | DONE | PARTIAL | PENDING |
+| Shop | DONE | TESTED | PENDING REGRESSION |
+| Quests | DONE | NOT STARTED | PENDING |
+| Achievements | DONE | NOT STARTED | PENDING |
+| Profile Card | DONE | NOT STARTED | PENDING |
+| Profile customization | DONE | NOT STARTED | PENDING |
+| Mini-games | DONE | NOT TESTED | PENDING AFTER IMPLEMENTATION |
+| Social / Friends / Romantic | DONE | NOT TESTED | PENDING AFTER IMPLEMENTATION |
+| Discord Activities | NOT STARTED | — | — |
+| PvP | REMOVED | — | — |
+| Collecting | REMOVED FOR NOW | — | — |
 
-| System | Implementation | Runtime | QA | Status |
-|---|---|---|---|---|
-| Configuration / TEST-MAIN | DONE | PARTIAL | PENDING | `IMPLEMENTED / QA PENDING` |
-| COG loading / startup | DONE | HISTORICALLY VERIFIED | PENDING | `IMPLEMENTED / QA PENDING` |
-| Owner/admin | DONE | PARTIAL | PENDING | `IMPLEMENTED / QA PENDING` |
-| Server Manager | DONE | PARTIAL | PENDING | `IMPLEMENTED / QA PENDING` |
-| Rebuild | DONE | PARTIAL | PENDING | `IMPLEMENTED / QA PENDING` |
-| Verification | DONE | LIVE VERIFIED | PENDING | `RUNTIME TESTED / QA PENDING` |
-| Moderation | DONE | PARTIAL | PENDING | `IMPLEMENTED / QA PENDING` |
-| Tickets | DONE | PARTIAL | PENDING | `IMPLEMENTED / QA PENDING` |
-| Logging | DONE | PARTIAL | PENDING | `IMPLEMENTED / QA PENDING` |
-| Voice statistics | DONE | PARTIAL | PENDING | `IMPLEMENTED / QA PENDING` |
-| Voice rooms | DONE | PARTIAL | PENDING | `IMPLEMENTED / QA PENDING` |
-| XP / Levels | DONE | PARTIAL | PENDING | `IMPLEMENTED / QA PENDING` |
-| Economy / Daily | DONE | PARTIAL | PENDING | `IMPLEMENTED / QA PENDING` |
-| Shop | DONE | TESTED | PENDING REGRESSION | `RUNTIME TESTED / QA PENDING` |
-| Quests | DONE | NOT STARTED | PENDING | `IMPLEMENTED / QA PENDING` |
-| Achievements | DONE | NOT STARTED | PENDING | `IMPLEMENTED / QA PENDING` |
-| Profile Card | DONE | NOT STARTED | PENDING | `IMPLEMENTED / QA PENDING` |
-| Profile customization | DONE | NOT STARTED | PENDING | `IMPLEMENTED / QA PENDING` |
-| Mini-games | DONE | NOT TESTED | NOT STARTED | `IMPLEMENTED / QA BLOCKED UNTIL IMPLEMENTATION PHASE ENDS` |
-| Discord Activities | NOT STARTED | — | — | `PLANNED` |
-| Social / Friends / Romantic | NOT STARTED | — | — | `PLANNED` |
-| PvP | — | — | — | `REMOVED` |
-| Collecting | — | — | — | `REMOVED FOR NOW` |
+## 8. XP / LEVELS
 
----
+Implemented in `cogs/xp.py` + `databases/xp.py`: persistent guild/user XP, message XP/cooldown, message count, counted voice XP, AFK exclusion, levels, `/level`, `/xp_ranking`, level-up DM, voice-session recovery, message economy reward, profile integration.
 
-# 9. XP / LEVELS
+Defaults: message XP 15–25; message cooldown 60s; voice 5/min; level threshold `100 * level²`; message economy reward 2.
 
-Implemented in `cogs/xp.py` + `databases/xp.py`:
+`databases/xp.py` also has `add_xp(guild_id, user_id, amount)` for generic progression XP without modifying message/voice counters.
 
-- persistent guild/user XP;
-- message XP/cooldown;
-- message counter;
-- counted voice XP;
-- AFK exclusion;
-- levels and automatic level calculation;
-- `/level`, `/xp_ranking`;
-- level-up DM;
-- persistent voice-session recovery;
-- message economy reward;
-- profile card and customization integration.
+## 9. ECONOMY / DAILY
 
-Defaults:
-
-```text
-xp_message_min=15
-xp_message_max=25
-xp_message_cooldown=60
-xp_voice_per_minute=5
-level threshold=100 * level²
-message economy reward=2
-```
-
-QA pending.
-
----
-
-# 10. ECONOMY / DAILY
-
-Implemented in `cogs/economy.py` + `databases/economy.py`:
-
-```text
-/balance /daily /pay /rich
-```
-
-Supports 🪙 and 💎 persistence, message rewards, daily reward, transfers, ranking, settings and Admin Panel adjustment.
+Implemented `/balance`, `/daily`, `/pay`, `/rich`; persistent coins and rare currency, message rewards, daily, transfers, ranking, settings and Admin Panel adjustment.
 
 Rare currency has persistence but no complete earning/spending loop yet.
-QA pending.
 
----
+## 10. SHOP
 
-# 11. SHOP
+Implemented `/shop` and `/buy`. Validates item/role/duplicate, charges economy, assigns role, refunds assignment failure and emits `shop_purchase` for achievements.
 
-Implemented/tested in `cogs/shop.py` + `databases/shop.py`.
+Runtime scenarios were tested 2026-08-31; regression QA remains pending.
 
-```text
-/shop /buy
-```
-
-Purchase flow validates item/role/duplicate, charges economy, assigns role, refunds on assignment failure and emits `shop_purchase` for achievements.
-
-Runtime scenarios were tested on 2026-08-31. Regression QA remains pending.
-
----
-
-# 12. QUESTS
-
-Implemented in `cogs/quests.py` + `databases/quests.py`.
+## 11. QUESTS
 
 Daily quests:
 
 ```text
-messages_10      → 10 messages → 50 🪙
-voice_30         → 30 counted voice minutes → 100 🪙
-voice_sessions_3 → 3 counted voice joins → 75 🪙
+messages_10 → 10 messages → 50 coins
+voice_30 → 30 counted voice minutes → 100 coins
+voice_sessions_3 → 3 counted voice joins → 75 coins
 ```
 
-Persistent per guild/user/date, UTC date, capped progress, one reward claim, bot/webhook exclusion, AFK exclusion and voice recovery.
+Persistent per guild/user/date; UTC date; capped progress; one claim; bots/webhooks excluded; AFK excluded; voice recovery. Known integration risk: quest completion and economy reward are separate persistence operations.
 
-Known integration risk: completion and economy reward are separate persistence operations, creating a crash window.
+## 12. ACHIEVEMENTS
 
----
+Implemented: `messages_1000`, `voice_10h`, `rich_10000`, `shop_purchase`, `active_7_days`.
 
-# 13. ACHIEVEMENTS
+Reuses XP, VoiceStats and Economy sources. Shop purchase consumes successful purchase event.
 
-Implemented in `cogs/achievements.py` + `databases/achievements.py`.
+## 13. PROFILE
 
-```text
-messages_1000
-voice_10h
-rich_10000
-shop_purchase
-active_7_days
-```
+`/profile` generates a 1000×460 PNG via Pillow with avatar, display name, level/XP, total XP, coins/rare currency, message count, voice XP, achievement count and bio.
 
-Progress reuses XP, VoiceStats and Economy sources. Shop purchase consumes the successful purchase event.
+`/profile_customize`: background color, accent color, bio, reset. Guild/user scoped persistence; colors normalized; bio max 70 chars. Long names and Unicode/Cyrillic remain QA candidates.
 
-QA pending.
+## 14. VOICE
 
----
+VoiceStats tracks persistent total/channel seconds and active sessions; AFK/bots excluded; restart recovery, channel moves and `on_ready` reconciliation.
 
-# 14. PROFILE
+Voice rooms provide private/user-created rooms, controls, access/co-owner management, persistence and cleanup. These systems remain separate.
 
-`/profile` generates a 1000×460 PNG using Pillow.
+## 15. VERIFICATION / MODERATION / TICKETS
 
-Current card data:
+Verification: arithmetic panel, role transition and owner synchronization. TEST role-create condition remains audit candidate.
 
-- avatar;
-- display name;
-- level/XP;
-- total XP;
-- coins/rare currency;
-- message count;
-- voice XP;
-- achievement count;
-- customized bio.
+Moderation: `/warn`, `/timeout`, `/kick`, `/ban`, `/unban`, `/history`; persistent actions, settings, hierarchy checks, history, logging, modal actions and interaction hardening.
 
-`/profile_customize` supports background color, accent color, short bio and reset. Persistence is guild/user scoped; colors are normalized; bio limit is 70 chars.
+Tickets: panel → modal → private thread → support → close confirmation → transcript → archive/lock; persistent state and ready recovery.
 
-QA pending, especially long names and Unicode/Cyrillic fallback.
+Historical fixes include role hierarchy, ticket parent privacy, ticket interaction timeout, moderation timeout, moderation modal COG reuse and verification persistent view.
 
----
+## 16. LOGGING / SERVER MANAGER / REBUILD
 
-# 15. VOICE
+Logging groups: chat / guild / moderation / setup / system / voice. Runtime mapping uses `.logging_channels.json` with `server_logs` compatibility.
 
-VoiceStats in `cogs/logging/voice_stats.py` + `databases/voice_stats.py` tracks persistent total/channel seconds and active sessions.
+Full rebuild on 2026-09-01 completed without the previous Unknown Channel / 404 logging errors.
 
-Rules: AFK excluded, bots excluded, restart recovery, channel move handling and `on_ready` reconciliation.
+Server Manager handles active guild targeting, managed permissions, synchronization, `/sync_server`, `/channel_create`.
 
-Voice rooms in `cogs/user_cmd/create_voice.py` + `databases/voice_rooms.py` provide private/user-created rooms, controls, access/co-owner management, persistence and cleanup.
+Rebuild is owner-only, TEST-restricted, confirmed, mapping-aware and database-preserving.
 
-Both systems consume voice events and must remain separate.
+## 17. MINI-GAMES — IMPLEMENTED
 
-QA pending.
+Files: `cogs/minigames.py`, `databases/xp.py`, `config.py`.
 
----
+Command: `/minigame` with `Математика`, `Реакция`, `Память`.
 
-# 16. VERIFICATION / MODERATION / TICKETS
+Rules: one active game per guild/user; 30-second cooldown after success/failure; only initiating user can operate buttons; expired games give no reward; XP-disabled servers cannot start; rewards use existing XP/economy; no gambling/betting; success gives +15 XP and +25 coins when economy enabled; existing XP level calculation is reused; memory sequence hides after 3 seconds; wrong answer ends without reward.
 
-Verification: arithmetic panel, role transition and owner synchronization. TEST role-create condition remains an audit candidate.
+No runtime QA yet. Known audit candidates: reward text when economy is disabled, timeout cooldown semantics, `_reward` dependency on XP COG and concurrency/restart behavior.
 
-Moderation: `/warn`, `/timeout`, `/kick`, `/ban`, `/unban`, `/history`; persistent actions, settings, hierarchy checks, history, logging and hardened interaction callbacks.
+## 18. SOCIAL / FRIENDS / ROMANTIC — NEW IMPLEMENTATION
 
-Tickets: panel → modal → private thread → support → close confirmation → transcript → archive/lock. Persistent state and ready-time recovery are implemented.
-
-QA pending for both.
-
-Relevant historical fixes:
-
-```text
-4dea2a9d80e05672af8c5fd77dad12a1732db0f0 → role hierarchy
-041dcb14bc4f2b9db0c01c0f1b687b03e6ce379c → ticket parent privacy
-1755d209f4bacf859a9da3396fef94e252140f6 → ticket interaction timeout
-64c80fb3ab96fcb954ae7524d799a57feaa0247f → moderation timeout
- d2c0509599b11359c1bc056dcac88c08deb7b141 → moderation modal COG reuse
-3767d4b7406f61b73437250ecc577259cd589371 → verification persistent view
-```
-
----
-
-# 17. LOGGING / SERVER MANAGER / REBUILD
-
-Logging groups:
-
-```text
-chat / guild / moderation / setup / system / voice
-```
-
-Runtime mapping uses `.logging_channels.json`, with `server_logs` compatibility. Full rebuild on 2026-09-01 completed without previous Unknown Channel / 404 logging errors.
-
-Server Manager handles active guild targeting, managed permissions, synchronization, `/sync_server` and `/channel_create`.
-
-Rebuild is owner-only, TEST-restricted, confirmed, mapping-aware and must preserve databases.
-
-QA pending.
-
----
-
-# 18. ADMIN / OWNER
-
-Admin Panel centralizes persistent server settings and audits changes.
-
-Owner/Owner Dump provide owner-level operational tools and are not part of the progression loop.
-
-Sensitive-data exposure and owner protection remain QA candidates.
-
----
-
-# 19. MINI-GAMES — CURRENT IMPLEMENTATION
-
-Status: `IMPLEMENTED / QA NOT STARTED`
+Status: `IMPLEMENTED / RUNTIME NOT TESTED / QA PENDING`.
 
 Files:
 
 ```text
-cogs/minigames.py
-databases/xp.py
+databases/social.py
+cogs/social.py
 config.py
 ```
 
-Command:
+Persistent `social.db` stores:
+
+- friend requests;
+- normalized friendships;
+- romantic requests;
+- normalized romantic relationships.
+
+Commands:
 
 ```text
-/minigame
+/friends
+/friends add <member>
+/friends accept <member>
+/friends remove <member>
+
+/relationship
+/relationship propose <member>
+/relationship accept <member>
+/relationship end <member>
 ```
 
-Available skill-based games:
+Rules currently implemented:
+
+- self-add/proposal is rejected;
+- friend request requires mutual acceptance;
+- duplicate/reverse friend requests are rejected;
+- romantic proposal requires an existing friendship;
+- romantic relationship requires mutual acceptance;
+- ending romance preserves friendship;
+- all state is guild-scoped and persistent;
+- relationship pairs are normalized to avoid duplicate direction records.
+
+No XP/economy rewards are attached yet; this avoids inventing a progression balance before QA/integration design.
+
+## 19. DISCORD ACTIVITIES — PLANNED / BLOCKED UNTIL REAL BOUNDARY
+
+Target:
 
 ```text
-Математика
-Реакция
-Память
-```
-
-Rules:
-
-- one active game per guild/user;
-- 30-second cooldown after completion/failure;
-- only the initiating user can operate the buttons;
-- expired games grant no reward;
-- XP-disabled servers cannot start games;
-- rewards reuse existing progression/economy storage;
-- no gambling/betting mechanic;
-- successful game gives `+15 XP` and, when economy is enabled, `+25 🪙`;
-- XP level calculation reuses the existing XP COG rather than creating a second level system;
-- memory sequence is hidden after three seconds;
-- wrong answers end the game without reward.
-
-`databases.xp.add_xp()` intentionally changes only total XP and does not inflate message/voice counters.
-
-No runtime test has been performed yet. Do not mark this system QA passed until the later global QA phase.
-
----
-
-# 20. FUTURE DISCORD ACTIVITIES
-
-Status: `PLANNED`
-
-Architecture target:
-
-```text
-Activity result
-   ↓
-trusted result integration
-   ↓
+verified Activity result
+        ↓
+trusted integration
+        ↓
 XP / Economy / Quests / Achievements / Rankings / Profile
 ```
 
-Before implementation define identity verification, guild verification, anti-cheat, reward calculation, idempotency, persistence and retry/failure semantics.
+Before implementation: identity verification, guild verification, anti-cheat, reward calculation, idempotency, persistence and retry/failure semantics must be defined.
 
 Do not fake external Activity results or mark an Activity integration complete without a real verified boundary.
 
----
-
-# 21. FUTURE SOCIAL SYSTEMS
-
-Status: `PLANNED`
-
-Potential directions:
-
-- social interactions;
-- Friends;
-- Romantic relationships.
-
-They must fit the community/progression concept and must not introduce traditional RPG systems.
-
----
-
-# 22. KNOWN TECHNICAL AUDIT ITEMS
+## 20. KNOWN AUDIT ITEMS
 
 High priority:
 
 - quest completion/reward atomicity;
 - moderation punishment vs logging failure;
-- TEST-specific verification role-create condition;
+- TEST verification role-create condition;
 - profile card long names and Unicode/Cyrillic fallback.
 
-Medium/low:
+Additional:
 
 - exact `active_7_days` semantics;
 - voice achievement timing;
 - legacy `get_roles.py`;
 - disabled `reaction_logs.py`;
 - guild-only command behavior;
-- permissions/role hierarchy edge cases;
+- permission/role hierarchy edges;
 - interaction acknowledgement;
 - duplicate event handling;
-- mini-game reward integration and concurrency behavior.
+- mini-game reward integration/concurrency;
+- social command and relationship concurrency/edge cases.
 
 Do not fix speculative issues without inspecting source/behavior first.
 
----
-
-# 23. QA STATE
+## 21. QA STATE
 
 ```text
 Detailed QA started: NO
@@ -574,71 +337,43 @@ Current QA system: NONE
 Current phase: IMPLEMENTATION FIRST
 ```
 
-Already runtime verified:
+Previously runtime verified: verification basics/role hierarchy; shop scenarios from 2026-08-31; full rebuild/logging recovery 2026-09-01; latest known logging-map Check workflow.
 
-- Verification basic flow and role hierarchy.
-- Shop scenarios from 2026-08-31.
-- Full rebuild/logging recovery on 2026-09-01 without previous Unknown Channel / 404 errors.
-- Latest known Check workflow for logging-map baseline.
+These are not full QA.
 
-These do not equal full QA.
-
----
-
-# 24. CURRENT DEVELOPMENT ORDER — USER OVERRIDE
-
-The old roadmap said documentation → integration audit → QA → expansion. The user has explicitly changed the immediate priority.
-
-Current order is:
+## 22. CURRENT DEVELOPMENT ORDER
 
 ```text
 1. Implement remaining planned systems.
-2. Integrate each new system with existing core where appropriate.
-3. Keep PROJECT_STATE.md updated after every action.
-4. Only when all planned implementation is complete:
-   → Integration cleanup
-   → Detailed QA, one system at a time
-   → Full regression
-   → Technical cleanup
+2. Integrate each new system where appropriate.
+3. Update PROJECT_STATE.md after every action.
+4. When implementation is complete:
+   → integration cleanup
+   → detailed QA, one system at a time
+   → full regression
+   → technical cleanup
 ```
 
-Current implementation checkpoint:
+Current checkpoint:
 
 ```text
-Core community/progression systems       → IMPLEMENTED
-Mini-games                                → IMPLEMENTED (new in this checkpoint)
-Discord Activities                         → PLANNED
-Social / Friends / Romantic                → PLANNED
-Full QA                                    → NOT STARTED
+Core community/progression systems → IMPLEMENTED
+Mini-games → IMPLEMENTED / QA PENDING
+Social / Friends / Romantic → IMPLEMENTED / QA PENDING
+Discord Activities → PLANNED / requires real verified external boundary
+Full QA → NOT STARTED
 ```
 
-Next implementation target: continue with the next planned system, not QA.
-
----
-
-# 25. IMPORTANT FIX HISTORY
+## 23. RECENT CHECKPOINT
 
 ```text
-b90d279960ba0a83822afd00fdf2e2aa0c39db07 → profile customization DB
-231fdab6110a6818028f4a2095d322be8de06884 → profile card customization
-06af69d097c5a9e45638e7f3a3897528d94f5057 → profile customization command
-55ac0a9043eed6cffc5e8d8d2fa60bf5fa020f21 → persistent actual voice time
-f4321d9aa022b7085c19b510cf965d073d4ed544 → TEST/MAIN isolation
-f19eedcf4f3bbc1476aabc9f17f6f355602e5590 → logging map compatibility
+27c49fd4c0ff0cf42c83d0e3851ed1eec1698d70 → persistent social database
+ e90ab1944b3d93ca091b7ac2ccac964df9d532d4 → social commands/COG
+89b002e7ee6f19570393cecf012837a70bb11f72 → load social COG
+CURRENT STATE UPDATE → this commit
 ```
 
-Recent current checkpoint commits:
-
-```text
-c80450ef6ecdb9fd8ec89ebf68cadbed4a50c1f0 → initial mini-games cog
-92d518e7d6396cdab13d3bee7a10bd537b392a99 → generic XP persistence
-566cae53fcfc640347e89311a02ae99d23f403ac → load mini-games COG
-18a084f82a87128b2c23d6c76cf9aafbf69ab760 → mini-game interaction/memory hardening
-```
-
----
-
-# 26. NEW-CHAT CONTINUATION
+## 24. NEW-CHAT CONTINUATION
 
 On every new chat:
 
@@ -651,6 +386,4 @@ On every new chat:
 7. Update this file immediately after the action.
 8. Continue from the new checkpoint.
 
-Never claim runtime success without runtime evidence.
-Never reset databases.
-Never use abbreviated replacement code.
+Never claim runtime success without runtime evidence. Never reset databases. Never use abbreviated replacement code.
