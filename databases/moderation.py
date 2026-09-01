@@ -1,3 +1,5 @@
+"""SQLite persistence for moderation punishment history."""
+
 from __future__ import annotations
 
 import sqlite3
@@ -10,12 +12,14 @@ DB_PATH = Path(BotConfig.DATABASE_DIR) / "moderation.db"
 
 
 def _connect() -> sqlite3.Connection:
+    """Open the moderation database with named-column row access."""
     connection = sqlite3.connect(DB_PATH)
     connection.row_factory = sqlite3.Row
     return connection
 
 
 def init_moderation() -> None:
+    """Create the punishment history table and its guild/user lookup index."""
     with _connect() as connection:
         connection.execute(
             """
@@ -46,6 +50,7 @@ def add_punishment(
     reason: str,
     expires_at: str | None = None,
 ) -> int:
+    """Store one moderation action with a UTC creation timestamp."""
     created_at = datetime.now(timezone.utc).isoformat()
     with _connect() as connection:
         cursor = connection.execute(
@@ -59,6 +64,7 @@ def add_punishment(
 
 
 def get_user_history(guild_id: int, user_id: int, limit: int = 20) -> list[sqlite3.Row]:
+    """Return the newest moderation records for a guild member."""
     with _connect() as connection:
         return connection.execute(
             "SELECT * FROM punishments WHERE guild_id = ? AND user_id = ? "
