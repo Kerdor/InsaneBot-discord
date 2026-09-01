@@ -57,15 +57,14 @@ server_structure.py
 logs.py
 cogs/
   owner.py owner_dump.py rebuild_command.py rebuild_test_server.py
-  server_manager.py verification.py moderation.py tickets.py
-  xp.py economy.py shop.py quests.py achievements.py minigames.py social.py admin_panel.py
+  server_manager.py verification.py moderation.py tickets.py xp.py economy.py shop.py quests.py achievements.py minigames.py social.py admin_panel.py
   user_cmd/create_voice.py
   logging/{chat_logs,guild_logs,moderation_logs,setup_logs,system_logs,voice_stats}.py
   logging/reaction_logs.py (disabled)
 databases/
   xp.py economy.py shop.py quests.py achievements.py
   profile_customization.py moderation.py tickets.py voice_stats.py voice_rooms.py social.py activities.py
-utils/profile_card.py
+utils/profile_card.py activity_registry.py
 ```
 
 Legacy `get_roles.py` remains unloaded. `reaction_logs.py` remains intentionally disabled.
@@ -270,7 +269,7 @@ No XP/economy rewards are attached yet.
 
 ## 19. DISCORD ACTIVITIES — FOUNDATION IMPLEMENTED
 
-A persistent idempotent result ledger now exists in `databases/activities.py`.
+A persistent idempotent result ledger exists in `databases/activities.py`.
 
 Stored fields:
 
@@ -285,6 +284,8 @@ received_at
 ```
 
 `result_id` is the primary key and duplicate results are ignored, providing the persistence/idempotency layer needed before rewards are applied.
+
+A static Activity registry now exists in `utils/activity_registry.py`. It defines the initial release games and the agreed future expansion list without assigning unapproved reward balances or pretending that external Activities already exist.
 
 This is **not** a complete Discord Activity integration. There is currently no external Activity/backend endpoint, signature verification, identity verification, anti-cheat validation, reward application pipeline, retry protocol or real Activity client.
 
@@ -347,7 +348,8 @@ Additional:
 - duplicate event handling;
 - mini-game reward integration/concurrency;
 - social command and relationship concurrency/edge cases;
-- Activity signature/identity/guild verification and reward integration.
+- Activity signature/identity/guild verification and reward integration;
+- Activity registry validation and initial-game implementation details.
 
 Do not fix speculative issues without inspecting source/behavior first.
 
@@ -383,6 +385,7 @@ Core community/progression systems → IMPLEMENTED
 Mini-games → IMPLEMENTED / QA PENDING
 Social / Friends / Romantic → IMPLEMENTED / QA PENDING
 Discord Activities → FOUNDATION / initial games planned: Snake, Sudoku, Wordle
+Activity registry → IMPLEMENTED / QA PENDING
 Future Activities → 2048, Minesweeper, Tetris, Flappy Bird, Connect Four, Chess, Checkers
 Full QA → NOT STARTED
 ```
@@ -394,7 +397,9 @@ Full QA → NOT STARTED
  e90ab1944b3d93ca091b7ac2ccac964df9d532d4 → social commands/COG
 89b002e7ee6f19570393cecf012837a70bb11f72 → load social COG
 1fd67f7fbb319a61b691022c6e7c1801c57e5a9c → Activity result ledger
-CURRENT STATE UPDATE → Activity roadmap expanded with initial and future games
+5946224802115e94940c5f2ab87f7bc6729731ab → Activity roadmap expanded with initial and future games
+9e584c6d80add5497c118db0aec0d5a23b0bc2da → Activity registry
+CURRENT STATE UPDATE → Activity registry checkpoint
 ```
 
 ## 24. NEW-CHAT CONTINUATION
