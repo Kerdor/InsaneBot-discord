@@ -38,7 +38,7 @@ Shop is primarily for server/community benefits such as Discord roles, not RPG i
 1. Levels/XP — implemented
 2. Economy — implemented/expanding
 3. Shop — implemented and runtime-tested; UI redesign postponed
-4. Profiles — generated profile-card image implemented; customization comes next
+4. Profiles — generated profile-card image implemented; customization implemented
 5. Daily rewards — implemented
 6. Quests — MVP implemented; detailed QA later
 7. PvP — **removed from current roadmap**
@@ -46,7 +46,7 @@ Shop is primarily for server/community benefits such as Discord roles, not RPG i
 9. Rankings — XP/economy/voice implemented
 10. Achievements — MVP implemented; detailed QA later
 11. Collecting — **removed from current roadmap for now**
-12. Profile customization — planned on top of generated profile-card architecture
+12. Profile customization — implemented on top of generated profile-card architecture
 13. Social interactions — planned
 14. Voice-time rankings — implemented
 15. Friends — planned
@@ -107,13 +107,13 @@ cogs.achievements
 cogs.admin_panel
 ```
 
-Before the latest feature commits, all configured COGs loaded successfully and startup reached Discord normally. Runtime verification of the newly added COGs remains part of the later QA phase.
+Before the latest feature commits, all configured COGs loaded successfully and startup reached Discord normally. Runtime verification of the newly added COGs and profile customization remains part of the later QA phase.
 
 ## 6. Command sync
 
 Latest previously verified startup had 33 application commands in memory and Discord returned 33 registered TEST commands. `/shop`, `/buy`, `/shop_admin`, `/admin_panel` were available.
 
-After adding quests and achievements, command sync must be runtime-verified again. Expected new commands: `/quests` and `/achievements`.
+After adding quests, achievements and profile customization, command sync must be runtime-verified again. Expected new commands include `/quests`, `/achievements` and `/profile_customize`.
 
 ## 7. XP / Levels
 
@@ -168,15 +168,38 @@ Later redesign: more visual presentation, pagination, 5 or 10 items per page, bo
 
 ## 10. Profile / Profile Card
 
-`/profile` now uses the existing XP/economy persistence and generates a PNG profile card instead of returning the old Embed.
+`/profile` uses the existing XP/economy persistence and generates a PNG profile card instead of the old Embed.
 
-New renderer: `utils/profile_card.py`.
+Renderer: `utils/profile_card.py`.
 
-The card currently includes display name, level, XP progress, total XP, coins, rare currency, message count, voice XP and unlocked achievement count, plus the user's Discord avatar.
+The card includes display name, level, XP progress, total XP, coins, rare currency, message count, voice XP and unlocked achievement count, plus the user's Discord avatar.
 
 Pillow was added to `requirements.txt` because actual PNG rendering is required for the profile-card feature.
 
-**Runtime QA remains pending.** Profile customization is intentionally not implemented yet; it should be built on top of this card architecture.
+### Profile customization — CODE IMPLEMENTED, runtime QA pending
+
+New persistent database: `databases/profile_customization.py`, SQLite file `databases/profile_customization.db`.
+
+Public command:
+```text
+/profile_customize
+```
+
+Supported user customization:
+- background color in `#RRGGBB` format;
+- accent color in `#RRGGBB` format;
+- short profile bio up to 70 characters;
+- `reset=true` to restore the default card appearance.
+
+Customization is stored per guild/user and is applied by `/profile` to the generated PNG card. Existing values are preserved when only one customization option is changed.
+
+Default appearance remains:
+- background: `#181B23`;
+- accent: `#FFD75A`.
+
+The renderer validates/falls back to safe RGB values, while the command validates user-provided hex colors before saving.
+
+**Runtime QA remains pending.**
 
 ## 11. Quests
 
@@ -344,6 +367,7 @@ databases/tickets.db
 databases/xp.db
 databases/quests.db
 databases/achievements.db
+databases/profile_customization.db
 ```
 
 ## 21. QA strategy after functionality build
@@ -373,7 +397,7 @@ Suggested QA order after the functionality stage:
 6. Shop
 7. Quests
 8. Achievements
-9. Profile/profile card
+9. Profile/profile card/customization
 10. Rankings/voice stats
 11. Admin panel
 12. Rebuild/server manager
@@ -385,7 +409,6 @@ After system-by-system QA, perform a final technical audit covering dead code, s
 
 ## 22. Future roadmap after current functionality stage
 
-- Profile customization
 - Mini-games
 - Discord Activities integrated with XP/economy/quests/achievements/rankings
 - Social interactions
@@ -404,6 +427,17 @@ Recently added directly to `main`:
 - generated PNG profile card;
 - Pillow dependency for profile rendering;
 - shop purchase event integration for achievements;
-- corresponding COG/config/state updates.
+- persistent profile customization database;
+- `/profile_customize` command;
+- customizable profile-card background, accent color and bio;
+- corresponding state updates.
 
-Next development task: finish any remaining agreed functionality, especially profile customization on top of the generated card architecture. **Do not begin the detailed one-system-at-a-time QA phase until the current functionality stage is complete.**
+### Latest profile customization commits
+
+- `b90d279960ba0a83822afd00fdf2e2aa0c39db07` — add persistent profile customization storage.
+- `231fdab6110a6818028f4a2095d322be8de06884` — apply customization to PNG profile-card rendering.
+- `06af69d097c5a9e45638e7f3a3897528d94f5057` — add `/profile_customize` and connect persistence to `/profile`.
+
+**Verification:** code was inspected against the current `main` architecture and changes were committed directly to `main`. Discord runtime QA has not yet been performed for profile customization.
+
+Next step: if no other agreed functionality remains, stop implementation and begin the planned detailed one-system-at-a-time QA phase. Profile customization should be included in the Profile/Profile Card QA pass.
