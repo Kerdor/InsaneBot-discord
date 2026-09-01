@@ -6,8 +6,10 @@ from pathlib import Path
 
 from config import BotConfig
 
+# Persistent achievement storage is kept separate from runtime Discord state.
 DB_PATH = Path(BotConfig.DATABASE_DIR) / "achievements.db"
 
+# Static achievement definitions are consumed by the cog and this database layer.
 ACHIEVEMENTS = (
     {
         "id": "messages_1000",
@@ -48,12 +50,14 @@ ACHIEVEMENTS = (
 
 
 def _connect() -> sqlite3.Connection:
+    """Open the achievements database with named-column row access."""
     connection = sqlite3.connect(DB_PATH)
     connection.row_factory = sqlite3.Row
     return connection
 
 
 def init_achievements() -> None:
+    """Create achievement progress and activity-day tables when needed."""
     with _connect() as connection:
         connection.execute(
             """
@@ -81,10 +85,12 @@ def init_achievements() -> None:
 
 
 def _achievement(achievement_id: str) -> dict | None:
+    """Return the static definition for an achievement ID, if it exists."""
     return next((item for item in ACHIEVEMENTS if item["id"] == achievement_id), None)
 
 
 def get_progress(guild_id: int, user_id: int) -> dict[str, sqlite3.Row]:
+    """Load all stored achievement progress for one guild member."""
     with _connect() as connection:
         rows = connection.execute(
             "SELECT * FROM achievement_progress WHERE guild_id = ? AND user_id = ?",
@@ -94,6 +100,7 @@ def get_progress(guild_id: int, user_id: int) -> dict[str, sqlite3.Row]:
 
 
 def get_unlocked(guild_id: int, user_id: int) -> list[sqlite3.Row]:
+    """Load only achievements already marked as unlocked for a member."""
     with _connect() as connection:
         return connection.execute(
             "SELECT * FROM achievement_progress WHERE guild_id = ? AND user_id = ? AND unlocked = 1",
@@ -102,6 +109,7 @@ def get_unlocked(guild_id: int, user_id: int) -> list[sqlite3.Row]:
 
 
 def update_progress(guild_id: int, user_id: int, achievement_id: str, progress: int) -> bool:
+    """Persist monotonically increasing progress and report whether the target is reached."""
     achievement = _achievement(achievement_id)
     if achievement is None:
         return False
@@ -122,6 +130,7 @@ def update_progress(guild_id: int, user_id: int, achievement_id: str, progress: 
 
 
 def add_progress(guild_id: int, user_id: int, achievement_id: str, amount: int) -> bool:
+    """Increment an achievement from its stored value without allowing negative additions."""
     if amount <= 0:
         return False
     current = get_progress(guild_id, user_id).get(achievement_id)
@@ -130,6 +139,7 @@ def add_progress(guild_id: int, user_id: int, achievement_id: str, amount: int) 
 
 
 def record_activity_day(guild_id: int, user_id: int) -> int:
+    """Record today's UTC activity date and return the member's distinct-day count."""
     activity_date = datetime.now(timezone.utc).date().isoformat()
     with _connect() as connection:
         connection.execute(
