@@ -6,8 +6,10 @@ from pathlib import Path
 
 from config import BotConfig
 
+# Quest progress is persisted separately so daily progress survives bot restarts.
 DB_PATH = Path(BotConfig.DATABASE_DIR) / "quests.db"
 
+# Static quest definitions are shared with the quest cog for progress and rewards.
 QUESTS = (
     {
         "id": "messages_10",
@@ -34,12 +36,14 @@ QUESTS = (
 
 
 def _connect() -> sqlite3.Connection:
+    """Open the quest database with named-column row access."""
     connection = sqlite3.connect(DB_PATH)
     connection.row_factory = sqlite3.Row
     return connection
 
 
 def init_quests() -> None:
+    """Create the daily quest progress table if it does not exist."""
     with _connect() as connection:
         connection.execute(
             """
@@ -58,10 +62,12 @@ def init_quests() -> None:
 
 
 def current_date() -> str:
+    """Return the current UTC calendar date used to partition daily quests."""
     return datetime.now(timezone.utc).date().isoformat()
 
 
 def get_progress(guild_id: int, user_id: int, quest_date: str | None = None) -> dict[str, sqlite3.Row]:
+    """Load all quest progress for a member on the requested UTC date."""
     quest_date = quest_date or current_date()
     with _connect() as connection:
         rows = connection.execute(
@@ -72,6 +78,7 @@ def get_progress(guild_id: int, user_id: int, quest_date: str | None = None) -> 
 
 
 def add_progress(guild_id: int, user_id: int, quest_id: str, amount: int) -> sqlite3.Row | None:
+    """Increment today's quest progress, capped at its configured target."""
     quest = next((item for item in QUESTS if item["id"] == quest_id), None)
     if quest is None or amount <= 0:
         return None
@@ -103,6 +110,7 @@ def add_progress(guild_id: int, user_id: int, quest_id: str, amount: int) -> sql
 
 
 def claim_completed(guild_id: int, user_id: int, quest_id: str) -> bool:
+    """Atomically mark a reached quest as claimed and report whether it changed state."""
     quest_date = current_date()
     with _connect() as connection:
         cursor = connection.execute(
