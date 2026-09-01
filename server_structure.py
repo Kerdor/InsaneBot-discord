@@ -189,7 +189,11 @@ async def apply_channel_overwrites(
     if isinstance(channel, disnake.CategoryChannel):
         return
 
-    desired = build_category_overwrites(channel.guild, category_key)
+    if channel.name == CHANNEL_NAMES["tickets"]:
+        desired = build_private_ticket_overwrites(channel.guild)
+    else:
+        desired = build_category_overwrites(channel.guild, category_key)
+
     for target, overwrite in desired.items():
         await channel.set_permissions(
             target,
