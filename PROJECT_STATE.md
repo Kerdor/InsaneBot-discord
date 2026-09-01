@@ -51,7 +51,7 @@ Shop is primarily for server/community benefits such as Discord roles, not RPG i
 14. Voice-time rankings — implemented
 15. Friends — planned
 16. Romantic relationships — planned
-17. Tickets — implemented; TEST configuration/testing next
+17. Tickets — implemented; TEST lifecycle testing in progress
 18. Moderation — implemented
 19. Logging — implemented/expanding
 
@@ -65,7 +65,7 @@ TEST_GUILDS=[519209364280573954]
 ```
 
 TEST guild: `Insane TEST` (`519209364280573954`).
-Bot: `Insane#6907` (`1329864697358782504`).
+Bot: `Insane#6907`.
 
 MAIN guild is not connected during TEST runs; expected.
 
@@ -106,16 +106,13 @@ Latest verified startup:
 - `/shop`, `/buy`, `/shop_admin`, `/admin_panel` are available;
 - Discord connection/startup succeeded.
 
-The previous missing `cogs.shop` problem was fixed in `77e0bd8`.
-
 ## 7. XP / Levels
 
 Persistent SQLite XP system.
 
 Implemented: chat XP with anti-spam cooldown, voice XP with AFK exclusion, persistent levels, `/level`, `/xp_ranking`, active voice session recovery and level-up DM notification.
 
-Recorded defaults:
-
+Defaults:
 - message XP cooldown: 60 seconds;
 - message XP: 15–25 XP;
 - voice XP: 5 XP per completed voice minute;
@@ -124,12 +121,9 @@ Recorded defaults:
 
 ## 8. Economy
 
-Persistent SQLite economy.
-
-Normal currency: 🪙. Rare currency: 💎.
+Persistent SQLite economy. Normal currency: 🪙. Rare currency: 💎.
 
 Commands:
-
 ```text
 /balance
 /daily
@@ -137,112 +131,43 @@ Commands:
 /rich
 ```
 
-Rare currency has no real-money purchase and is intended to be difficult to obtain.
-
 ### Admin Economy — VERIFIED
 
-`/admin_panel → 💰 Экономика → UserSelect → amount` works.
+`/admin_panel → 💰 Экономика → UserSelect → amount` works. Verified user selection, give/remove coins, zero rejection and balance changes.
 
-Verified:
-- select user;
-- give coins;
-- remove coins;
-- reject zero;
-- apply balance changes.
-
-Negative-balance policy is still undecided. Do not silently change it.
+Negative-balance policy remains undecided; do not silently change it.
 
 ## 9. Shop — FUNCTIONALLY TESTED
 
 Persistent `shop_items` storage contains id, guild_id, name, description, price, role_id and enabled state.
 
 Public commands:
-
 ```text
 /shop
 /buy <item_id>
 ```
 
-Admin operations: create, edit, enable/disable, delete, configure name/description/price/role.
+Admin operations: create, edit, enable/disable, delete and configure name/description/price/role.
 
-### Purchase safety
+Purchase validation, duplicate-role protection, balance checks, role assignment and refund-on-failure are implemented.
 
-`ad99f0a` — `Fix shop role purchase validation`.
+Runtime tests completed 2026-08-31: display, CRUD/edit, disable/delete, nonexistent item, insufficient balance, duplicate purchase, missing role, assignment failure/refund and successful role purchase were verified.
 
-Current flow validates enabled item and role, rejects duplicate role ownership, checks coins, purchases/deducts, assigns role, and refunds on `disnake.Forbidden` or `disnake.HTTPException`.
+### Future shop UI/UX — POSTPONED
 
-### Runtime tests completed 2026-08-31
-
-Verified:
-
-- shop display;
-- CRUD/edit;
-- disabling item removes it from public shop;
-- deleting item removes it from public shop;
-- nonexistent/deleted item error;
-- insufficient balance error;
-- duplicate purchase rejection;
-- missing role error;
-- role assignment failure with refund;
-- successful role purchase and actual Discord role assignment.
-
-The previous PROJECT_STATE test list is stale; these tests must not be repeated unless a relevant regression/code change occurs.
-
-### FUTURE SHOP UI/UX — AGREED, POSTPONED
-
-The current shop presentation is considered too dry. The user wants a later visual redesign without changing the purchase mechanism.
-
-Current style:
-
-```text
-🛒 Магазин
-
-#1 · test — 1 🪙 → @Неизвестная роль — test
-#2 · test — 2 🪙 → @test — test
-
-Используйте /buy <ID> для покупки
-```
-
-Agreed future design:
-
-- make the shop embed/text more visually appealing and less dry;
-- paginate shop items;
-- allow/display a choice of **5 or 10 items per page**;
-- add bottom navigation buttons;
-- left/right arrow buttons with page number in the center, visually like:
-
-```text
-◀  1/2  ▶
-```
-
-Navigation behavior:
-
-- first page: left disabled;
-- last page: right disabled;
-- middle pages: both enabled;
-- page number updates when navigating;
-- `/buy <ID>` remains the purchase mechanism.
-
-**Do not implement this redesign until the user explicitly asks to start it.** It is a planned UI/UX improvement, not a bug.
+Later redesign: more visual presentation, pagination, 5 or 10 items per page, bottom navigation and `◀ 1/2 ▶`. Do not implement until explicitly requested.
 
 ## 10. Profile
 
-Basic `/profile` is implemented using existing XP/economy persistence. It shows identity, level/XP progress, normal/rare currency, message count, voice XP and total XP.
-
-Future: profile cards, customization, achievements and social information.
+Basic `/profile` is implemented using existing XP/economy persistence. Future: profile cards, customization, achievements and social information.
 
 ## 11. Admin panel
 
-`/admin_panel` is admin/owner restricted and is becoming the central management UI.
-
-Current areas: settings, logging, shop and economy balance management; future controls may be added incrementally.
-
-Persistent server settings: `databases/settings.db` with settings audit history.
+`/admin_panel` is admin/owner restricted. Current areas: settings, logging, shop and economy balance management. Persistent server settings use `databases/settings.db` with audit history.
 
 ## 12. Logging
 
 COGs:
-
 ```text
 cogs.logging.chat_logs
 cogs.logging.guild_logs
@@ -256,28 +181,17 @@ Groups: messages, members/server, moderation, setup, voice, system.
 
 Reaction logging is disabled by default because it is noisy. Do not redesign logging into a forum/thread architecture unless explicitly requested.
 
-### 2026-09-01 rebuild/logging fixes
+### Rebuild/logging fixes — 2026-09-01
 
-Initial `/rebuild` runs produced repeated `ClientException: Parent channel not found` errors in `GuildLogs.get_log_channel()` because cached log `Thread` objects could survive after their parent channel was deleted.
+Stale cached logging threads/channels caused `Parent channel not found` and later `404 Unknown Channel` errors during `/rebuild`.
 
-The first stale-thread fix was committed on `main` before the 02:02 runtime test. That test confirmed the `Parent channel not found` exception no longer occurs.
+Fixed in `a0a515d24b81f3340bfb231e81513a5602068f8f`: cached destinations are validated against current guild cache, deleted text channels are invalidated, cached threads with missing parents are invalidated, and fetched destinations receive the same validation.
 
-The 2026-09-01 02:02 runtime test then exposed a second cache problem: after the configured log forum/thread was deleted during rebuild, a stale cached logging destination was still returned and `.send()` produced `404 Not Found: Unknown Channel`.
-
-Fixed in commit `a0a515d24b81f3340bfb231e81513a5602068f8f`:
-
-- cached logging destinations are now checked against the current guild cache before reuse;
-- deleted cached text channels are invalidated;
-- cached threads are invalidated when their parent is missing from the guild cache;
-- fetched thread destinations receive the same parent-existence validation;
-- existing logging architecture and normal behavior are preserved.
-
-**Verification status:** the stale-thread and stale-channel logging fixes are now **LIVE VERIFIED**. A full `/rebuild` on 2026-09-01 completed successfully with **no `Unknown Channel` / 404 logging errors**.
+**Verification:** full `/rebuild` on 2026-09-01 completed without `Unknown Channel` / 404 logging errors.
 
 ## 13. Moderation
 
-Implemented persistent moderation DB, slash commands, moderation panel and moderation logging.
-
+Implemented persistent moderation DB, slash commands, moderation panel and moderation logging:
 ```text
 /ban
 /kick
@@ -286,37 +200,39 @@ Implemented persistent moderation DB, slash commands, moderation panel and moder
 /warn
 ```
 
-## 14. Tickets — NEXT CONCRETE TASK
+## 14. Tickets
 
 Private-thread ticket system exists with creation, transcripts, recovery and persistent state.
 
-Current TEST warning:
+### Ticket runtime tests already passed
 
-```text
-Канал create_ticket не настроен для guild=519209364280573954
-```
+- Ticket creation works.
+- Ticket is created as a Discord private thread under `🎫・тикеты`.
+- Ticket privacy was checked successfully: author/moderation access works and ordinary users cannot access the individual ticket.
+- Closing a ticket works and the ticket is not immediately deleted.
 
-This is configuration, not a startup crash.
+### Ticket channel permissions bug — FIXED, runtime verification pending
 
-Next: configure/map the TEST `create_ticket` channel, then test ticket creation, private thread behavior, closing/transcript and recovery.
+**Problem found during live testing:** ordinary users could see the parent channel `🎫・тикеты`, even though individual ticket threads were private.
+
+Root cause:
+- `rebuild_test_server.py` correctly created `🎫・тикеты` with `build_private_ticket_overwrites()`;
+- however `server_manager.py` automatically called `apply_channel_overwrites()` for every new channel;
+- `apply_channel_overwrites()` always applied normal category permissions;
+- the support category grants the `Member` role `view_channel=True`;
+- therefore the automatic channel-permission handler overwrote the intended private permissions of `🎫・тикеты`.
+
+Fixed in commit `041dcb14bc4f2b9db0c01c0f1b687b03e6ce379c`: `apply_channel_overwrites()` now detects the managed `🎫・тикеты` channel by `CHANNEL_NAMES["tickets"]` and applies `build_private_ticket_overwrites()` instead of the normal category overwrites.
+
+This preserves the existing ticket architecture and also fixes future automatic permission application, `/sync_server`, and channel creation/update paths that use `apply_channel_overwrites()`.
+
+**Verification status:** CODE-FIXED, runtime verification pending. The TEST server must be rebuilt or `/sync_server` run after the bot pulls commit `041dcb14...`; then verify that ordinary users cannot see `🎫・тикеты` while `🎫・создать-тикет` remains public and ticket creation still works.
 
 ## 15. Server map / persistent config
 
-`.server_map.json` provides TEST server-specific role/channel IDs.
+`.server_map.json` provides TEST server-specific role/channel IDs. `.logging_channels.json` stores logging destinations/forum/thread IDs.
 
 Required roles and hierarchy:
-
-```text
-Owner
-Administrator
-Moderator
-Helper
-Member
-Not verified
-```
-
-Discord hierarchy after rebuild must be, from highest to lowest:
-
 ```text
 Owner
 Administrator
@@ -329,79 +245,34 @@ Not verified
 
 ### Role hierarchy fix — 2026-09-01
 
-The previous rebuild relied on role creation order alone. Runtime testing showed that the resulting Discord hierarchy did not match the required order: `Not verified` appeared above `Member`, while `Owner` appeared at the bottom.
+The previous rebuild relied on role creation order and produced the wrong hierarchy. Fixed in `4dea2a9d80e05672af8c5fd77dad12a1732db0f0` by explicitly calling `guild.edit_role_positions()` after role creation:
 
-Fixed in commit `4dea2a9d80e05672af8c5fd77dad12a1732db0f0`:
+- Not verified = 1
+- Member = 2
+- Helper = 3
+- Moderator = 4
+- Administrator = 5
+- Owner = 6
 
-- `_create_roles()` still creates the same six roles with the same permissions, colors, hoist and mentionable settings;
-- after creation, the actual created `Role` objects are collected from the guild cache;
-- `guild.edit_role_positions()` explicitly sets:
-  - `Not verified` = 1;
-  - `Member` = 2;
-  - `Helper` = 3;
-  - `Moderator` = 4;
-  - `Administrator` = 5;
-  - `Owner` = 6;
-- a rebuild log line records the intended final hierarchy.
+**Verification:** LIVE VERIFIED 2026-09-01. Full rebuild completed without errors and Discord showed Owner → Administrator → Moderator → Helper → Member → Not verified → @everyone.
 
-**Verification status:** **LIVE VERIFIED 2026-09-01.** The complete `/rebuild` completed without errors and the Discord role hierarchy was confirmed as Owner → Administrator → Moderator → Helper → Member → Not verified → @everyone.
-
-Required channels include:
-
-```text
-create_voice
-verification
-create_ticket
-tickets
-game_panel
-moderation_panel
-chat_logs
-guild_logs
-moderation_logs
-system_logs
-voice_logs
-logs
-```
-
-`.logging_channels.json` stores logging destinations/forum/thread IDs.
+Required channels include `create_voice`, `verification`, `create_ticket`, `tickets`, `game_panel`, `moderation_panel`, logging destinations and the normal community/game channels.
 
 ## 16. Dev runner — VERIFIED
 
-`dev_runner.py` is the local development auto-update runner.
+`dev_runner.py` polls every 5 seconds.
 
-Current polling interval: **5 seconds**.
-
-### Full live test
-
-While runner was already running, commit `6dbd454` (`test: verify dev runner auto update`) was made.
-
-Runner output confirmed:
-
-```text
-[GIT] Updating 53bf473..6dbd454
-[RUNNER] Обнаружены изменения: 53bf473... -> 6dbd454
-[RUNNER] Останавливаем старый процесс бота...
-[RUNNER] Запуск бота...
-```
-
-Restarted bot loaded all COGs, connected to Discord, became ready and synchronized 33 TEST commands. Runner continued with `[GIT] Already up to date.`.
-
-Temporary `DEV_RUNNER_TEST.txt` was removed in commit `3b872d6`, and that deletion was also automatically pulled/restarted.
-
-Therefore the complete **pull → detect changed HEAD → stop child → start child → continue polling** cycle is verified.
-
-Do not repeat the runner test unless runner code changes or regression occurs.
+Full live pull → detect changed HEAD → stop child → start child → continue polling cycle was verified. Do not repeat unless runner code changes or a regression occurs.
 
 Do not run a separate `main.py` alongside the runner.
 
-Runner self-update is not implemented: changing `dev_runner.py` itself through GitHub does not replace the currently running runner process. Treat that as a separate feature only if explicitly requested.
+Runner self-update is not implemented; treat it as a separate future feature only if explicitly requested.
 
 ## 17. Local Git / databases
 
 Do not blindly discard local runtime DB changes.
 
 Previously observed local files:
-
 ```text
 modified: databases/Insane.sqlite3
 untracked: databases/economy.db
@@ -418,26 +289,27 @@ Do not use destructive restore/reset/cleanup commands against these without expl
 ### DONE / VERIFIED
 
 - Admin Economy UserSelect and balance operations.
-- Shop loading and command synchronization.
-- Shop CRUD and purchase/error/refund behavior.
+- Shop loading, command synchronization, CRUD and purchase/error/refund behavior.
 - Successful shop role assignment.
-- Dev runner 5-second polling.
-- Full live auto-pull/restart cycle.
+- Dev runner 5-second polling and full auto-pull/restart cycle.
 - Runner test file removal.
-- Discord ticket/private-thread behavior fix verified: ticket channels no longer create unwanted Discord threads.
-- Logging `Parent channel not found` stale-thread crash fixed and verified gone.
-- Rebuild logging stale cached-channel 404 fix **live verified** on 2026-09-01.
-- Rebuild role hierarchy **live verified** on 2026-09-01.
+- Discord ticket/private-thread behavior: individual ticket privacy and lifecycle creation/closing verified.
+- Logging stale-thread crash and stale cached-channel 404 fix.
+- Rebuild role hierarchy.
 
-### DONE / CODE-FIXED, RUNTIME VERIFICATION PENDING
+### CODE-FIXED, RUNTIME VERIFICATION PENDING
 
-- None for the rebuild/logging/role-hierarchy items tested in the latest run.
+- `🎫・тикеты` parent-channel privacy fix from commit `041dcb14bc4f2b9db0c01c0f1b687b03e6ce379c`.
 
 ### NEXT
 
-1. **Tickets:** configure/map the TEST `create_ticket` channel and test the full lifecycle: creation → private thread → closing/transcript → recovery.
-2. **Admin panel:** fix only issues discovered during real testing.
-3. **Economy:** explicitly decide whether negative balances are allowed.
+1. Pull/restart the bot with `041dcb14...` and run `/rebuild` or `/sync_server`.
+2. Verify ordinary users cannot see `🎫・тикеты`.
+3. Verify `🎫・создать-тикет` remains public and ticket creation still works.
+4. Continue ticket lifecycle tests: closing/transcript/recovery.
+5. Then move to the next planned functionality and test it incrementally.
+6. Admin panel: fix only issues discovered during real testing.
+7. Economy: explicitly decide whether negative balances are allowed.
 
 ### FUTURE
 
@@ -455,14 +327,16 @@ Do not use destructive restore/reset/cleanup commands against these without expl
 - TEST guild: `519209364280573954` (`Insane TEST`).
 - Bot: `Insane#6907`.
 - Runner interval: **5 seconds**.
-- Runner auto-update: **verified**.
-- Shop function/error/CRUD tests: **verified**.
-- Admin Economy UserSelect: **verified**.
+- Runner auto-update: verified.
+- Shop function/error/CRUD tests: verified.
+- Admin Economy UserSelect: verified.
 - `/shop`, `/buy`, `/shop_admin`, `/admin_panel`: synchronized and available in TEST.
-- Shop UI redesign is **planned, not current work**.
-- Tickets exist in code; Discord ticket-thread behavior has been corrected and needs lifecycle testing.
-- Logging stale-thread crash and stale cached-channel 404 are verified fixed.
-- Rebuild role hierarchy is verified in live Discord.
+- Shop UI redesign is planned, not current work.
+- Tickets use private Discord Threads under the `🎫・тикеты` parent channel.
+- Individual ticket privacy and creation/closing have been tested successfully.
+- Parent `🎫・тикеты` privacy fix is committed but needs live verification after update/rebuild.
+- Logging stale-thread and stale-channel fixes are verified.
+- Rebuild role hierarchy is verified.
 - **After every fix, update `PROJECT_STATE.md` before considering the work complete.**
 - Do not repeat completed shop/runner tests without a relevant code change.
 - Do not discard local runtime databases.
