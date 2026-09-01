@@ -1,3 +1,5 @@
+"""Server economy commands and persistent balance interactions."""
+
 from __future__ import annotations
 
 import logging
@@ -16,10 +18,12 @@ class Economy(commands.Cog):
 
     def __init__(self, bot: commands.Bot) -> None:
         self.bot = bot
+        # The economy database is shared by commands and progression rewards.
         init_economy()
 
     @commands.slash_command(name="balance", description="Показать баланс")
     async def balance(self, inter: disnake.ApplicationCommandInteraction, member: disnake.Member | None = None) -> None:
+        """Display the persistent coin and rare-currency balances."""
         target = member or inter.author
         row = get_user(inter.guild.id, target.id)
         embed = disnake.Embed(title=f"💰 Баланс — {target.display_name}", color=disnake.Color.gold())
@@ -29,6 +33,7 @@ class Economy(commands.Cog):
 
     @commands.slash_command(name="daily", description="Получить ежедневную награду")
     async def daily(self, inter: disnake.ApplicationCommandInteraction) -> None:
+        """Claim the configured daily reward when the economy is enabled."""
         if not get_bool(inter.guild.id, "economy_enabled"):
             await inter.response.send_message("💰 Экономика сейчас отключена администрацией.", ephemeral=True)
             return
@@ -42,6 +47,7 @@ class Economy(commands.Cog):
 
     @commands.slash_command(name="pay", description="Перевести монеты другому пользователю")
     async def pay(self, inter: disnake.ApplicationCommandInteraction, member: disnake.Member, amount: int) -> None:
+        """Transfer coins between two non-bot members on the same guild."""
         if not get_bool(inter.guild.id, "economy_enabled"):
             await inter.response.send_message("💰 Экономика сейчас отключена администрацией.", ephemeral=True)
             return
@@ -58,6 +64,7 @@ class Economy(commands.Cog):
 
     @commands.slash_command(name="rich", description="Показать рейтинг по балансу")
     async def rich(self, inter: disnake.ApplicationCommandInteraction) -> None:
+        """Show the ten members with the highest persistent coin balance."""
         from databases.economy import get_ranking
 
         rows = get_ranking(inter.guild.id, 10)
@@ -74,5 +81,6 @@ class Economy(commands.Cog):
 
 
 def setup(bot: commands.Bot) -> None:
+    """Register the economy cog with the Discord bot."""
     bot.add_cog(Economy(bot))
     logger.info("Economy cog loaded")
