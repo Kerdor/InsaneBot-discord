@@ -64,7 +64,7 @@ cogs/
   logging/reaction_logs.py (disabled)
 databases/
   xp.py economy.py shop.py quests.py achievements.py
-  profile_customization.py moderation.py tickets.py voice_stats.py voice_rooms.py social.py
+  profile_customization.py moderation.py tickets.py voice_stats.py voice_rooms.py social.py activities.py
 utils/profile_card.py
 ```
 
@@ -129,6 +129,7 @@ quests.py → quests.db
 achievements.py → achievements.db
 profile_customization.py → profile_customization.db
 social.py → social.db
+activities.py → activities.db
 voice_stats.py → Insane.sqlite3
 voice_rooms.py → configured persistence
 ```
@@ -159,7 +160,7 @@ Runtime databases are real state and must never be reset.
 | Profile customization | DONE | NOT STARTED | PENDING |
 | Mini-games | DONE | NOT TESTED | PENDING AFTER IMPLEMENTATION |
 | Social / Friends / Romantic | DONE | NOT TESTED | PENDING AFTER IMPLEMENTATION |
-| Discord Activities | NOT STARTED | — | — |
+| Discord Activities | FOUNDATION | NOT TESTED | PENDING REAL BOUNDARY |
 | PvP | REMOVED | — | — |
 | Collecting | REMOVED FOR NOW | — | — |
 
@@ -243,24 +244,11 @@ Rules: one active game per guild/user; 30-second cooldown after success/failure;
 
 No runtime QA yet. Known audit candidates: reward text when economy is disabled, timeout cooldown semantics, `_reward` dependency on XP COG and concurrency/restart behavior.
 
-## 18. SOCIAL / FRIENDS / ROMANTIC — NEW IMPLEMENTATION
+## 18. SOCIAL / FRIENDS / ROMANTIC — IMPLEMENTED
 
-Status: `IMPLEMENTED / RUNTIME NOT TESTED / QA PENDING`.
+Files: `databases/social.py`, `cogs/social.py`, `config.py`.
 
-Files:
-
-```text
-databases/social.py
-cogs/social.py
-config.py
-```
-
-Persistent `social.db` stores:
-
-- friend requests;
-- normalized friendships;
-- romantic requests;
-- normalized romantic relationships.
+Persistent `social.db` stores friend requests, normalized friendships, romantic requests and normalized romantic relationships.
 
 Commands:
 
@@ -276,34 +264,41 @@ Commands:
 /relationship end <member>
 ```
 
-Rules currently implemented:
+Rules: self-add/proposal rejected; friend request requires acceptance; duplicate/reverse requests rejected; romantic proposal requires friendship; romance requires mutual acceptance; ending romance preserves friendship; all state is guild-scoped and persistent; pairs are normalized.
 
-- self-add/proposal is rejected;
-- friend request requires mutual acceptance;
-- duplicate/reverse friend requests are rejected;
-- romantic proposal requires an existing friendship;
-- romantic relationship requires mutual acceptance;
-- ending romance preserves friendship;
-- all state is guild-scoped and persistent;
-- relationship pairs are normalized to avoid duplicate direction records.
+No XP/economy rewards are attached yet.
 
-No XP/economy rewards are attached yet; this avoids inventing a progression balance before QA/integration design.
+## 19. DISCORD ACTIVITIES — FOUNDATION IMPLEMENTED
 
-## 19. DISCORD ACTIVITIES — PLANNED / BLOCKED UNTIL REAL BOUNDARY
+A persistent idempotent result ledger now exists in `databases/activities.py`.
 
-Target:
+Stored fields:
 
 ```text
-verified Activity result
-        ↓
-trusted integration
-        ↓
-XP / Economy / Quests / Achievements / Rankings / Profile
+result_id
+activity_key
+guild_id
+user_id
+xp_reward
+coin_reward
+received_at
 ```
 
-Before implementation: identity verification, guild verification, anti-cheat, reward calculation, idempotency, persistence and retry/failure semantics must be defined.
+`result_id` is the primary key and duplicate results are ignored, providing the persistence/idempotency layer needed before rewards are applied.
 
-Do not fake external Activity results or mark an Activity integration complete without a real verified boundary.
+This is **not** a complete Discord Activity integration. There is currently no external Activity/backend endpoint, signature verification, identity verification, anti-cheat validation, reward application pipeline, retry protocol or real Activity client.
+
+Required final architecture remains:
+
+```text
+Discord Activity
+      ↓
+verified/trusted result
+      ↓
+idempotent persistence
+      ↓
+XP / Economy / Quests / Achievements / Rankings / Profile
+```
 
 ## 20. KNOWN AUDIT ITEMS
 
@@ -325,7 +320,8 @@ Additional:
 - interaction acknowledgement;
 - duplicate event handling;
 - mini-game reward integration/concurrency;
-- social command and relationship concurrency/edge cases.
+- social command and relationship concurrency/edge cases;
+- Activity signature/identity/guild verification and reward integration.
 
 Do not fix speculative issues without inspecting source/behavior first.
 
@@ -360,7 +356,7 @@ Current checkpoint:
 Core community/progression systems → IMPLEMENTED
 Mini-games → IMPLEMENTED / QA PENDING
 Social / Friends / Romantic → IMPLEMENTED / QA PENDING
-Discord Activities → PLANNED / requires real verified external boundary
+Discord Activities → FOUNDATION / real external boundary still required
 Full QA → NOT STARTED
 ```
 
@@ -370,6 +366,7 @@ Full QA → NOT STARTED
 27c49fd4c0ff0cf42c83d0e3851ed1eec1698d70 → persistent social database
  e90ab1944b3d93ca091b7ac2ccac964df9d532d4 → social commands/COG
 89b002e7ee6f19570393cecf012837a70bb11f72 → load social COG
+1fd67f7fbb319a61b691022c6e7c1801c57e5a9c → Activity result ledger
 CURRENT STATE UPDATE → this commit
 ```
 
