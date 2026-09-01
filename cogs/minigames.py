@@ -25,6 +25,8 @@ class MiniGameView(disnake.ui.View):
         self.cog = cog
         self.user_id = user_id
         self.finished = False
+        self.guild_id: int | None = None
+        self.message: disnake.Message | None = None
 
     async def interaction_check(self, inter: disnake.MessageInteraction) -> bool:
         """Prevent other members from controlling the active player's game."""
@@ -63,7 +65,8 @@ class MiniGames(commands.Cog):
 
     async def _finish_timeout(self, view: MiniGameView) -> None:
         """Remove an expired session from the active-game registry."""
-        self._active_games.discard((view.cog._guild_id, view.user_id))
+        if view.guild_id is not None:
+            self._active_games.discard((view.guild_id, view.user_id))
         for child in view.children:
             child.disabled = True
 
@@ -72,6 +75,16 @@ class MiniGames(commands.Cog):
                 await view.message.edit(content="⏱️ Время вышло. Награда не получена.", view=view)
             except disnake.HTTPException:
                 pass
+
+    async def _finish_failure(self, inter: disnake.MessageInteraction, view: MiniGameView, text: str) -> None:
+        """Finish a failed game and start the cooldown without granting rewards."""
+        view.finished = True
+        self._active_games.discard((inter.guild.id, view.user_id))
+        self._cooldowns[(inter.guild.id, view.user_id)] = time.monotonic()
+        view.stop()
+        for child in view.children:
+            child.disabled = True
+        await inter.response.edit_message(content=text, view=view)
 
     async def _reward(self, inter: disnake.MessageInteraction, view: MiniGameView) -> None:
         """Award the standard mini-game reward and settle the player's level."""
@@ -133,18 +146,30 @@ class MiniGames(commands.Cog):
         self._cooldowns.pop(key, None)
 
         if game == "math":
-            view = self._math_game(inter.author.id)
-            text = "🧮 Реши пример и выбери правильный ответ."
+            view, text = self._math_game(inter.author.id)
         elif game == "reaction":
             view, text = self._reaction_game(inter.author.id)
         else:
             view, text = self._memory_game(inter.author.id)
 
-        view._guild_id = inter.guild.id
+        view.guild_id = inter.guild.id
         await inter.response.send_message(text, view=view)
         view.message = await inter.original_response()
 
-    def _math_game(self, user_id: int) -> MiniGameView:
+        if game == "memory":
+            asyncio.create_task(self._hide_memory_sequence(view))
+
+    async def _hide_memory_sequence(self, view: MiniGameView) -> None:
+        """Hide the memory sequence after a short viewing period."""
+        await asyncio.sleep(3)
+        if view.finished or not view.message:
+            return
+        try:
+            await view.message.edit(content="🧠 Время! Введи последовательность кнопками по порядку.", view=view)
+        except disnake.HTTPException:
+            pass
+
+    def _math_game(self, user_id: int) -> tuple[MiniGameView, str]:
         """Build a short arithmetic challenge."""
         first = random.randint(5, 30)
         second = random.randint(2, 20)
@@ -170,27 +195,14 @@ class MiniGames(commands.Cog):
                 if view.finished:
                     return
                 if value != answer:
-                    view.finished = True
-                    self._active_games.discard((inter.guild.id, user_id))
-                    self._cooldowns[(inter.guild.id, user_id)] = time.monotonic()
-                    view.stop()
-                    for child in view.children:
-                        child.disabled = True
-                    await inter.response.edit_message(content=f"❌ Неверно. Правильный ответ: **{answer}**.", view=view)
+                    await self._finish_failure(inter, view, f"❌ Неверно. Правильный ответ: **{answer}**.")
                     return
                 await self._reward(inter, view)
 
             button.callback = callback
             view.add_item(button)
 
-        view._answer_text = f"**{first} {operation} {second} = ?**"
-        original_timeout = view.on_timeout
-
-        async def timeout_with_answer() -> None:
-            await original_timeout()
-
-        view.on_timeout = timeout_with_answer
-        return view
+        return view, f"🧮 **{first} {operation} {second} = ?**\nВыбери правильный ответ."
 
     def _reaction_game(self, user_id: int) -> tuple[MiniGameView, str]:
         """Build a button-position reaction challenge."""
@@ -205,22 +217,16 @@ class MiniGames(commands.Cog):
                 if view.finished:
                     return
                 if value != target:
-                    view.finished = True
-                    self._active_games.discard((inter.guild.id, user_id))
-                    self._cooldowns[(inter.guild.id, user_id)] = time.monotonic()
-                    view.stop()
-                    for child in view.children:
-                        child.disabled = True
-                    await inter.response.edit_message(content=f"❌ Не тот цвет. Нужно было нажать **{target}**.", view=view)
+                    await self._finish_failure(inter, view, f"❌ Не тот цвет. Нужно было нажать **{target}**.")
                     return
                 await self._reward(inter, view)
 
             button.callback = callback
             view.add_item(button)
-        return view, f"⚡ Нажми на **{target}** быстрее остальных."
+        return view, f"⚡ Нажми на **{target}** как можно быстрее."
 
     def _memory_game(self, user_id: int) -> tuple[MiniGameView, str]:
-        """Build a small sequence-memory challenge using buttons."""
+        """Build a short sequence-memory challenge using buttons."""
         sequence = [str(random.randint(1, 4)) for _ in range(3)]
         view = MiniGameView(self, user_id, timeout=30.0)
         view.sequence = sequence
@@ -234,13 +240,7 @@ class MiniGames(commands.Cog):
                     return
                 expected = view.sequence[view.position]
                 if value != expected:
-                    view.finished = True
-                    self._active_games.discard((inter.guild.id, user_id))
-                    self._cooldowns[(inter.guild.id, user_id)] = time.monotonic()
-                    view.stop()
-                    for child in view.children:
-                        child.disabled = True
-                    await inter.response.edit_message(content=f"❌ Ошибка. Последовательность была: **{' '.join(sequence)}**.", view=view)
+                    await self._finish_failure(inter, view, f"❌ Ошибка. Последовательность была: **{' '.join(sequence)}**.")
                     return
                 view.position += 1
                 if view.position == len(view.sequence):
@@ -251,14 +251,7 @@ class MiniGames(commands.Cog):
             button.callback = callback
             view.add_item(button)
 
-        view._sequence_text = " ".join(sequence)
-        return view, f"🧠 Запомни последовательность: **{' '.join(sequence)}**. Затем вводи её кнопками по порядку."
-
-    @commands.Cog.listener()
-    async def on_message(self, message: disnake.Message) -> None:
-        """Keep mini-game sessions isolated from normal message progression."""
-        if message.guild and message.author.bot:
-            return
+        return view, f"🧠 Запомни последовательность: **{' '.join(sequence)}**. Она исчезнет через 3 секунды."
 
 
 def setup(bot: commands.Bot) -> None:
