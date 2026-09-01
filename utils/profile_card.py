@@ -1,3 +1,5 @@
+"""Generate the rendered profile card image used by the XP profile command."""
+
 from __future__ import annotations
 
 from io import BytesIO
@@ -7,6 +9,7 @@ from PIL import Image, ImageDraw, ImageFont
 
 
 def _font(size: int) -> ImageFont.FreeTypeFont | ImageFont.ImageFont:
+    """Load the preferred font, falling back when the runtime has no font file."""
     try:
         return ImageFont.truetype("DejaVuSans.ttf", size)
     except OSError:
@@ -14,6 +17,7 @@ def _font(size: int) -> ImageFont.FreeTypeFont | ImageFont.ImageFont:
 
 
 def _color(value: str, fallback: tuple[int, int, int]) -> tuple[int, int, int]:
+    """Convert a six-digit hex color into an RGB tuple with a safe fallback."""
     try:
         value = value.strip().lstrip("#")
         if len(value) != 6:
@@ -28,6 +32,7 @@ async def generate_profile_card(
     stats: dict[str, int],
     customization: dict[str, str] | None = None,
 ) -> BytesIO:
+    """Render profile statistics and user customization into an in-memory PNG."""
     width, height = 1000, 460
     customization = customization or {}
     background = _color(customization.get("background_color", "#181B23"), (24, 27, 35))
