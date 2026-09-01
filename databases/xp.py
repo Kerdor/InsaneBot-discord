@@ -1,3 +1,5 @@
+"""SQLite persistence for member XP, levels and activity counters."""
+
 from __future__ import annotations
 
 import sqlite3
@@ -9,12 +11,14 @@ DB_PATH = Path(BotConfig.DATABASE_DIR) / "xp.db"
 
 
 def _connect() -> sqlite3.Connection:
+    """Open the XP database with named-column row access."""
     connection = sqlite3.connect(DB_PATH)
     connection.row_factory = sqlite3.Row
     return connection
 
 
 def init_xp() -> None:
+    """Create the persistent XP table when the database is initialized."""
     with _connect() as connection:
         connection.execute(
             """
@@ -33,6 +37,7 @@ def init_xp() -> None:
 
 
 def get_user(guild_id: int, user_id: int) -> sqlite3.Row | None:
+    """Return one member's stored XP row, if it exists."""
     with _connect() as connection:
         return connection.execute(
             "SELECT * FROM user_xp WHERE guild_id = ? AND user_id = ?",
@@ -41,6 +46,7 @@ def get_user(guild_id: int, user_id: int) -> sqlite3.Row | None:
 
 
 def ensure_user(guild_id: int, user_id: int) -> None:
+    """Create a member's XP row without overwriting existing progress."""
     with _connect() as connection:
         connection.execute(
             "INSERT OR IGNORE INTO user_xp (guild_id, user_id) VALUES (?, ?)",
@@ -50,6 +56,7 @@ def ensure_user(guild_id: int, user_id: int) -> None:
 
 
 def add_message_xp(guild_id: int, user_id: int, amount: int) -> sqlite3.Row:
+    """Add message XP, increment the message counter and return the row."""
     ensure_user(guild_id, user_id)
     with _connect() as connection:
         connection.execute(
@@ -65,6 +72,7 @@ def add_message_xp(guild_id: int, user_id: int, amount: int) -> sqlite3.Row:
 
 
 def add_voice_xp(guild_id: int, user_id: int, amount: int) -> sqlite3.Row:
+    """Add voice XP and the same amount to the dedicated voice counter."""
     ensure_user(guild_id, user_id)
     with _connect() as connection:
         connection.execute(
@@ -80,6 +88,7 @@ def add_voice_xp(guild_id: int, user_id: int, amount: int) -> sqlite3.Row:
 
 
 def set_level(guild_id: int, user_id: int, level: int) -> None:
+    """Persist a calculated level for an existing member row."""
     with _connect() as connection:
         connection.execute(
             "UPDATE user_xp SET level = ? WHERE guild_id = ? AND user_id = ?",
@@ -89,6 +98,7 @@ def set_level(guild_id: int, user_id: int, level: int) -> None:
 
 
 def get_ranking(guild_id: int, limit: int = 10) -> list[sqlite3.Row]:
+    """Return members ordered by XP and then level."""
     with _connect() as connection:
         return connection.execute(
             "SELECT * FROM user_xp WHERE guild_id = ? ORDER BY xp DESC, level DESC LIMIT ?",
