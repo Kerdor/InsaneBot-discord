@@ -263,7 +263,26 @@ No libraries or overall ticket/rebuild architecture were changed.
 
 **Verification status:** CODE-FIXED, runtime verification pending. After the runner pulls both commits, test `/rebuild`, create a ticket, open the close dialog and confirm close several times. The expected result is that the interaction is acknowledged every time without requiring a second click.
 
-## 15. Server map / persistent config
+## 15. Verification / role synchronization
+
+Verification system assigns `Not verified` to new members, removes it and assigns `Member` after successful verification, and synchronizes existing members on startup. The guild owner receives `Owner` instead of `Not verified`.
+
+### Rebuild role assignment bug — CODE-FIXED, runtime verification pending — 2026-09-01
+
+**Problem:** after `/rebuild`, all old custom roles are deleted and recreated with new IDs. The rebuild correctly recreated the role hierarchy, but it did not immediately reassign the new roles to existing members. The existing synchronization only ran on bot startup (`on_ready`) or member join, so a rebuild during an already-running bot left users without `Not verified` / `Owner` until a restart.
+
+**Expected behavior:** yes — after a TEST rebuild, existing ordinary users should receive the newly created `Not verified` role, while the guild owner should receive the newly created `Owner` role and have `Not verified` removed. A previously verified ordinary user should keep their `Member` role only if that role is still present; because rebuild replaces the roles, the current sync behavior treats users without the new `Member` role as not verified.
+
+Fixed directly on `main` in commit `cd04d2c63db22214b16e1fcd4c8dda74ba589f10` (`cogs/verification.py`):
+
+- added an `on_guild_role_create` listener that detects creation of the rebuilt `Owner` role and immediately runs existing-member role synchronization;
+- `_sync_existing_members()` now falls back to resolving the freshly created roles by their configured names when the runtime IDs still point to deleted pre-rebuild roles;
+- existing verification logic and role hierarchy were not otherwise changed;
+- no new libraries and no branches were used.
+
+**Verification status:** CODE-FIXED, runtime verification pending. Pull/restart, run `/rebuild`, then check an ordinary member has `Not verified` and the guild owner has `Owner` (without `Not verified`). Also verify the verification panel still changes `Not verified → Member` normally.
+
+## 16. Server map / persistent config
 
 `.server_map.json` provides TEST server-specific role/channel IDs. `.logging_channels.json` stores logging destinations/forum/thread IDs.
 
@@ -293,7 +312,7 @@ The previous rebuild relied on role creation order and produced the wrong hierar
 
 Required channels include `create_voice`, `verification`, `create_ticket`, `tickets`, `game_panel`, `moderation_panel`, logging destinations and the normal community/game channels.
 
-## 16. Dev runner — VERIFIED
+## 17. Dev runner — VERIFIED
 
 `dev_runner.py` polls every 5 seconds.
 
@@ -303,7 +322,7 @@ Do not run a separate `main.py` alongside the runner.
 
 Runner self-update is not implemented; treat it as a separate future feature only if explicitly requested.
 
-## 17. Local Git / databases
+## 18. Local Git / databases
 
 Do not blindly discard local runtime DB changes.
 
@@ -319,7 +338,7 @@ databases/xp.db
 
 Do not use destructive restore/reset/cleanup commands against these without explicit instruction.
 
-## 18. Current status / next steps
+## 19. Current status / next steps
 
 ### DONE / VERIFIED
 
@@ -337,17 +356,20 @@ Do not use destructive restore/reset/cleanup commands against these without expl
 - `🎫・тикеты` parent-channel privacy fix from commit `041dcb14bc4f2b9db0c01c0f1b687b03e6ce379c`.
 - Intermittent Discord interaction timeout fix from commits `1755d209f4bacf859a9da3396fef94e252140f6` and `a6257712677652a2e31d4bf20ea773a8f4d0ca5e`.
 - Moderation interaction acknowledgement hardening from commit `64c80fb3ab96fcb954ae7524d799a57feaa0247f`.
+- Rebuild existing-member role synchronization from commit `cd04d2c63db22214b16e1fcd4c8dda74ba589f10`.
 
 ### NEXT
 
 1. Pull/restart the bot with the latest `main`.
-2. Verify the moderation interaction acknowledgement fix: test `/warn`, `/timeout`, `/kick`, `/ban`, `/unban`, `/history` and all moderation panel modals multiple times.
-3. Confirm moderation logs and punishment history remain correct.
-4. Finish runtime verification of the ticket parent-channel privacy fix and ticket/rebuild interaction acknowledgement fix if not already verified after the latest pull.
-5. Continue ticket lifecycle tests: transcript/recovery.
-6. Then move to the next planned functionality and test it incrementally.
-7. Admin panel: fix only issues discovered during real testing.
-8. Economy: explicitly decide whether negative balances are allowed.
+2. Run `/rebuild` and verify role synchronization: ordinary member → `Not verified`; guild owner → `Owner` and not `Not verified`.
+3. Verify the verification panel still converts `Not verified → Member`.
+4. Verify the moderation interaction acknowledgement fix: test `/warn`, `/timeout`, `/kick`, `/ban`, `/unban`, `/history` and all moderation panel modals multiple times.
+5. Confirm moderation logs and punishment history remain correct.
+6. Finish runtime verification of the ticket parent-channel privacy fix and ticket/rebuild interaction acknowledgement fix if not already verified after the latest pull.
+7. Continue ticket lifecycle tests: transcript/recovery.
+8. Then move to the next planned functionality and test it incrementally.
+9. Admin panel: fix only issues discovered during real testing.
+10. Economy: explicitly decide whether negative balances are allowed.
 
 ### FUTURE
 
@@ -359,7 +381,7 @@ Do not use destructive restore/reset/cleanup commands against these without expl
 - Friends/relationships.
 - Other planned social systems.
 
-## 19. IMPORTANT HAND-OFF FACTS
+## 20. IMPORTANT HAND-OFF FACTS
 
 - Branch: `main` only; **do not create branches**.
 - TEST guild: `519209364280573954` (`Insane TEST`).
@@ -376,6 +398,7 @@ Do not use destructive restore/reset/cleanup commands against these without expl
 - Ticket/rebuild interaction acknowledgement fix is committed but needs live verification.
 - Logging stale-thread and stale-channel fixes are verified.
 - Rebuild role hierarchy is verified.
+- Rebuild role synchronization fix is committed but needs live verification.
 - **After every fix, update `PROJECT_STATE.md` before considering the work complete.**
 - Do not repeat completed shop/runner tests without a relevant code change.
 - Do not discard local runtime databases.
