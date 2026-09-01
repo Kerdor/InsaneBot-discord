@@ -228,6 +228,23 @@ This preserves the existing ticket architecture and also fixes future automatic 
 
 **Verification status:** CODE-FIXED, runtime verification pending. The TEST server must be rebuilt or `/sync_server` run after the bot pulls commit `041dcb14...`; then verify that ordinary users cannot see `🎫・тикеты` while `🎫・создать-тикет` remains public and ticket creation still works.
 
+### Discord interaction timeout fix — CODE-FIXED, runtime verification pending
+
+Live testing showed intermittent `Приложение не отвечает` on ticket creation, ticket closing and `/rebuild`, sometimes succeeding immediately on a second attempt, with no corresponding application error in the bot console.
+
+Discord interactions must be acknowledged promptly; otherwise Discord can display a failed interaction even when the bot later continues processing. citeturn0search0turn0search2
+
+Inspection found ticket handlers performing synchronous/database work before acknowledging the interaction. The rebuild slash command also sent its first response instead of immediately deferring it.
+
+Fixed on `main`:
+
+- `cogs/tickets.py` commit `1755d209f4bacf859a9da3396fef94e252140f6`: ticket modal now defers immediately before database checks; ticket close button/command and close confirmation also acknowledge immediately before database/transcript work and use followups afterward.
+- `cogs/rebuild_command.py` commit `a6257712677652a2e31d4bf20ea773a8f4d0ca5e`: `/rebuild_test_server` now defers immediately and sends the confirmation through a followup.
+
+No libraries or overall ticket/rebuild architecture were changed.
+
+**Verification status:** CODE-FIXED, runtime verification pending. After the runner pulls both commits, test `/rebuild`, create a ticket, open the close dialog and confirm close several times. The expected result is that the interaction is acknowledged every time without requiring a second click.
+
 ## 15. Server map / persistent config
 
 `.server_map.json` provides TEST server-specific role/channel IDs. `.logging_channels.json` stores logging destinations/forum/thread IDs.
@@ -300,16 +317,19 @@ Do not use destructive restore/reset/cleanup commands against these without expl
 ### CODE-FIXED, RUNTIME VERIFICATION PENDING
 
 - `🎫・тикеты` parent-channel privacy fix from commit `041dcb14bc4f2b9db0c01c0f1b687b03e6ce379c`.
+- Intermittent Discord interaction timeout fix from commits `1755d209f4bacf859a9da3396fef94e252140f6` and `a6257712677652a2e31d4bf20ea773a8f4d0ca5e`.
 
 ### NEXT
 
-1. Pull/restart the bot with `041dcb14...` and run `/rebuild` or `/sync_server`.
-2. Verify ordinary users cannot see `🎫・тикеты`.
-3. Verify `🎫・создать-тикет` remains public and ticket creation still works.
-4. Continue ticket lifecycle tests: closing/transcript/recovery.
-5. Then move to the next planned functionality and test it incrementally.
-6. Admin panel: fix only issues discovered during real testing.
-7. Economy: explicitly decide whether negative balances are allowed.
+1. Pull/restart the bot with the latest `main`.
+2. Run `/rebuild` several times and confirm the command always acknowledges immediately.
+3. Create a ticket several times and confirm the modal submission always acknowledges immediately.
+4. Close tickets several times and confirm both close-button stages always acknowledge immediately.
+5. Verify ordinary users cannot see `🎫・тикеты` while `🎫・создать-тикет` remains public.
+6. Continue ticket lifecycle tests: transcript/recovery.
+7. Then move to the next planned functionality and test it incrementally.
+8. Admin panel: fix only issues discovered during real testing.
+9. Economy: explicitly decide whether negative balances are allowed.
 
 ### FUTURE
 
@@ -335,6 +355,7 @@ Do not use destructive restore/reset/cleanup commands against these without expl
 - Tickets use private Discord Threads under the `🎫・тикеты` parent channel.
 - Individual ticket privacy and creation/closing have been tested successfully.
 - Parent `🎫・тикеты` privacy fix is committed but needs live verification after update/rebuild.
+- Ticket/rebuild interaction acknowledgement fix is committed but needs live verification.
 - Logging stale-thread and stale-channel fixes are verified.
 - Rebuild role hierarchy is verified.
 - **After every fix, update `PROJECT_STATE.md` before considering the work complete.**
