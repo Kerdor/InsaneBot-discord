@@ -33,27 +33,37 @@ Do not introduce talismans, consumable combat items, loot boxes, RPG equipment/i
 
 Shop is primarily for server/community benefits such as Discord roles, not RPG inventory.
 
-## 3. Roadmap
+## 3. Current roadmap
 
 1. Levels/XP — implemented
 2. Economy — implemented/expanding
 3. Shop — implemented and runtime-tested; UI redesign postponed
-4. Profiles — basic `/profile` implemented
+4. Profiles — basic `/profile` implemented; **next profile step is generated profile-card image**
 5. Daily rewards — implemented
-6. Quests — planned
-7. PvP — planned
-8. Mini-games — planned
+6. **Quests — implemented MVP; runtime QA next**
+7. PvP — **removed from current roadmap**
+8. Mini-games — future; Discord Activities are an accepted direction
 9. Rankings — XP/economy/voice implemented
-10. Achievements — planned
-11. Collecting — planned
-12. Profile customization — planned
+10. **Achievements — planned next after quests/profile-card work**
+11. Collecting — **removed from current roadmap for now**
+12. Profile customization — planned after generated profile card
 13. Social interactions — planned
 14. Voice-time rankings — implemented
 15. Friends — planned
 16. Romantic relationships — planned
-17. Tickets — implemented; TEST lifecycle testing in progress
-18. Moderation — implemented; interaction acknowledgement hardening added
+17. Tickets — implemented; final regression QA remains
+18. Moderation — implemented; interaction acknowledgement hardening added; runtime QA remains
 19. Logging — implemented/expanding
+
+### Agreed development order before full QA
+
+Finish currently selected functionality first:
+1. Quests
+2. Achievements
+3. Profile card (replace current `/profile` Embed with generated image)
+4. Then perform detailed QA **one system at a time**.
+
+Mini-games are a later feature and may include Discord Activities integrated with the main bot systems: XP, economy, quests, achievements and rankings.
 
 ## 4. TEST runtime
 
@@ -69,7 +79,7 @@ Bot: `Insane#6907`.
 
 MAIN guild is not connected during TEST runs; expected.
 
-`config.py` separates TEST/production, loads `.server_map.json` and `.logging_channels.json`, validates/creates required directories, and includes `cogs.shop` and `cogs.admin_panel`.
+`config.py` separates TEST/production, loads `.server_map.json` and `.logging_channels.json`, validates/creates required directories, and now loads `cogs.quests`.
 
 ## 5. Current COGs
 
@@ -91,20 +101,17 @@ cogs.logging.setup_logs
 cogs.logging.voice_stats
 cogs.logging.system_logs
 cogs.shop
+cogs.quests
 cogs.admin_panel
 ```
 
-All loaded successfully in the latest verified run.
+Before quests, all configured COGs loaded successfully and startup reached Discord normally.
 
-## 6. Command sync — VERIFIED
+## 6. Command sync
 
-Latest verified startup:
+Latest previously verified startup had 33 application commands in memory and Discord returned 33 registered TEST commands. `/shop`, `/buy`, `/shop_admin`, `/admin_panel` were available.
 
-- all configured COGs loaded;
-- 33 application commands in memory;
-- Discord returned 33 registered TEST commands;
-- `/shop`, `/buy`, `/shop_admin`, `/admin_panel` are available;
-- Discord connection/startup succeeded.
+After adding quests, command sync must be runtime-verified again. Expected new command: `/quests`.
 
 ## 7. XP / Levels
 
@@ -119,6 +126,8 @@ Defaults:
 - level threshold: `100 * level²`;
 - eligible message also awards 2 🪙.
 
+Full QA remains pending.
+
 ## 8. Economy
 
 Persistent SQLite economy. Normal currency: 🪙. Rare currency: 💎.
@@ -131,9 +140,7 @@ Commands:
 /rich
 ```
 
-### Admin Economy — VERIFIED
-
-`/admin_panel → 💰 Экономика → UserSelect → amount` works. Verified user selection, give/remove coins, zero rejection and balance changes.
+Admin Economy was runtime verified: `/admin_panel → 💰 Экономика → UserSelect → amount`, including user selection, give/remove coins, zero rejection and balance changes.
 
 Negative-balance policy remains undecided; do not silently change it.
 
@@ -159,13 +166,59 @@ Later redesign: more visual presentation, pagination, 5 or 10 items per page, bo
 
 ## 10. Profile
 
-Basic `/profile` is implemented using existing XP/economy persistence. Future: profile cards, customization, achievements and social information.
+Basic `/profile` currently uses XP/economy persistence and returns an Embed.
 
-## 11. Admin panel
+**Agreed next step:** replace the Embed presentation with a generated profile-card image. Customization should be built on top of the card architecture, not before it.
+
+## 11. Quests — MVP IMPLEMENTED, QA PENDING
+
+New persistent database: `databases/quests.py`, SQLite file `databases/quests.db`.
+
+New COG: `cogs/quests.py`.
+
+Public command:
+```text
+/quests
+```
+
+Current daily quests:
+- `messages_10`: send 10 messages → 50 🪙
+- `voice_30`: spend 30 counted voice minutes → 100 🪙
+- `voice_sessions_3`: enter a counted voice channel 3 times → 75 🪙
+
+Progress is stored per guild/user/quest/date. The date is UTC, so a new UTC day creates fresh progress without destructive cleanup.
+
+Completion is automatic: when a target is reached, the quest is atomically marked completed and the coin reward is granted. This prevents the same quest completion from paying twice under concurrent events.
+
+Bot/webhook messages are excluded from the message quest. AFK voice channels are excluded. Voice sessions are recovered on `on_ready` using the existing persistent voice-session information when available.
+
+No new libraries were added. Existing economy storage is reused for rewards.
+
+### Quest verification still required
+
+After runner pulls the commits, verify:
+- cog loads without errors;
+- `/quests` appears after command sync;
+- fresh user sees 0 progress;
+- each normal message increments only the message quest;
+- bot/webhook messages do not increment it;
+- exactly 10 messages completes once and pays 50 🪙;
+- repeated messages after completion do not pay again;
+- entering/leaving counted voice updates session quest and minutes correctly;
+- AFK channel does not count;
+- channel switching preserves accumulated voice minutes;
+- restart while in voice does not lose recoverable session time;
+- daily date boundary starts fresh progress;
+- DB persistence survives restart;
+- insufficient/failed economy scenarios do not silently duplicate rewards.
+
+## 12. Admin panel
 
 `/admin_panel` is admin/owner restricted. Current areas: settings, logging, shop and economy balance management. Persistent server settings use `databases/settings.db` with audit history.
 
-## 12. Logging
+Full QA remains pending.
+
+## 13. Logging
 
 COGs:
 ```text
@@ -189,7 +242,7 @@ Fixed in `a0a515d24b81f3340bfb231e81513a5602068f8f`: cached destinations are val
 
 **Verification:** full `/rebuild` on 2026-09-01 completed without `Unknown Channel` / 404 logging errors.
 
-## 13. Moderation
+## 14. Moderation
 
 Implemented persistent moderation DB, slash commands, moderation panel and moderation logging:
 ```text
@@ -200,206 +253,120 @@ Implemented persistent moderation DB, slash commands, moderation panel and moder
 /warn
 ```
 
-### Discord interaction timeout hardening — CODE-FIXED, runtime verification pending
+### Interaction timeout hardening — CODE-FIXED, runtime QA pending
 
-Inspection of `cogs/moderation.py` found the same intermittent interaction-timeout risk previously seen in tickets/rebuild: slash commands could perform Discord API, database or logging work before acknowledging the interaction. The modal callback could also fetch a member, perform moderation actions and send logs before acknowledgement.
+Fixed in commit `64c80fb3ab96fcb954ae7524d799a57feaa0247f`:
+- moderation slash commands defer before long Discord/API/DB/logging work;
+- `ModerationTargetModal.callback()` defers before member lookup and moderation work;
+- successful post-defer responses use followups.
 
-Fixed in commit `64c80fb3ab96fcb954ae7524d799a57feaa0247f` directly on `main`:
+Runtime QA remains: `/warn`, `/timeout`, `/kick`, `/ban`, `/unban`, `/history` and moderation-panel modals multiple times, plus logs/history correctness.
 
-- `/warn` now defers before moderation logging/database work.
-- `/timeout` now defers before the Discord timeout and database write.
-- `/kick` now defers before the Discord kick/logging work.
-- `/ban` now defers before the Discord ban/logging work.
-- `/unban` now defers before user fetch/unban/logging work.
-- `/history` now defers before the database read.
-- `ModerationTargetModal.callback()` now defers before member lookup and all moderation work.
-- All successful responses after a defer use `inter.followup.send()`.
-- Validation/configuration errors that occur before long work still use the initial interaction response.
-
-No new libraries, no branch, and no moderation logic/architecture changes were introduced.
-
-**Verification status:** CODE-FIXED, runtime verification pending. After the runner pulls `64c80fb...`, test `/warn`, `/timeout`, `/kick`, `/ban`, `/unban`, `/history` and each moderation-panel modal multiple times. Confirm that every interaction acknowledges immediately and never requires a second click. Also verify moderation logs and punishment history remain correct.
-
-## 14. Tickets
+## 15. Tickets
 
 Private-thread ticket system exists with creation, transcripts, recovery and persistent state.
 
-### Ticket runtime tests already passed
+Previously verified:
+- ticket creation works;
+- ticket is a Discord private thread under `🎫・тикеты`;
+- author/moderation access works;
+- ordinary users cannot access an individual ticket;
+- closing works and the ticket is not immediately deleted.
 
-- Ticket creation works.
-- Ticket is created as a Discord private thread under `🎫・тикеты`.
-- Ticket privacy was checked successfully: author/moderation access works and ordinary users cannot access the individual ticket.
-- Closing a ticket works and the ticket is not immediately deleted.
+### Parent channel privacy bug — CODE-FIXED, runtime QA pending
 
-### Ticket channel permissions bug — FIXED, runtime verification pending
+Commit `041dcb14bc4f2b9db0c01c0f1b687b03e6ce379c` changed `server_manager.apply_channel_overwrites()` so managed `🎫・тикеты` uses `build_private_ticket_overwrites()` instead of normal support-category permissions.
 
-**Problem found during live testing:** ordinary users could see the parent channel `🎫・тикеты`, even though individual ticket threads were private.
+After pulling/rebuilding or `/sync_server`, verify ordinary users cannot see `🎫・тикеты` while `🎫・создать-тикет` remains public and ticket creation still works.
 
-Root cause:
-- `rebuild_test_server.py` correctly created `🎫・тикеты` with `build_private_ticket_overwrites()`;
-- however `server_manager.py` automatically called `apply_channel_overwrites()` for every new channel;
-- `apply_channel_overwrites()` always applied normal category permissions;
-- the support category grants the `Member` role `view_channel=True`;
-- therefore the automatic channel-permission handler overwrote the intended private permissions of `🎫・тикеты`.
+### Interaction timeout fix — CODE-FIXED, runtime QA pending
 
-Fixed in commit `041dcb14bc4f2b9db0c01c0f1b687b03e6ce379c`: `apply_channel_overwrites()` now detects the managed `🎫・тикеты` channel by `CHANNEL_NAMES["tickets"]` and applies `build_private_ticket_overwrites()` instead of the normal category overwrites.
+- `cogs/tickets.py`: commit `1755d209f4bacf859a9da3396fef94e252140f6` — ticket modal, close button/command and close confirmation defer before DB/transcript work.
+- `cogs/rebuild_command.py`: commit `a6257712676522a2e31d4bf20ea773a8f4d0ca5e` — `/rebuild_test_server` defers immediately and uses followup.
 
-This preserves the existing ticket architecture and also fixes future automatic permission application, `/sync_server`, and channel creation/update paths that use `apply_channel_overwrites()`.
+## 16. Verification — LIVE VERIFIED
 
-**Verification status:** CODE-FIXED, runtime verification pending. The TEST server must be rebuilt or `/sync_server` run after the bot pulls commit `041dcb14...`; then verify that ordinary users cannot see `🎫・тикеты` while `🎫・создать-тикет` remains public and ticket creation still works.
-
-### Discord interaction timeout fix — CODE-FIXED, runtime verification pending
-
-Live testing showed intermittent `Приложение не отвечает` on ticket creation, ticket closing and `/rebuild`, sometimes succeeding immediately on a second attempt, with no corresponding application error in the bot console.
-
-Discord interactions must be acknowledged promptly; otherwise Discord can display a failed interaction even when the bot later continues processing.
-
-Fixed on `main`:
-
-- `cogs/tickets.py` commit `1755d209f4bacf859a9da3396fef94e252140f6`: ticket modal now defers immediately before database checks; ticket close button/command and close confirmation also acknowledge immediately before database/transcript work and use followups afterward.
-- `cogs/rebuild_command.py` commit `a6257712677652a2e31d4bf20ea773a8f4d0ca5e`: `/rebuild_test_server` now defers immediately and sends the confirmation through a followup.
-
-No libraries or overall ticket/rebuild architecture were changed.
-
-**Verification status:** CODE-FIXED, runtime verification pending. After the runner pulls both commits, test `/rebuild`, create a ticket, open the close dialog and confirm close several times. The expected result is that the interaction is acknowledged every time without requiring a second click.
-
-## 15. Verification / role synchronization
-
-Verification system assigns `Not verified` to new members, removes it and assigns `Member` after successful verification, and synchronizes existing members on startup. The guild owner receives `Owner` instead of `Not verified`.
-
-### Rebuild role assignment bug — CODE-FIXED, runtime verification pending — 2026-09-01
-
-**Problem:** after `/rebuild`, all old custom roles are deleted and recreated with new IDs. The rebuild correctly recreated the role hierarchy, but it did not immediately reassign the new roles to existing members. The existing synchronization only ran on bot startup (`on_ready`) or member join, so a rebuild during an already-running bot left users without `Not verified` / `Owner` until a restart.
-
-**Expected behavior:** yes — after a TEST rebuild, existing ordinary users should receive the newly created `Not verified` role, while the guild owner should receive the newly created `Owner` role and have `Not verified` removed. A previously verified ordinary user should keep their `Member` role only if that role is still present; because rebuild replaces the roles, the current sync behavior treats users without the new `Member` role as not verified.
-
-Fixed directly on `main` in commit `cd04d2c63db22214b16e1fcd4c8dda74ba589f10` (`cogs/verification.py`):
-
-- added an `on_guild_role_create` listener that detects creation of the rebuilt `Owner` role and immediately runs existing-member role synchronization;
-- `_sync_existing_members()` now falls back to resolving the freshly created roles by their configured names when the runtime IDs still point to deleted pre-rebuild roles;
-- existing verification logic and role hierarchy were not otherwise changed;
-- no new libraries and no branches were used.
-
-**Verification status:** CODE-FIXED, runtime verification pending. Pull/restart, run `/rebuild`, then check an ordinary member has `Not verified` and the guild owner has `Owner` (without `Not verified`). Also verify the verification panel still changes `Not verified → Member` normally.
-
-## 16. Server map / persistent config
-
-`.server_map.json` provides TEST server-specific role/channel IDs. `.logging_channels.json` stores logging destinations/forum/thread IDs.
-
-Required roles and hierarchy:
+Current role hierarchy:
 ```text
-Owner
-Administrator
-Moderator
-Helper
-Member
-Not verified
-@everyone
+Owner > Administrator > Moderator > Helper > Member > Not verified > @everyone
 ```
 
-### Role hierarchy fix — 2026-09-01
+Live verification already completed after `/rebuild`:
+- ordinary user gets `Not verified`;
+- owner gets `Owner` without `Not verified`;
+- verification changes `Not verified → Member`.
 
-The previous rebuild relied on role creation order and produced the wrong hierarchy. Fixed in `4dea2a9d80e05672af8c5fd77dad12a1732db0f0` by explicitly calling `guild.edit_role_positions()` after role creation:
+## 17. Server Manager / Rebuild
 
-- Not verified = 1
-- Member = 2
-- Helper = 3
-- Moderator = 4
-- Administrator = 5
-- Owner = 6
+Role hierarchy fix commit: `4dea2a9d80e05672af8c5fd77dad12a1732db0f0`.
 
-**Verification:** LIVE VERIFIED 2026-09-01. Full rebuild completed without errors and Discord showed Owner → Administrator → Moderator → Helper → Member → Not verified → @everyone.
+Rebuild/logging cache fix commit: `a0a515d24b81f3340bfb231e81513a5602068f8f`.
 
-Required channels include `create_voice`, `verification`, `create_ticket`, `tickets`, `game_panel`, `moderation_panel`, logging destinations and the normal community/game channels.
+Full rebuild previously completed successfully without Unknown Channel/404 logging errors.
 
-## 17. Dev runner — VERIFIED
+## 18. Runner
 
 `dev_runner.py` polls every 5 seconds.
 
-Full live pull → detect changed HEAD → stop child → start child → continue polling cycle was verified. Do not repeat unless runner code changes or a regression occurs.
+Previously verified full pull → detect → stop child → restart child cycle.
 
-Do not run a separate `main.py` alongside the runner.
+No separate `main.py` replacement is planned; the repository currently has `main.py` as the bot entrypoint and `dev_runner.py` as the development runner.
 
-Runner self-update is not implemented; treat it as a separate future feature only if explicitly requested.
+Runner self-update is not implemented.
 
-## 18. Local Git / databases
+## 19. Local DB caution
 
-Do not blindly discard local runtime DB changes.
+Do not destructively reset/restore runtime DBs.
 
-Previously observed local files:
+Observed runtime DBs include:
 ```text
-modified: databases/Insane.sqlite3
-untracked: databases/economy.db
+databases/Insane.sqlite3
+databases/economy.db
 databases/moderation.db
 databases/settings.db
 databases/tickets.db
 databases/xp.db
+databases/quests.db
 ```
 
-Do not use destructive restore/reset/cleanup commands against these without explicit instruction.
+## 20. QA strategy after functionality build
 
-## 19. Current status / next steps
+User decision: **finish all currently selected functionality first, then test one system at a time in detail.**
 
-### DONE / VERIFIED
+For each system test at minimum:
+- normal scenario;
+- invalid/bad input;
+- permissions and role restrictions;
+- edge cases;
+- repeated execution/double-clicks;
+- persistence/restart;
+- interaction acknowledgement/timeouts;
+- Discord permission failures;
+- API/DB failures where practical;
+- logs;
+- rebuild/sync interactions;
+- race/concurrency-sensitive paths.
 
-- Admin Economy UserSelect and balance operations.
-- Shop loading, command synchronization, CRUD and purchase/error/refund behavior.
-- Successful shop role assignment.
-- Dev runner 5-second polling and full auto-pull/restart cycle.
-- Runner test file removal.
-- Discord ticket/private-thread behavior: individual ticket privacy and lifecycle creation/closing verified.
-- Logging stale-thread crash and stale cached-channel 404 fix.
-- Rebuild role hierarchy.
+Suggested QA order:
+1. Tickets and recent timeout/privacy fixes
+2. Moderation
+3. Verification
+4. XP/levels
+5. Economy/daily/pay/rich
+6. Shop
+7. Quests
+8. Profile/profile card
+9. Rankings/voice stats
+10. Admin panel
+11. Rebuild/server manager
+12. Logging groups
+13. Runner
+14. Full regression
 
-### CODE-FIXED, RUNTIME VERIFICATION PENDING
+After system-by-system QA, perform a final technical audit covering dead code, stale references, async correctness, interaction acknowledgement, permissions, role hierarchy, channels/threads, config, DB, runner, COG architecture, exceptions and race conditions.
 
-- `🎫・тикеты` parent-channel privacy fix from commit `041dcb14bc4f2b9db0c01c0f1b687b03e6ce379c`.
-- Intermittent Discord interaction timeout fix from commits `1755d209f4bacf859a9da3396fef94e252140f6` and `a6257712677652a2e31d4bf20ea773a8f4d0ca5e`.
-- Moderation interaction acknowledgement hardening from commit `64c80fb3ab96fcb954ae7524d799a57feaa0247f`.
-- Rebuild existing-member role synchronization from commit `cd04d2c63db22214b16e1fcd4c8dda74ba589f10`.
+## 21. Next action
 
-### NEXT
+Quests MVP has been added directly to `main`. The next step is to pull/restart the TEST runner and verify startup plus `/quests` before proceeding to achievements.
 
-1. Pull/restart the bot with the latest `main`.
-2. Run `/rebuild` and verify role synchronization: ordinary member → `Not verified`; guild owner → `Owner` and not `Not verified`.
-3. Verify the verification panel still converts `Not verified → Member`.
-4. Verify the moderation interaction acknowledgement fix: test `/warn`, `/timeout`, `/kick`, `/ban`, `/unban`, `/history` and all moderation panel modals multiple times.
-5. Confirm moderation logs and punishment history remain correct.
-6. Finish runtime verification of the ticket parent-channel privacy fix and ticket/rebuild interaction acknowledgement fix if not already verified after the latest pull.
-7. Continue ticket lifecycle tests: transcript/recovery.
-8. Then move to the next planned functionality and test it incrementally.
-9. Admin panel: fix only issues discovered during real testing.
-10. Economy: explicitly decide whether negative balances are allowed.
-
-### FUTURE
-
-- Shop visual redesign with 5/10 items per page and `◀ page/total ▶` navigation.
-- Profile cards/customization.
-- Quests.
-- Achievements.
-- Mini-games.
-- Friends/relationships.
-- Other planned social systems.
-
-## 20. IMPORTANT HAND-OFF FACTS
-
-- Branch: `main` only; **do not create branches**.
-- TEST guild: `519209364280573954` (`Insane TEST`).
-- Bot: `Insane#6907`.
-- Runner interval: **5 seconds**.
-- Runner auto-update: verified.
-- Shop function/error/CRUD tests: verified.
-- Admin Economy UserSelect: verified.
-- `/shop`, `/buy`, `/shop_admin`, `/admin_panel`: synchronized and available in TEST.
-- Shop UI redesign is planned, not current work.
-- Tickets use private Discord Threads under the `🎫・тикеты` parent channel.
-- Individual ticket privacy and creation/closing have been tested successfully.
-- Parent `🎫・тикеты` privacy fix is committed but needs live verification after update/rebuild.
-- Ticket/rebuild interaction acknowledgement fix is committed but needs live verification.
-- Logging stale-thread and stale-channel fixes are verified.
-- Rebuild role hierarchy is verified.
-- Rebuild role synchronization fix is committed but needs live verification.
-- **After every fix, update `PROJECT_STATE.md` before considering the work complete.**
-- Do not repeat completed shop/runner tests without a relevant code change.
-- Do not discard local runtime databases.
-- Do not turn the project into a traditional RPG.
+Do not start the detailed full QA phase until quests, achievements and the generated profile-card step are finished.
