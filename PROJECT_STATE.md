@@ -52,7 +52,7 @@ Shop is primarily for server/community benefits such as Discord roles, not RPG i
 15. Friends — planned
 16. Romantic relationships — planned
 17. Tickets — implemented; TEST lifecycle testing in progress
-18. Moderation — implemented
+18. Moderation — implemented; interaction acknowledgement hardening added
 19. Logging — implemented/expanding
 
 ## 4. TEST runtime
@@ -200,6 +200,26 @@ Implemented persistent moderation DB, slash commands, moderation panel and moder
 /warn
 ```
 
+### Discord interaction timeout hardening — CODE-FIXED, runtime verification pending
+
+Inspection of `cogs/moderation.py` found the same intermittent interaction-timeout risk previously seen in tickets/rebuild: slash commands could perform Discord API, database or logging work before acknowledging the interaction. The modal callback could also fetch a member, perform moderation actions and send logs before acknowledgement.
+
+Fixed in commit `64c80fb3ab96fcb954ae7524d799a57feaa0247f` directly on `main`:
+
+- `/warn` now defers before moderation logging/database work.
+- `/timeout` now defers before the Discord timeout and database write.
+- `/kick` now defers before the Discord kick/logging work.
+- `/ban` now defers before the Discord ban/logging work.
+- `/unban` now defers before user fetch/unban/logging work.
+- `/history` now defers before the database read.
+- `ModerationTargetModal.callback()` now defers before member lookup and all moderation work.
+- All successful responses after a defer use `inter.followup.send()`.
+- Validation/configuration errors that occur before long work still use the initial interaction response.
+
+No new libraries, no branch, and no moderation logic/architecture changes were introduced.
+
+**Verification status:** CODE-FIXED, runtime verification pending. After the runner pulls `64c80fb...`, test `/warn`, `/timeout`, `/kick`, `/ban`, `/unban`, `/history` and each moderation-panel modal multiple times. Confirm that every interaction acknowledges immediately and never requires a second click. Also verify moderation logs and punishment history remain correct.
+
 ## 14. Tickets
 
 Private-thread ticket system exists with creation, transcripts, recovery and persistent state.
@@ -232,9 +252,7 @@ This preserves the existing ticket architecture and also fixes future automatic 
 
 Live testing showed intermittent `Приложение не отвечает` on ticket creation, ticket closing and `/rebuild`, sometimes succeeding immediately on a second attempt, with no corresponding application error in the bot console.
 
-Discord interactions must be acknowledged promptly; otherwise Discord can display a failed interaction even when the bot later continues processing. citeturn0search0turn0search2
-
-Inspection found ticket handlers performing synchronous/database work before acknowledging the interaction. The rebuild slash command also sent its first response instead of immediately deferring it.
+Discord interactions must be acknowledged promptly; otherwise Discord can display a failed interaction even when the bot later continues processing.
 
 Fixed on `main`:
 
@@ -318,18 +336,18 @@ Do not use destructive restore/reset/cleanup commands against these without expl
 
 - `🎫・тикеты` parent-channel privacy fix from commit `041dcb14bc4f2b9db0c01c0f1b687b03e6ce379c`.
 - Intermittent Discord interaction timeout fix from commits `1755d209f4bacf859a9da3396fef94e252140f6` and `a6257712677652a2e31d4bf20ea773a8f4d0ca5e`.
+- Moderation interaction acknowledgement hardening from commit `64c80fb3ab96fcb954ae7524d799a57feaa0247f`.
 
 ### NEXT
 
 1. Pull/restart the bot with the latest `main`.
-2. Run `/rebuild` several times and confirm the command always acknowledges immediately.
-3. Create a ticket several times and confirm the modal submission always acknowledges immediately.
-4. Close tickets several times and confirm both close-button stages always acknowledge immediately.
-5. Verify ordinary users cannot see `🎫・тикеты` while `🎫・создать-тикет` remains public.
-6. Continue ticket lifecycle tests: transcript/recovery.
-7. Then move to the next planned functionality and test it incrementally.
-8. Admin panel: fix only issues discovered during real testing.
-9. Economy: explicitly decide whether negative balances are allowed.
+2. Verify the moderation interaction acknowledgement fix: test `/warn`, `/timeout`, `/kick`, `/ban`, `/unban`, `/history` and all moderation panel modals multiple times.
+3. Confirm moderation logs and punishment history remain correct.
+4. Finish runtime verification of the ticket parent-channel privacy fix and ticket/rebuild interaction acknowledgement fix if not already verified after the latest pull.
+5. Continue ticket lifecycle tests: transcript/recovery.
+6. Then move to the next planned functionality and test it incrementally.
+7. Admin panel: fix only issues discovered during real testing.
+8. Economy: explicitly decide whether negative balances are allowed.
 
 ### FUTURE
 
