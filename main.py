@@ -1,3 +1,10 @@
+"""Discord bot entrypoint and runtime lifecycle.
+
+This module owns startup configuration validation, extension loading, command
+synchronization for TEST, and the Discord client's top-level lifecycle.
+Business logic remains inside cogs and utility/database modules.
+"""
+
 import asyncio
 import logging
 import sys
@@ -8,13 +15,19 @@ from disnake.ext import commands
 from config import BotConfig
 from logs import get_discord_log_handler, setup_logging
 
+# Logging must be configured before creating the bot so startup and extension
+# loading failures are captured by the same application logger.
 setup_logging()
 logger = logging.getLogger(__name__)
 
+# The bot needs member and message-content intents because progression,
+# moderation, logging, and other cogs react to guild members and messages.
 intents = disnake.Intents.default()
 intents.members = True
 intents.message_content = True
 
+# Debug synchronization is intentionally enabled while command registration is
+# still being verified. TEST commands are explicitly overwritten on ready.
 command_sync_flags = commands.CommandSyncFlags.default()
 command_sync_flags.sync_commands_debug = True
 
@@ -26,14 +39,19 @@ bot = commands.Bot(
     command_sync_flags=command_sync_flags,
 )
 
+# on_ready can fire more than once after reconnects. Keep explicit TEST
+# synchronization idempotent within a single process.
 _test_commands_synced = False
 
 
 def _load_extensions(bot_instance: commands.Bot) -> None:
+    """Load configured cogs and fail startup if any required extension fails."""
     failed_extensions: list[str] = []
 
     print("\n[STARTUP] Загрузка расширений...")
 
+    # dict.fromkeys preserves configured order while preventing duplicate loads.
+    # admin_panel is always included because it is part of the management layer.
     for extension in dict.fromkeys((*BotConfig.COGS, "cogs.admin_panel")):
         print(f"[COG] Загружаем: {extension}")
         try:
@@ -44,6 +62,8 @@ def _load_extensions(bot_instance: commands.Bot) -> None:
             print(f"[COG] OK: {extension}")
             print(f"[COG] Загруженные cogs: {', '.join(loaded_cog_names) if loaded_cog_names else 'НЕТ'}")
 
+            # This diagnostic shows which commands became local TEST commands
+            # as each cog is loaded, making registration problems easy to locate.
             local_commands = []
             for command in bot_instance.application_commands:
                 guild_ids = getattr(command, "guild_ids", None)
@@ -89,6 +109,7 @@ def _load_extensions(bot_instance: commands.Bot) -> None:
 
 
 def _deployment_guilds() -> list[tuple[int, str]]:
+    """Return configured MAIN and TEST guilds for startup diagnostics."""
     guilds: list[tuple[int, str]] = []
 
     if BotConfig.MAIN_GUILD_ID is not None:
@@ -100,6 +121,7 @@ def _deployment_guilds() -> list[tuple[int, str]]:
 
 
 async def _sync_test_commands() -> None:
+    """Explicitly overwrite TEST guild commands once per process."""
     global _test_commands_synced
 
     if _test_commands_synced:
@@ -113,6 +135,8 @@ async def _sync_test_commands() -> None:
 
     print(f"[SYNC] Начинаем явную синхронизацию TEST: guild_id={guild_id}")
 
+    # Include global commands and commands explicitly assigned to TEST. This
+    # mirrors the intended command deployment boundary without touching MAIN.
     commands_to_sync = []
     for command in bot.application_commands:
         guild_ids = getattr(command, "guild_ids", None)
@@ -136,6 +160,8 @@ async def _sync_test_commands() -> None:
                 f"[SYNC]   <- {command.name} | guild_id={command.guild_id} | id={command.id}"
             )
 
+        # Fetch the final guild state so the startup log verifies Discord's
+        # registered command set rather than only the local overwrite result.
         commands_in_guild = await bot.fetch_guild_commands(guild_id)
         command_names = sorted(command.name for command in commands_in_guild)
         print(
@@ -150,6 +176,7 @@ async def _sync_test_commands() -> None:
 
 @bot.event
 async def on_ready() -> None:
+    """Register the log handler with the connected bot and verify deployment."""
     get_discord_log_handler().set_bot(bot)
     logger.info("Bot %s is ready", bot.user)
     logger.info("Bot ID: %s", bot.user.id if bot.user else "Unknown")
@@ -179,6 +206,7 @@ async def on_ready() -> None:
 
 @bot.event
 async def on_connect() -> None:
+    """Attach the Discord log handler when the gateway connection opens."""
     get_discord_log_handler().set_bot(bot)
     logger.info("Bot connected to Discord")
     print("[GATEWAY] Подключение к Discord установлено")
@@ -186,12 +214,14 @@ async def on_connect() -> None:
 
 @bot.event
 async def on_disconnect() -> None:
+    """Log gateway disconnects without changing application state."""
     logger.warning("Bot disconnected from Discord")
     print("[GATEWAY] Соединение с Discord закрыто")
 
 
 @bot.event
 async def on_error(event: str, *args, **kwargs) -> None:
+    """Capture unhandled Discord event errors in the central logger."""
     logger.error("Error in event %s", event, exc_info=True)
     print(f"[EVENT] Ошибка события: {event}")
 
@@ -199,6 +229,7 @@ async def on_error(event: str, *args, **kwargs) -> None:
 @bot.slash_command(description="Загрузить cog")
 @commands.is_owner()
 async def load(ctx: disnake.ApplicationCommandInteraction, extension: str) -> None:
+    """Load an extension manually; intended for owner-only runtime management."""
     qualified_extension = extension if extension.startswith("cogs.") else f"cogs.{extension}"
     print(f"[CMD] /load вызван: {qualified_extension}")
     logger.info("[CMD] /load: user=%s (%s), guild=%s, extension=%s", ctx.author, ctx.author.id, ctx.guild.id if ctx.guild else None, qualified_extension)
@@ -222,6 +253,7 @@ async def load(ctx: disnake.ApplicationCommandInteraction, extension: str) -> No
 @bot.slash_command(description="Выгрузить cog")
 @commands.is_owner()
 async def unload(ctx: disnake.ApplicationCommandInteraction, extension: str) -> None:
+    """Unload an extension manually; intended for owner-only runtime management."""
     qualified_extension = extension if extension.startswith("cogs.") else f"cogs.{extension}"
     print(f"[CMD] /unload вызван: {qualified_extension}")
     logger.info("[CMD] /unload: user=%s (%s), guild=%s, extension=%s", ctx.author, ctx.author.id, ctx.guild.id if ctx.guild else None, qualified_extension)
@@ -238,6 +270,7 @@ async def unload(ctx: disnake.ApplicationCommandInteraction, extension: str) -> 
 @bot.slash_command(description="Перезагрузить cog")
 @commands.is_owner()
 async def reload(ctx: disnake.ApplicationCommandInteraction, extension: str) -> None:
+    """Reload an extension, falling back to load when it was not active."""
     qualified_extension = extension if extension.startswith("cogs.") else f"cogs.{extension}"
     print(f"[CMD] /reload вызван: {qualified_extension}")
     logger.info("[CMD] /reload: user=%s (%s), guild=%s, extension=%s", ctx.author, ctx.author.id, ctx.guild.id if ctx.guild else None, qualified_extension)
@@ -257,6 +290,9 @@ async def reload(ctx: disnake.ApplicationCommandInteraction, extension: str) -> 
 
 
 async def main() -> None:
+    """Validate configuration, load cogs, and start the Discord client."""
+    # Validation happens before loading cogs so invalid environment separation
+    # or server mappings cannot result in a partially initialized application.
     BotConfig.validate()
     print(f"[CONFIG] ENVIRONMENT={BotConfig.ENVIRONMENT}")
     print(f"[CONFIG] MAIN_GUILD_ID={BotConfig.MAIN_GUILD_ID}")
@@ -269,6 +305,8 @@ async def main() -> None:
     try:
         await bot.start(BotConfig.TOKEN)
     finally:
+        # Explicit close keeps shutdown deterministic if bot.start() exits
+        # because of an exception or an external cancellation.
         if not bot.is_closed():
             await bot.close()
 
