@@ -1,3 +1,5 @@
+"""Owner-only server structure export used for audit and rebuild workflows."""
+
 from __future__ import annotations
 
 import gzip
@@ -14,15 +16,18 @@ logger = logging.getLogger(__name__)
 
 
 def _permissions(perms: disnake.Permissions) -> list[str]:
+    """Return the enabled permission names from a Discord permission set."""
     return [name for name, enabled in perms if enabled]
 
 
 def _overwrite_data(overwrite: disnake.PermissionOverwrite) -> dict[str, list[str]]:
+    """Serialize an allow/deny permission overwrite for JSON export."""
     allow, deny = overwrite.pair()
     return {"allow": _permissions(allow), "deny": _permissions(deny)}
 
 
 def _role_data(role: disnake.Role) -> dict:
+    """Serialize the role attributes required to audit server structure."""
     return {
         "id": role.id,
         "name": role.name,
@@ -42,6 +47,7 @@ def _role_data(role: disnake.Role) -> dict:
 
 
 def _channel_data(channel: disnake.abc.GuildChannel) -> dict:
+    """Serialize a guild channel, including type-specific settings and overwrites."""
     data = {
         "id": channel.id,
         "name": channel.name,
@@ -110,6 +116,7 @@ def _channel_data(channel: disnake.abc.GuildChannel) -> dict:
 
 
 def _member_data(member: disnake.Member) -> dict:
+    """Serialize the member fields needed by a server structure audit."""
     return {
         "id": member.id,
         "name": member.name,
@@ -126,6 +133,7 @@ def _member_data(member: disnake.Member) -> dict:
 
 
 def build_dump(guild: disnake.Guild) -> dict:
+    """Build a JSON-serializable snapshot of the guild's structure and members."""
     channels = sorted(guild.channels, key=lambda channel: (channel.position, channel.id))
     categories = [channel for channel in channels if isinstance(channel, disnake.CategoryChannel)]
     non_categories = [channel for channel in channels if not isinstance(channel, disnake.CategoryChannel)]
@@ -184,10 +192,13 @@ def build_dump(guild: disnake.Guild) -> dict:
 
 
 def _write_json(data: dict, path: Path) -> None:
+    """Write the structured dump as UTF-8 JSON."""
     path.write_text(json.dumps(data, ensure_ascii=False, indent=2), encoding="utf-8")
 
 
 class OwnerDump(commands.Cog):
+    """Provide the owner-only server export command."""
+
     def __init__(self, bot: commands.Bot) -> None:
         self.bot = bot
 
@@ -197,6 +208,7 @@ class OwnerDump(commands.Cog):
     )
     @commands.is_owner()
     async def dump_server(self, inter: disnake.ApplicationCommandInteraction) -> None:
+        """Create, optionally compress and privately return the current guild dump."""
         if not inter.guild:
             await inter.response.send_message("Команда доступна только на сервере.", ephemeral=True)
             return
@@ -255,4 +267,5 @@ class OwnerDump(commands.Cog):
 
 
 def setup(bot: commands.Bot) -> None:
+    """Register the server dump cog with the bot."""
     bot.add_cog(OwnerDump(bot))
