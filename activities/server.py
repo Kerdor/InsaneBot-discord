@@ -78,6 +78,9 @@ class ActivityRequestHandler(BaseHTTPRequestHandler):
             {
                 "user_id": session["user_id"],
                 "username": session["username"],
+                "instance_id": session["instance_id"],
+                "guild_id": session["guild_id"],
+                "channel_id": session["channel_id"],
                 "expires_at": session["expires_at"],
             },
         )
@@ -102,8 +105,21 @@ class ActivityRequestHandler(BaseHTTPRequestHandler):
 
             payload = json.loads(self.rfile.read(content_length).decode("utf-8"))
             code = payload.get("code", "")
+            instance_id = payload.get("instance_id")
+            guild_id = payload.get("guild_id")
+            channel_id = payload.get("channel_id")
+
             if not isinstance(code, str) or not code.strip():
                 self._send_json(400, {"error": "Authorization code is required"})
+                return
+            if not isinstance(instance_id, str) or not instance_id.strip():
+                self._send_json(400, {"error": "Activity instance ID is required"})
+                return
+            if not isinstance(guild_id, str) or not guild_id.strip():
+                self._send_json(400, {"error": "Activity guild ID is required"})
+                return
+            if not isinstance(channel_id, str) or not channel_id.strip():
+                self._send_json(400, {"error": "Activity channel ID is required"})
                 return
 
             form = urlencode(
@@ -151,6 +167,9 @@ class ActivityRequestHandler(BaseHTTPRequestHandler):
                 self.server.activity_sessions[session_id] = {
                     "user_id": user_id,
                     "username": username,
+                    "instance_id": instance_id,
+                    "guild_id": guild_id,
+                    "channel_id": channel_id,
                     "expires_at": expires_at,
                 }
 
