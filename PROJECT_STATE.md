@@ -455,6 +455,7 @@ Validation includes:
 - game must exist and not be expired;
 - game must belong to the same user and Activity context;
 - result ID must equal the server-issued result ID;
+- submitted seed must equal the server-issued game seed;
 - input trace and tick limits are enforced;
 - direction names must be valid;
 - illegal reverse-direction transitions are rejected;
@@ -544,6 +545,7 @@ b27608d81ed8bdbf33eb188131722906429700b7 → Snake result submission from Activi
 68029850727f69f42514bd4de061c91dccf5779d → authoritative Snake replay validation boundary
 b9d92a282c455f0ed85e028d0bfe06f178d26da8 → server-issued Snake result ID binding
 0b19754e43544b9fe0d5b54ff5e404d3ad838da2 → Activity client final server-issued game binding
+66564974132545bccff6b50c585984012d8e6642 → Snake seed binding hardening
 ```
 
 ## 21. CURRENT IMPLEMENTATION ORDER
