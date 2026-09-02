@@ -27,7 +27,12 @@ async function authenticate() {
             "Content-Type": "application/json",
         },
         credentials: "include",
-        body: JSON.stringify({ code }),
+        body: JSON.stringify({
+            code,
+            instance_id: discordSdk.instanceId,
+            guild_id: discordSdk.guildId,
+            channel_id: discordSdk.channelId,
+        }),
     });
 
     if (!response.ok) {
@@ -109,6 +114,15 @@ async function start() {
 
     if (session.user_id !== String(authentication.user.id)) {
         throw new Error("Activity session identity mismatch");
+    }
+    if (session.instance_id !== discordSdk.instanceId) {
+        throw new Error("Activity instance identity mismatch");
+    }
+    if (session.guild_id !== discordSdk.guildId) {
+        throw new Error("Activity guild identity mismatch");
+    }
+    if (session.channel_id !== discordSdk.channelId) {
+        throw new Error("Activity channel identity mismatch");
     }
 
     renderGame(authentication.user);
