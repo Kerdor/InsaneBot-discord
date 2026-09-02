@@ -23,6 +23,7 @@ def init_economy() -> None:
     """Create the economy table when the database is initialized."""
     with _connect() as connection:
         connection.execute("""CREATE TABLE IF NOT EXISTS economy (guild_id INTEGER NOT NULL, user_id INTEGER NOT NULL, balance INTEGER NOT NULL DEFAULT 0, rare_currency INTEGER NOT NULL DEFAULT 0, daily_claimed_at TEXT, PRIMARY KEY (guild_id, user_id))""")
+        connection.execute("""CREATE TABLE IF NOT EXISTS economy_rewards (reward_id TEXT PRIMARY KEY, guild_id INTEGER NOT NULL, user_id INTEGER NOT NULL, amount INTEGER NOT NULL, created_at TEXT NOT NULL)""")
         connection.commit()
 
 
@@ -47,6 +48,25 @@ def add_balance(guild_id: int, user_id: int, amount: int) -> sqlite3.Row:
         connection.execute("UPDATE economy SET balance = balance + ? WHERE guild_id = ? AND user_id = ?", (amount, guild_id, user_id))
         connection.commit()
         return connection.execute("SELECT * FROM economy WHERE guild_id = ? AND user_id = ?", (guild_id, user_id)).fetchone()
+
+
+def add_reward_balance(guild_id: int, user_id: int, amount: int, reward_id: str) -> tuple[sqlite3.Row, bool]:
+    """Apply a reward once and return the resulting row plus whether it was applied."""
+    if not reward_id.strip():
+        raise ValueError("Reward ID must not be empty")
+    if amount < 0:
+        raise ValueError("Reward amount cannot be negative")
+    ensure_user(guild_id, user_id)
+    with _connect() as connection:
+        existing = connection.execute("SELECT reward_id FROM economy_rewards WHERE reward_id = ?", (reward_id,)).fetchone()
+        if existing is not None:
+            row = connection.execute("SELECT * FROM economy WHERE guild_id = ? AND user_id = ?", (guild_id, user_id)).fetchone()
+            return row, False
+        connection.execute("UPDATE economy SET balance = balance + ? WHERE guild_id = ? AND user_id = ?", (amount, guild_id, user_id))
+        connection.execute("INSERT INTO economy_rewards (reward_id, guild_id, user_id, amount, created_at) VALUES (?, ?, ?, ?, ?)", (reward_id, guild_id, user_id, amount, datetime.now(timezone.utc).isoformat()))
+        connection.commit()
+        row = connection.execute("SELECT * FROM economy WHERE guild_id = ? AND user_id = ?", (guild_id, user_id)).fetchone()
+    return row, True
 
 
 def transfer_balance(guild_id: int, sender_id: int, receiver_id: int, amount: int) -> tuple[bool, str, sqlite3.Row]:
