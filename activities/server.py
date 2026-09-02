@@ -1,9 +1,4 @@
-"""Minimal HTTP backend for Discord Activity authentication and results.
-
-The Activity frontend sends the one-time authorization code received from the
-Embedded App SDK here. The backend exchanges that code with Discord using the
-application client secret, which must never be exposed to the browser.
-"""
+"""Minimal HTTP backend for Discord Activity authentication and results."""
 
 from __future__ import annotations
 
@@ -16,6 +11,8 @@ from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 from urllib.parse import urlencode
 from urllib.request import Request, urlopen
 
+from utils.activity_rewards import TrustedActivityResult, apply_trusted_result
+
 
 DISCORD_TOKEN_URL = "https://discord.com/api/oauth2/token"
 DISCORD_USER_URL = "https://discord.com/api/users/@me"
@@ -25,6 +22,8 @@ SNAKE_MAX_INPUTS = 20000
 SNAKE_MAX_TICKS = 100000
 SNAKE_GAME_TTL = 900
 SNAKE_GRID_SIZE = 20
+SNAKE_XP_PER_POINT = 15
+SNAKE_COINS_PER_POINT = 25
 SNAKE_DIRECTIONS = {
     "ArrowUp": (0, -1),
     "ArrowDown": (0, 1),
@@ -62,28 +61,23 @@ class ActivityRequestHandler(BaseHTTPRequestHandler):
         )
         if not session_id:
             return None
-
-        sessions = self.server.activity_sessions
         with self.server.activity_sessions_lock:
-            session = sessions.get(session_id)
+            session = self.server.activity_sessions.get(session_id)
             if session is None:
                 return None
             if session["expires_at"] <= time.time():
-                sessions.pop(session_id, None)
+                self.server.activity_sessions.pop(session_id, None)
                 return None
             return dict(session)
 
     def do_GET(self) -> None:
-        """Return the identity bound to the current Activity session."""
         if self.path != "/api/discord/session":
             self._send_json(404, {"error": "Not found"})
             return
-
         session = self._get_session()
         if session is None:
             self._send_json(401, {"error": "Activity session is not authenticated"})
             return
-
         self._send_json(
             200,
             {
@@ -97,7 +91,6 @@ class ActivityRequestHandler(BaseHTTPRequestHandler):
         )
 
     def do_POST(self) -> None:
-        """Handle Activity OAuth and validated game-result requests."""
         if self.path == "/api/discord/token":
             self._handle_token_exchange()
             return
@@ -117,12 +110,10 @@ class ActivityRequestHandler(BaseHTTPRequestHandler):
         return payload if isinstance(payload, dict) else None
 
     def _handle_snake_start(self) -> None:
-        """Create a server-issued deterministic Snake game for this session."""
         session = self._get_session()
         if session is None:
             self._send_json(401, {"error": "Activity session is not authenticated"})
             return
-
         game_id = secrets.token_urlsafe(24)
         result_id = secrets.token_urlsafe(24)
         seed = secrets.randbits(32)
@@ -138,29 +129,18 @@ class ActivityRequestHandler(BaseHTTPRequestHandler):
         }
         with self.server.activity_games_lock:
             self.server.activity_games[game_id] = game
-
-        self._send_json(
-            200,
-            {
-                "game_id": game_id,
-                "result_id": result_id,
-                "seed": seed,
-            },
-        )
+        self._send_json(200, {"game_id": game_id, "result_id": result_id, "seed": seed})
 
     def _handle_snake_result(self) -> None:
-        """Replay and validate a Snake result against the authenticated game."""
         session = self._get_session()
         if session is None:
             self._send_json(401, {"error": "Activity session is not authenticated"})
             return
-
         try:
             payload = self._read_json_body()
             if payload is None:
                 self._send_json(400, {"error": "Invalid request body"})
                 return
-
             game_id = payload.get("game_id")
             result_id = payload.get("result_id")
             activity_key = payload.get("activity_key")
@@ -172,7 +152,6 @@ class ActivityRequestHandler(BaseHTTPRequestHandler):
             instance_id = payload.get("instance_id")
             guild_id = payload.get("guild_id")
             channel_id = payload.get("channel_id")
-
             if not isinstance(game_id, str) or not game_id.strip() or len(game_id) > 128:
                 self._send_json(400, {"error": "Valid game ID is required"})
                 return
@@ -206,7 +185,6 @@ class ActivityRequestHandler(BaseHTTPRequestHandler):
             if channel_id != session["channel_id"]:
                 self._send_json(403, {"error": "Activity channel identity mismatch"})
                 return
-
             with self.server.activity_games_lock:
                 game = self.server.activity_games.get(game_id)
                 if game is None:
@@ -216,25 +194,15 @@ class ActivityRequestHandler(BaseHTTPRequestHandler):
                     self.server.activity_games.pop(game_id, None)
                     self._send_json(410, {"error": "Snake game expired"})
                     return
-                if game["result_id"] != result_id:
-                    self._send_json(403, {"error": "Snake result identity mismatch"})
-                    return
-                if game["seed"] != seed:
-                    self._send_json(403, {"error": "Snake seed identity mismatch"})
+                if game["result_id"] != result_id or game["seed"] != seed:
+                    self._send_json(403, {"error": "Snake game identity mismatch"})
                     return
                 if game["user_id"] != session["user_id"]:
                     self._send_json(403, {"error": "Snake game user mismatch"})
                     return
-                if game["instance_id"] != session["instance_id"]:
-                    self._send_json(403, {"error": "Snake game instance mismatch"})
+                if game["instance_id"] != session["instance_id"] or game["guild_id"] != session["guild_id"] or game["channel_id"] != session["channel_id"]:
+                    self._send_json(403, {"error": "Snake game context mismatch"})
                     return
-                if game["guild_id"] != session["guild_id"]:
-                    self._send_json(403, {"error": "Snake game guild mismatch"})
-                    return
-                if game["channel_id"] != session["channel_id"]:
-                    self._send_json(403, {"error": "Snake game channel mismatch"})
-                    return
-
                 validation = self._replay_snake(game["seed"], inputs, tick_count)
                 if validation is None:
                     self._send_json(400, {"error": "Snake replay validation failed"})
@@ -243,13 +211,24 @@ class ActivityRequestHandler(BaseHTTPRequestHandler):
                 if expected_score != score or expected_reason != reason:
                     self._send_json(400, {"error": "Snake result does not match server replay"})
                     return
-
+                trusted_result = TrustedActivityResult(
+                    result_id=result_id,
+                    activity_key="snake",
+                    guild_id=int(session["guild_id"]),
+                    user_id=int(session["user_id"]),
+                    xp_reward=score * SNAKE_XP_PER_POINT,
+                    coin_reward=score * SNAKE_COINS_PER_POINT,
+                )
+                reward_applied = apply_trusted_result(trusted_result)
                 result = {
                     "result_id": result_id,
                     "activity_key": "snake",
                     "guild_id": session["guild_id"],
                     "user_id": session["user_id"],
                     "score": score,
+                    "xp_reward": trusted_result.xp_reward,
+                    "coin_reward": trusted_result.coin_reward,
+                    "reward_applied": reward_applied,
                     "instance_id": session["instance_id"],
                     "channel_id": session["channel_id"],
                     "game_id": game_id,
@@ -258,17 +237,15 @@ class ActivityRequestHandler(BaseHTTPRequestHandler):
                 }
                 self.server.activity_results[result_id] = result
                 self.server.activity_games.pop(game_id, None)
-
             self._send_json(200, {"accepted": True, "result": result})
         except (ValueError, UnicodeDecodeError):
             self._send_json(400, {"error": "Invalid JSON request"})
         except Exception as exc:
-            print(f"[ACTIVITY RESULT] Snake validation failed: {type(exc).__name__}: {exc}")
-            self._send_json(500, {"error": "Snake result validation failed"})
+            print(f"[ACTIVITY RESULT] Snake validation/reward failed: {type(exc).__name__}: {exc}")
+            self._send_json(500, {"error": "Snake result processing failed"})
 
     @staticmethod
     def _next_snake_random(state: int) -> tuple[int, float]:
-        """Advance the same xorshift32 PRNG used by the Snake client."""
         state &= 0xFFFFFFFF
         state ^= (state << 13) & 0xFFFFFFFF
         state ^= state >> 17
@@ -278,7 +255,6 @@ class ActivityRequestHandler(BaseHTTPRequestHandler):
 
     @classmethod
     def _snake_food(cls, snake: list[tuple[int, int]], random_state: int) -> tuple[tuple[int, int], int]:
-        """Return the deterministic next food position and updated PRNG state."""
         occupied = set(snake)
         free_cells = [
             (x, y)
@@ -292,16 +268,9 @@ class ActivityRequestHandler(BaseHTTPRequestHandler):
         return free_cells[int(random_value * len(free_cells))], random_state
 
     @classmethod
-    def _replay_snake(
-        cls,
-        seed: int,
-        inputs: list,
-        tick_count: int,
-    ) -> tuple[int, str] | None:
-        """Replay the complete client game using only trusted seed and inputs."""
+    def _replay_snake(cls, seed: int, inputs: list, tick_count: int) -> tuple[int, str] | None:
         if not isinstance(seed, int) or isinstance(seed, bool) or not 0 <= seed <= 0xFFFFFFFF:
             return None
-
         snake = [(10, 10), (9, 10), (8, 10)]
         direction = (1, 0)
         next_direction = (1, 0)
@@ -309,56 +278,36 @@ class ActivityRequestHandler(BaseHTTPRequestHandler):
         food, random_state = cls._snake_food(snake, random_state)
         normalized_inputs = []
         last_tick = -1
-
         for item in inputs:
             if not isinstance(item, dict):
                 return None
             input_tick = item.get("tick")
             input_direction = item.get("direction")
-            if (
-                not isinstance(input_tick, int)
-                or isinstance(input_tick, bool)
-                or input_tick < 0
-                or input_tick >= tick_count
-                or input_tick < last_tick
-                or input_direction not in SNAKE_DIRECTIONS
-            ):
+            if not isinstance(input_tick, int) or isinstance(input_tick, bool) or input_tick < 0 or input_tick >= tick_count or input_tick < last_tick or input_direction not in SNAKE_DIRECTIONS:
                 return None
             dx, dy = SNAKE_DIRECTIONS[input_direction]
-            if (dx, dy) == (-direction[0], -direction[1]):
-                return None
-            if (dx, dy) == (-next_direction[0], -next_direction[1]):
+            if (dx, dy) == (-direction[0], -direction[1]) or (dx, dy) == (-next_direction[0], -next_direction[1]):
                 return None
             next_direction = (dx, dy)
             normalized_inputs.append((input_tick, next_direction))
             last_tick = input_tick
-
         input_index = 0
         score = 0
         for current_tick in range(tick_count):
             while input_index < len(normalized_inputs) and normalized_inputs[input_index][0] == current_tick:
                 next_direction = normalized_inputs[input_index][1]
                 input_index += 1
-
             direction = next_direction
             head_x, head_y = snake[0]
             next_head = (head_x + direction[0], head_y + direction[1])
-            if (
-                next_head[0] < 0
-                or next_head[0] >= SNAKE_GRID_SIZE
-                or next_head[1] < 0
-                or next_head[1] >= SNAKE_GRID_SIZE
-            ):
+            if next_head[0] < 0 or next_head[0] >= SNAKE_GRID_SIZE or next_head[1] < 0 or next_head[1] >= SNAKE_GRID_SIZE:
                 if current_tick + 1 != tick_count:
                     return None
                 return score, "game_over"
-
-            body_to_check = snake[:-1]
-            if next_head in body_to_check:
+            if next_head in snake[:-1]:
                 if current_tick + 1 != tick_count:
                     return None
                 return score, "game_over"
-
             snake.insert(0, next_head)
             if next_head == food:
                 score += 1
@@ -369,72 +318,37 @@ class ActivityRequestHandler(BaseHTTPRequestHandler):
                     return score, "win"
             else:
                 snake.pop()
-
         return None
 
     def _handle_token_exchange(self) -> None:
-        """Exchange a Discord Activity authorization code for an access token."""
         client_id = os.getenv("DISCORD_ACTIVITY_CLIENT_ID", "").strip()
         client_secret = os.getenv("DISCORD_ACTIVITY_CLIENT_SECRET", "").strip()
         if not client_id or not client_secret:
             self._send_json(503, {"error": "Activity OAuth is not configured"})
             return
-
         try:
             payload = self._read_json_body()
             if payload is None:
                 self._send_json(400, {"error": "Invalid request body"})
                 return
-
             code = payload.get("code", "")
             instance_id = payload.get("instance_id")
             guild_id = payload.get("guild_id")
             channel_id = payload.get("channel_id")
-
-            if not isinstance(code, str) or not code.strip():
-                self._send_json(400, {"error": "Authorization code is required"})
+            if not isinstance(code, str) or not code.strip() or not isinstance(instance_id, str) or not instance_id.strip() or not isinstance(guild_id, str) or not guild_id.strip() or not isinstance(channel_id, str) or not channel_id.strip():
+                self._send_json(400, {"error": "Authorization code and Activity context are required"})
                 return
-            if not isinstance(instance_id, str) or not instance_id.strip():
-                self._send_json(400, {"error": "Activity instance ID is required"})
-                return
-            if not isinstance(guild_id, str) or not guild_id.strip():
-                self._send_json(400, {"error": "Activity guild ID is required"})
-                return
-            if not isinstance(channel_id, str) or not channel_id.strip():
-                self._send_json(400, {"error": "Activity channel ID is required"})
-                return
-
-            form = urlencode(
-                {
-                    "client_id": client_id,
-                    "client_secret": client_secret,
-                    "grant_type": "authorization_code",
-                    "code": code,
-                }
-            ).encode("utf-8")
-            request = Request(
-                DISCORD_TOKEN_URL,
-                data=form,
-                headers={"Content-Type": "application/x-www-form-urlencoded"},
-                method="POST",
-            )
-
+            form = urlencode({"client_id": client_id, "client_secret": client_secret, "grant_type": "authorization_code", "code": code}).encode("utf-8")
+            request = Request(DISCORD_TOKEN_URL, data=form, headers={"Content-Type": "application/x-www-form-urlencoded"}, method="POST")
             with urlopen(request, timeout=10) as response:
                 discord_payload = json.loads(response.read().decode("utf-8"))
-
             access_token = discord_payload.get("access_token")
             if not isinstance(access_token, str) or not access_token:
                 self._send_json(502, {"error": "Discord did not return an access token"})
                 return
-
-            user_request = Request(
-                DISCORD_USER_URL,
-                headers={"Authorization": f"Bearer {access_token}"},
-                method="GET",
-            )
+            user_request = Request(DISCORD_USER_URL, headers={"Authorization": f"Bearer {access_token}"}, method="GET")
             with urlopen(user_request, timeout=10) as response:
                 user_payload = json.loads(response.read().decode("utf-8"))
-
             user_id = user_payload.get("id")
             username = user_payload.get("username")
             if not isinstance(user_id, str) or not user_id:
@@ -442,29 +356,11 @@ class ActivityRequestHandler(BaseHTTPRequestHandler):
                 return
             if not isinstance(username, str):
                 username = "Discord user"
-
             session_id = secrets.token_urlsafe(32)
             expires_at = time.time() + ACTIVITY_SESSION_TTL
             with self.server.activity_sessions_lock:
-                self.server.activity_sessions[session_id] = {
-                    "user_id": user_id,
-                    "username": username,
-                    "instance_id": instance_id,
-                    "guild_id": guild_id,
-                    "channel_id": channel_id,
-                    "expires_at": expires_at,
-                }
-
-            self._send_json(
-                200,
-                {"access_token": access_token},
-                {
-                    "Set-Cookie": (
-                        f"insanebot_activity_session={session_id}; "
-                        "HttpOnly; Path=/api/discord; SameSite=Lax"
-                    )
-                },
-            )
+                self.server.activity_sessions[session_id] = {"user_id": user_id, "username": username, "instance_id": instance_id, "guild_id": guild_id, "channel_id": channel_id, "expires_at": expires_at}
+            self._send_json(200, {"access_token": access_token}, {"Set-Cookie": f"insanebot_activity_session={session_id}; HttpOnly; Path=/api/discord; SameSite=Lax"})
         except (ValueError, UnicodeDecodeError):
             self._send_json(400, {"error": "Invalid JSON request"})
         except Exception as exc:
@@ -472,12 +368,10 @@ class ActivityRequestHandler(BaseHTTPRequestHandler):
             self._send_json(502, {"error": "Discord token exchange failed"})
 
     def log_message(self, format: str, *args) -> None:
-        """Keep the standard HTTP server quiet except for application diagnostics."""
         return
 
 
 def create_activity_server(host: str, port: int) -> ThreadingHTTPServer:
-    """Create the Activity backend server without starting its serving loop."""
     server = ThreadingHTTPServer((host, port), ActivityRequestHandler)
     server.activity_sessions = {}
     server.activity_sessions_lock = threading.Lock()
