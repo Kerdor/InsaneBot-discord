@@ -296,13 +296,17 @@ get_user_results(guild_id, user_id, activity_key=None, limit=100)
 
 A static Activity registry exists in `utils/activity_registry.py`. It defines the initial release games and agreed future expansion list without assigning unapproved reward balances or pretending that external Activities already exist.
 
-A trusted-result application layer exists in `utils/activity_rewards.py`. It accepts a `TrustedActivityResult`, validates the Activity identity, IDs and non-negative reward values, persists the result through the idempotent Activity ledger, and applies the supplied XP and coin rewards through the existing XP/Economy database APIs.
+A trusted-result application layer exists in `utils/activity_rewards.py`. It accepts a `TrustedActivityResult`, validates the Activity identity, IDs and non-negative reward values, persists the result through the idempotent Activity ledger, verifies that a reused `result_id` has identical result data, and applies the supplied XP and coin rewards through the existing idempotent XP/Economy reward APIs.
 
 The XP side now supports an optional `reward_id` and stores a persistent reward ledger in `xp.db`. This makes a trusted Activity XP reward idempotent across retries: if the same `reward_id` is encountered again with the same guild/user/amount, XP is not added a second time. Existing XP callers are unaffected when no reward ID is supplied.
 
-The Economy side now has the same persistent idempotent reward mechanism in `economy.db`: `economy_rewards` stores `reward_id`, guild/user, amount and timestamp, and `add_reward_balance()` atomically checks/inserts the reward record together with the balance update. The next implementation step is to wire `activity_rewards.py` to pass the Activity result ID into both reward stores and make retry/recovery semantics consistent across XP and Economy.
+The Economy side now has the same persistent idempotent reward mechanism in `economy.db`: `economy_rewards` stores `reward_id`, guild/user, amount and timestamp, and `add_reward_balance()` atomically checks/inserts the reward record together with the balance update.
 
-Absolute multi-database transaction atomicity is still not claimed; Activity, XP and Economy remain separate SQLite databases.
+The Activity reward pipeline now passes `result.result_id` as the reward ID to both XP and Economy. If the Activity result was persisted but a reward application was interrupted, a retry can safely continue: already-applied XP/coins are skipped by their reward ledgers while missing rewards are applied. A reused result ID with different payload is rejected instead of silently changing the stored result.
+
+The function returns whether this invocation inserted the Activity result or newly applied at least one reward. This preserves useful boolean semantics while allowing recovery calls to finish partially applied rewards.
+
+Absolute multi-database transaction atomicity is still not claimed; Activity, XP and Economy remain separate SQLite databases. The new reward ledgers provide retry/recovery safety across the separate stores.
 
 Important boundary: this layer accepts **already trusted** results only. It does not claim to verify an external Discord Activity. External signature verification, identity/guild verification, anti-cheat validation and a real Activity client/backend remain outside the current implementation.
 
@@ -409,9 +413,10 @@ Discord Activities → FOUNDATION / trusted-result pipeline implemented / initia
 Activity registry → IMPLEMENTED / QA PENDING
 Activity XP reward idempotency → IMPLEMENTED
 Activity Economy reward idempotency → IMPLEMENTED
-Activity reward pipeline wiring → NEXT IMPLEMENTATION TARGET
+Activity reward pipeline wiring → IMPLEMENTED / QA PENDING
 Future Activities → 2048, Minesweeper, Tetris, Flappy Bird, Connect Four, Chess, Checkers
 Full QA → NOT STARTED
+```
 
 ## 23. RECENT CHECKPOINT
 
@@ -426,7 +431,8 @@ a5d8bf9c138f5cb28e231b5d565572a479e9ca3d → Activity result lookup/history laye
 0f1f501f4cab242453f88fd390d74312b36cfade → trusted Activity reward pipeline
 082cab6e5fd383d4de31c34d1773cafd50cf0aa3 → XP reward idempotency
 3348a0793009dcae7d9cf9fdb120a2ac897ec4f2 → Economy reward idempotency
-CURRENT STATE UPDATE → Economy reward idempotency checkpoint
+86196954830ed8f1b2eaec3d584753fedb903c3d → Activity reward pipeline wiring / retry recovery
+CURRENT STATE UPDATE → Activity reward pipeline wiring checkpoint
 ```
 
 ## 24. NEW-CHAT CONTINUATION
