@@ -8,6 +8,12 @@ const DIRECTIONS = {
     ArrowRight: { x: 1, y: 0 },
 };
 
+function createRandomSeed() {
+    const values = new Uint32Array(1);
+    crypto.getRandomValues(values);
+    return values[0];
+}
+
 export class SnakeGame {
     constructor(canvas, scoreElement, statusElement, onFinished = null) {
         this.canvas = canvas;
@@ -17,10 +23,12 @@ export class SnakeGame {
         this.onFinished = onFinished;
         this.cellSize = canvas.width / GRID_SIZE;
         this.timer = null;
+        this.gameId = null;
+        this.seed = null;
         this.reset();
     }
 
-    reset() {
+    reset(seed = null, gameId = null) {
         this.stop();
         this.snake = [
             { x: 10, y: 10 },
@@ -30,6 +38,11 @@ export class SnakeGame {
         this.direction = { x: 1, y: 0 };
         this.nextDirection = { x: 1, y: 0 };
         this.score = 0;
+        this.tickCount = 0;
+        this.inputs = [];
+        this.seed = seed === null ? createRandomSeed() : seed >>> 0;
+        this.gameId = gameId;
+        this.randomState = this.seed;
         this.food = this.createFood();
         this.running = false;
         this.finished = false;
@@ -55,7 +68,7 @@ export class SnakeGame {
         }
     }
 
-    setDirection(direction) {
+    setDirection(direction, key = null) {
         if (!direction || this.finished) {
             return;
         }
@@ -66,6 +79,9 @@ export class SnakeGame {
             return;
         }
         this.nextDirection = direction;
+        if (key) {
+            this.inputs.push({ tick: this.tickCount, direction: key });
+        }
         if (!this.running) {
             this.start();
         }
@@ -82,6 +98,7 @@ export class SnakeGame {
         if (this.isCollision(nextHead)) {
             this.stop();
             this.finished = true;
+            this.tickCount += 1;
             this.statusElement.textContent = "Игра окончена — нажми «Новая игра»";
             this.draw();
             this.finish("game_over");
@@ -93,6 +110,7 @@ export class SnakeGame {
             this.score += 1;
             this.food = this.createFood();
             this.updateScore();
+            this.tickCount += 1;
             if (this.snake.length === GRID_SIZE * GRID_SIZE) {
                 this.stop();
                 this.finished = true;
@@ -103,6 +121,7 @@ export class SnakeGame {
             }
         } else {
             this.snake.pop();
+            this.tickCount += 1;
         }
 
         this.draw();
@@ -115,6 +134,10 @@ export class SnakeGame {
         this.onFinished({
             reason,
             score: this.score,
+            tick_count: this.tickCount,
+            seed: this.seed,
+            game_id: this.gameId,
+            inputs: this.inputs.slice(),
         });
     }
 
@@ -134,6 +157,15 @@ export class SnakeGame {
         );
     }
 
+    nextRandom() {
+        let state = this.randomState >>> 0;
+        state ^= state << 13;
+        state ^= state >>> 17;
+        state ^= state << 5;
+        this.randomState = state >>> 0;
+        return this.randomState / 4294967296;
+    }
+
     createFood() {
         const freeCells = [];
         for (let y = 0; y < GRID_SIZE; y += 1) {
@@ -148,7 +180,7 @@ export class SnakeGame {
             return { x: 0, y: 0 };
         }
 
-        return freeCells[Math.floor(Math.random() * freeCells.length)];
+        return freeCells[Math.floor(this.nextRandom() * freeCells.length)];
     }
 
     updateScore() {
@@ -201,6 +233,6 @@ export function bindSnakeControls(game) {
             return;
         }
         event.preventDefault();
-        game.setDirection(direction);
+        game.setDirection(direction, event.key);
     });
 }
