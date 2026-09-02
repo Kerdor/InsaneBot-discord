@@ -93,6 +93,11 @@ class BotConfig:
     LOGS_DIR = PROJECT_DIR / "logs"
     LOGGING_CHANNELS_FILE = PROJECT_DIR / ".logging_channels.json"
 
+    ACTIVITY_HOST = os.getenv("DISCORD_ACTIVITY_HOST", "127.0.0.1").strip() or "127.0.0.1"
+    ACTIVITY_PORT = _optional_int_env("DISCORD_ACTIVITY_PORT") or 8080
+    if not 1 <= ACTIVITY_PORT <= 65535:
+        raise RuntimeError("DISCORD_ACTIVITY_PORT должен быть в диапазоне 1-65535")
+
     @staticmethod
     def ensure_asset(filename: str | Path) -> Path:
         """Resolve an asset path and fail if the requested asset does not exist."""
@@ -173,6 +178,7 @@ class BotConfig:
         "cogs.achievements",
         "cogs.minigames",
         "cogs.social",
+        "cogs.activity_server",
         "cogs.admin_panel",
     )
 
