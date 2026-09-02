@@ -9,27 +9,78 @@ from __future__ import annotations
 
 import json
 import os
+import secrets
+import threading
+import time
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 from urllib.parse import urlencode
 from urllib.request import Request, urlopen
 
 
 DISCORD_TOKEN_URL = "https://discord.com/api/oauth2/token"
+DISCORD_USER_URL = "https://discord.com/api/users/@me"
+ACTIVITY_SESSION_TTL = 3600
 
 
 class ActivityRequestHandler(BaseHTTPRequestHandler):
-    """Handle the private backend endpoint used by the Activity client."""
+    """Handle the private backend endpoints used by the Activity client."""
 
     server_version = "InsaneBotActivity/0.1"
 
-    def _send_json(self, status: int, payload: dict) -> None:
+    def _send_json(self, status: int, payload: dict, headers: dict | None = None) -> None:
         body = json.dumps(payload, ensure_ascii=False).encode("utf-8")
         self.send_response(status)
         self.send_header("Content-Type", "application/json; charset=utf-8")
         self.send_header("Content-Length", str(len(body)))
         self.send_header("Cache-Control", "no-store")
+        for name, value in (headers or {}).items():
+            self.send_header(name, value)
         self.end_headers()
         self.wfile.write(body)
+
+    def _get_session(self) -> dict | None:
+        cookie = self.headers.get("Cookie", "")
+        prefix = "insanebot_activity_session="
+        session_id = next(
+            (
+                item.split("=", 1)[1]
+                for item in cookie.split(";")
+                if item.strip().startswith(prefix)
+            ),
+            None,
+        )
+        if not session_id:
+            return None
+
+        sessions = self.server.activity_sessions
+        with self.server.activity_sessions_lock:
+            session = sessions.get(session_id)
+            if session is None:
+                return None
+            if session["expires_at"] <= time.time():
+                sessions.pop(session_id, None)
+                return None
+            return dict(session)
+
+    def do_GET(self) -> None:
+        """Return the identity bound to the current Activity session."""
+        if self.path != "/api/discord/session":
+            self._send_json(404, {"error": "Not found"})
+            return
+
+        session = self._get_session()
+        if session is None:
+            self._send_json(401, {"error": "Activity session is not authenticated"})
+            return
+
+        self._send_json(
+            200,
+            {
+                "user_id": session["user_id"],
+                "username": session["username"],
+                "expires_at": session["expires_at"],
+            },
+        )
 
     def do_POST(self) -> None:
         """Exchange a Discord Activity authorization code for an access token."""
@@ -78,7 +129,41 @@ class ActivityRequestHandler(BaseHTTPRequestHandler):
                 self._send_json(502, {"error": "Discord did not return an access token"})
                 return
 
-            self._send_json(200, {"access_token": access_token})
+            user_request = Request(
+                DISCORD_USER_URL,
+                headers={"Authorization": f"Bearer {access_token}"},
+                method="GET",
+            )
+            with urlopen(user_request, timeout=10) as response:
+                user_payload = json.loads(response.read().decode("utf-8"))
+
+            user_id = user_payload.get("id")
+            username = user_payload.get("username")
+            if not isinstance(user_id, str) or not user_id:
+                self._send_json(502, {"error": "Discord did not return a valid user identity"})
+                return
+            if not isinstance(username, str):
+                username = "Discord user"
+
+            session_id = secrets.token_urlsafe(32)
+            expires_at = time.time() + ACTIVITY_SESSION_TTL
+            with self.server.activity_sessions_lock:
+                self.server.activity_sessions[session_id] = {
+                    "user_id": user_id,
+                    "username": username,
+                    "expires_at": expires_at,
+                }
+
+            self._send_json(
+                200,
+                {"access_token": access_token},
+                {
+                    "Set-Cookie": (
+                        f"insanebot_activity_session={session_id}; "
+                        "HttpOnly; Path=/api/discord; SameSite=Lax"
+                    )
+                },
+            )
         except ValueError:
             self._send_json(400, {"error": "Invalid JSON request"})
         except Exception as exc:
@@ -92,4 +177,7 @@ class ActivityRequestHandler(BaseHTTPRequestHandler):
 
 def create_activity_server(host: str, port: int) -> ThreadingHTTPServer:
     """Create the Activity backend server without starting its serving loop."""
-    return ThreadingHTTPServer((host, port), ActivityRequestHandler)
+    server = ThreadingHTTPServer((host, port), ActivityRequestHandler)
+    server.activity_sessions = {}
+    server.activity_sessions_lock = threading.Lock()
+    return server
