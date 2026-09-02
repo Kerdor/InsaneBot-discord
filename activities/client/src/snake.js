@@ -9,17 +9,19 @@ const DIRECTIONS = {
 };
 
 export class SnakeGame {
-    constructor(canvas, scoreElement, statusElement) {
+    constructor(canvas, scoreElement, statusElement, onFinished = null) {
         this.canvas = canvas;
         this.context = canvas.getContext("2d");
         this.scoreElement = scoreElement;
         this.statusElement = statusElement;
+        this.onFinished = onFinished;
         this.cellSize = canvas.width / GRID_SIZE;
         this.timer = null;
         this.reset();
     }
 
     reset() {
+        this.stop();
         this.snake = [
             { x: 10, y: 10 },
             { x: 9, y: 10 },
@@ -30,13 +32,14 @@ export class SnakeGame {
         this.score = 0;
         this.food = this.createFood();
         this.running = false;
+        this.finished = false;
         this.statusElement.textContent = "Нажми «Старт» или стрелку";
         this.updateScore();
         this.draw();
     }
 
     start() {
-        if (this.running) {
+        if (this.running || this.finished) {
             return;
         }
         this.running = true;
@@ -53,7 +56,7 @@ export class SnakeGame {
     }
 
     setDirection(direction) {
-        if (!direction) {
+        if (!direction || this.finished) {
             return;
         }
         if (direction.x === -this.direction.x && direction.y === -this.direction.y) {
@@ -78,8 +81,10 @@ export class SnakeGame {
 
         if (this.isCollision(nextHead)) {
             this.stop();
+            this.finished = true;
             this.statusElement.textContent = "Игра окончена — нажми «Новая игра»";
             this.draw();
+            this.finish("game_over");
             return;
         }
 
@@ -88,11 +93,29 @@ export class SnakeGame {
             this.score += 1;
             this.food = this.createFood();
             this.updateScore();
+            if (this.snake.length === GRID_SIZE * GRID_SIZE) {
+                this.stop();
+                this.finished = true;
+                this.statusElement.textContent = "Победа! Поле заполнено";
+                this.draw();
+                this.finish("win");
+                return;
+            }
         } else {
             this.snake.pop();
         }
 
         this.draw();
+    }
+
+    finish(reason) {
+        if (typeof this.onFinished !== "function") {
+            return;
+        }
+        this.onFinished({
+            reason,
+            score: this.score,
+        });
     }
 
     isCollision(position) {
@@ -122,8 +145,6 @@ export class SnakeGame {
         }
 
         if (freeCells.length === 0) {
-            this.stop();
-            this.statusElement.textContent = "Победа! Поле заполнено";
             return { x: 0, y: 0 };
         }
 
