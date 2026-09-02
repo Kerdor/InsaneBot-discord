@@ -58,6 +58,27 @@ async function loadSession() {
     return response.json();
 }
 
+async function startSnakeGame() {
+    const response = await fetch("/api/activities/snake/start", {
+        method: "POST",
+        headers: {
+            "Content-Type": "application/json",
+        },
+        credentials: "include",
+        body: JSON.stringify({
+            instance_id: discordSdk.instanceId,
+            guild_id: discordSdk.guildId,
+            channel_id: discordSdk.channelId,
+        }),
+    });
+
+    if (!response.ok) {
+        throw new Error(`Snake game start failed: ${response.status}`);
+    }
+
+    return response.json();
+}
+
 async function submitSnakeResult(result) {
     const response = await fetch("/api/activities/snake/result", {
         method: "POST",
@@ -66,9 +87,14 @@ async function submitSnakeResult(result) {
         },
         credentials: "include",
         body: JSON.stringify({
-            result_id: crypto.randomUUID(),
+            game_id: result.game_id,
+            result_id: result.result_id,
             activity_key: "snake",
             score: result.score,
+            reason: result.reason,
+            tick_count: result.tick_count,
+            seed: result.seed,
+            inputs: result.inputs,
             instance_id: discordSdk.instanceId,
             guild_id: discordSdk.guildId,
             channel_id: discordSdk.channelId,
@@ -82,7 +108,7 @@ async function submitSnakeResult(result) {
     return response.json();
 }
 
-function renderGame(user) {
+function renderGame(user, initialGame) {
     document.body.innerHTML = `
         <main class="activity-shell">
             <section class="game-card">
@@ -126,10 +152,21 @@ function renderGame(user) {
         }
     });
 
+    game.reset(initialGame.seed, initialGame.game_id);
+    game.resultId = initialGame.result_id;
+
     bindSnakeControls(game);
     document.querySelector("#start-button").addEventListener("click", () => game.start());
-    document.querySelector("#restart-button").addEventListener("click", () => {
-        game.reset();
+    document.querySelector("#restart-button").addEventListener("click", async () => {
+        try {
+            status.textContent = "Создание новой игры...";
+            const nextGame = await startSnakeGame();
+            game.reset(nextGame.seed, nextGame.game_id);
+            game.resultId = nextGame.result_id;
+        } catch (error) {
+            console.error(error);
+            status.textContent = "Не удалось создать новую игру";
+        }
     });
 }
 
@@ -159,7 +196,8 @@ async function start() {
         throw new Error("Activity channel identity mismatch");
     }
 
-    renderGame(authentication.user);
+    const initialGame = await startSnakeGame();
+    renderGame(authentication.user, initialGame);
 }
 
 start().catch((error) => {
