@@ -24,6 +24,7 @@ async function authenticate() {
         headers: {
             "Content-Type": "application/json",
         },
+        credentials: "include",
         body: JSON.stringify({ code }),
     });
 
@@ -32,23 +33,14 @@ async function authenticate() {
     }
 
     const { access_token: accessToken } = await response.json();
-
-    await discordSdk.commands.authenticate({
+    const authentication = await discordSdk.commands.authenticate({
         access_token: accessToken,
     });
+
+    return authentication.user;
 }
 
-async function start() {
-    await authenticate();
-
-    const { user } = await discordSdk.commands.authenticate({
-        access_token: await getAccessToken(),
-    });
-
-    document.body.textContent = `InsaneBot Activity connected as ${user.username}`;
-}
-
-async function getAccessToken() {
+async function loadSession() {
     const response = await fetch("/api/discord/session", {
         method: "GET",
         credentials: "include",
@@ -58,8 +50,18 @@ async function getAccessToken() {
         throw new Error(`Activity session failed: ${response.status}`);
     }
 
-    const { access_token: accessToken } = await response.json();
-    return accessToken;
+    return response.json();
+}
+
+async function start() {
+    const user = await authenticate();
+    const session = await loadSession();
+
+    if (session.user_id !== String(user.id)) {
+        throw new Error("Activity session identity mismatch");
+    }
+
+    document.body.textContent = `InsaneBot Activity connected as ${user.username}`;
 }
 
 start().catch((error) => {
