@@ -65,6 +65,8 @@ databases/
   xp.py economy.py shop.py quests.py achievements.py
   profile_customization.py moderation.py tickets.py voice_stats.py voice_rooms.py social.py activities.py
 utils/profile_card.py activity_registry.py activity_rewards.py
+activities/
+  client/package.json
 ```
 
 Legacy `get_roles.py` remains unloaded. `reaction_logs.py` remains intentionally disabled.
@@ -159,7 +161,7 @@ Runtime databases are real state and must never be reset.
 | Profile customization | DONE | NOT STARTED | PENDING |
 | Mini-games | DONE | NOT TESTED | PENDING AFTER IMPLEMENTATION |
 | Social / Friends / Romantic | DONE | NOT TESTED | PENDING AFTER IMPLEMENTATION |
-| Discord Activities | FOUNDATION | NOT TESTED | PENDING REAL BOUNDARY |
+| Discord Activities | FOUNDATION + CLIENT STARTED | NOT TESTED | PENDING REAL BOUNDARY |
 | PvP | REMOVED | — | — |
 | Collecting | REMOVED FOR NOW | — | — |
 
@@ -312,6 +314,10 @@ Important boundary: this layer accepts **already trusted** results only. It does
 
 The reward amounts are supplied by the trusted caller; no new reward balance has been invented here.
 
+### Activity client foundation — STARTED
+
+`activities/client/package.json` has been added with the official `@discord/embedded-app-sdk` dependency and Vite build scripts. This is the beginning of the real web-based Activity client rather than a fake slash-command replacement. Discord documents Activities as web applications embedded in Discord via the Embedded App SDK. The client still requires the actual Activity frontend, OAuth/authentication flow, URL mapping and Developer Portal configuration before it can be launched.
+
 ### Planned Activity games
 
 **Initial release:**
@@ -374,7 +380,8 @@ Additional:
 - Activity signature/identity/guild verification and reward integration;
 - Activity reward atomicity across the separate XP/Economy/Activity SQLite databases;
 - Activity reward idempotency/recovery across all reward stores;
-- Activity registry validation and initial-game implementation details.
+- Activity registry validation and initial-game implementation details;
+- Activity client authentication, URL mapping, deployment and initial game implementation.
 
 Do not fix speculative issues without inspecting source/behavior first.
 
@@ -409,11 +416,14 @@ Current checkpoint:
 Core community/progression systems → IMPLEMENTED
 Mini-games → IMPLEMENTED / QA PENDING
 Social / Friends / Romantic → IMPLEMENTED / QA PENDING
-Discord Activities → FOUNDATION / trusted-result pipeline implemented / initial games planned: Snake, Sudoku, Wordle
+Discord Activities → FOUNDATION + CLIENT STARTED / AUTH + UI + GAMES REMAIN
 Activity registry → IMPLEMENTED / QA PENDING
 Activity XP reward idempotency → IMPLEMENTED
 Activity Economy reward idempotency → IMPLEMENTED
 Activity reward pipeline wiring → IMPLEMENTED / QA PENDING
+Activity client package → IMPLEMENTED
+Activity client authentication → NEXT IMPLEMENTATION TARGET
+Initial Activities → Snake, Sudoku, Wordle
 Future Activities → 2048, Minesweeper, Tetris, Flappy Bird, Connect Four, Chess, Checkers
 Full QA → NOT STARTED
 ```
@@ -432,7 +442,8 @@ a5d8bf9c138f5cb28e231b5d565572a479e9ca3d → Activity result lookup/history laye
 082cab6e5fd383d4de31c34d1773cafd50cf0aa3 → XP reward idempotency
 3348a0793009dcae7d9cf9fdb120a2ac897ec4f2 → Economy reward idempotency
 86196954830ed8f1b2eaec3d584753fedb903c3d → Activity reward pipeline wiring / retry recovery
-CURRENT STATE UPDATE → Activity reward pipeline wiring checkpoint
+9680d41c2e7a64df751f13d7430d7232a1c4b12a → Discord Activity client package foundation
+CURRENT STATE UPDATE → Activity client foundation checkpoint
 ```
 
 ## 24. NEW-CHAT CONTINUATION
