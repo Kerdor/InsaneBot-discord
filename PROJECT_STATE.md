@@ -300,7 +300,9 @@ A trusted-result application layer exists in `utils/activity_rewards.py`. It acc
 
 The XP side now supports an optional `reward_id` and stores a persistent reward ledger in `xp.db`. This makes a trusted Activity XP reward idempotent across retries: if the same `reward_id` is encountered again with the same guild/user/amount, XP is not added a second time. Existing XP callers are unaffected when no reward ID is supplied.
 
-The current Activity reward pipeline still has a separate-database recovery boundary for the Economy side and Activity result ledger. The next implementation target is to add the same idempotent reward-claim mechanism to `economy.py`, then make `activity_rewards.py` retry-safe across both reward stores. Absolute multi-database transaction atomicity is not claimed.
+The Economy side now has the same persistent idempotent reward mechanism in `economy.db`: `economy_rewards` stores `reward_id`, guild/user, amount and timestamp, and `add_reward_balance()` atomically checks/inserts the reward record together with the balance update. The next implementation step is to wire `activity_rewards.py` to pass the Activity result ID into both reward stores and make retry/recovery semantics consistent across XP and Economy.
+
+Absolute multi-database transaction atomicity is still not claimed; Activity, XP and Economy remain separate SQLite databases.
 
 Important boundary: this layer accepts **already trusted** results only. It does not claim to verify an external Discord Activity. External signature verification, identity/guild verification, anti-cheat validation and a real Activity client/backend remain outside the current implementation.
 
@@ -405,11 +407,11 @@ Mini-games → IMPLEMENTED / QA PENDING
 Social / Friends / Romantic → IMPLEMENTED / QA PENDING
 Discord Activities → FOUNDATION / trusted-result pipeline implemented / initial games planned: Snake, Sudoku, Wordle
 Activity registry → IMPLEMENTED / QA PENDING
-Future Activities → 2048, Minesweeper, Tetris, Flappy Bird, Connect Four, Chess, Checkers
 Activity XP reward idempotency → IMPLEMENTED
-Activity Economy reward idempotency → NEXT IMPLEMENTATION TARGET
+Activity Economy reward idempotency → IMPLEMENTED
+Activity reward pipeline wiring → NEXT IMPLEMENTATION TARGET
+Future Activities → 2048, Minesweeper, Tetris, Flappy Bird, Connect Four, Chess, Checkers
 Full QA → NOT STARTED
-```
 
 ## 23. RECENT CHECKPOINT
 
@@ -422,8 +424,9 @@ e90ab1944b3d93ca091b7ac2ccac964df9d532d4 → social commands/COG
 9e584c6d80add5497c118db0aec0d5a23b0bc2da → Activity registry
 a5d8bf9c138f5cb28e231b5d565572a479e9ca3d → Activity result lookup/history layer
 0f1f501f4cab242453f88fd390d74312b36cfade → trusted Activity reward pipeline
-e2e9ed79d22fe8ac7a5f54fb1bf6259321f1d7e7 → idempotent XP reward ledger
-CURRENT STATE UPDATE → XP reward ledger checkpoint
+082cab6e5fd383d4de31c34d1773cafd50cf0aa3 → XP reward idempotency
+3348a0793009dcae7d9cf9fdb120a2ac897ec4f2 → Economy reward idempotency
+CURRENT STATE UPDATE → Economy reward idempotency checkpoint
 ```
 
 ## 24. NEW-CHAT CONTINUATION
