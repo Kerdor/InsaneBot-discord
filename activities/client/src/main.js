@@ -10,6 +10,51 @@ if (!clientId) {
 
 const discordSdk = new DiscordSDK(clientId);
 
+const ACTIVITIES = [
+    {
+        key: "snake",
+        name: "Snake",
+        icon: "🐍",
+        description: "Классическая змейка с серверной проверкой результата.",
+        status: "available",
+    },
+    {
+        key: "sudoku",
+        name: "Sudoku",
+        icon: "🔢",
+        description: "Логическая головоломка.",
+        status: "coming_soon",
+    },
+    {
+        key: "wordle",
+        name: "Wordle",
+        icon: "🟩",
+        description: "Угадай слово за ограниченное число попыток.",
+        status: "coming_soon",
+    },
+    {
+        key: "2048",
+        name: "2048",
+        icon: "🔲",
+        description: "Объединяй плитки и набирай очки.",
+        status: "future",
+    },
+    {
+        key: "minesweeper",
+        name: "Minesweeper",
+        icon: "💣",
+        description: "Найди безопасные клетки.",
+        status: "future",
+    },
+    {
+        key: "tetris",
+        name: "Tetris",
+        icon: "🧱",
+        description: "Собирай линии из падающих фигур.",
+        status: "future",
+    },
+];
+
 async function authenticate() {
     await discordSdk.ready();
 
@@ -108,10 +153,78 @@ async function submitSnakeResult(result) {
     return response.json();
 }
 
+function renderLauncher(user) {
+    document.body.innerHTML = `
+        <main class="activity-shell">
+            <section class="launcher-card">
+                <header class="launcher-header">
+                    <div>
+                        <p class="eyebrow">INSANEBOT ACTIVITY</p>
+                        <h1>Игры</h1>
+                        <p class="launcher-subtitle">Выбери игру и играй прямо в Discord.</p>
+                    </div>
+                    <div class="player-badge">${escapeHtml(user.username)}</div>
+                </header>
+
+                <div class="activity-grid">
+                    ${ACTIVITIES.map(renderActivityCard).join("")}
+                </div>
+            </section>
+        </main>
+    `;
+
+    document.querySelectorAll("[data-activity-key]").forEach((card) => {
+        if (card.dataset.status !== "available") {
+            return;
+        }
+        card.addEventListener("click", () => {
+            const activityKey = card.dataset.activityKey;
+            if (activityKey === "snake") {
+                openSnake(user).catch(showError);
+            }
+        });
+    });
+}
+
+function renderActivityCard(activity) {
+    const statusLabel = activity.status === "available"
+        ? "Играть"
+        : activity.status === "coming_soon"
+            ? "Скоро"
+            : "В планах";
+    const disabledClass = activity.status === "available" ? "" : " activity-card-disabled";
+
+    return `
+        <button
+            class="activity-card${disabledClass}"
+            type="button"
+            data-activity-key="${activity.key}"
+            data-status="${activity.status}"
+            ${activity.status === "available" ? "" : "disabled"}
+        >
+            <span class="activity-icon">${activity.icon}</span>
+            <span class="activity-card-content">
+                <strong>${escapeHtml(activity.name)}</strong>
+                <span>${escapeHtml(activity.description)}</span>
+            </span>
+            <span class="activity-status activity-status-${activity.status}">${statusLabel}</span>
+        </button>
+    `;
+}
+
+async function openSnake(user) {
+    const initialGame = await startSnakeGame();
+    renderGame(user, initialGame);
+}
+
 function renderGame(user, initialGame) {
     document.body.innerHTML = `
         <main class="activity-shell">
             <section class="game-card">
+                <div class="game-topbar">
+                    <button id="back-button" class="back-button" type="button">← Игры</button>
+                </div>
+
                 <header class="game-header">
                     <div>
                         <p class="eyebrow">INSANEBOT ACTIVITY</p>
@@ -166,6 +279,9 @@ function renderGame(user, initialGame) {
             status.textContent = "Не удалось создать новую игру";
         }
     });
+    document.querySelector("#back-button").addEventListener("click", () => {
+        renderLauncher(user);
+    });
 }
 
 function escapeHtml(value) {
@@ -175,6 +291,11 @@ function escapeHtml(value) {
         .replaceAll(">", "&gt;")
         .replaceAll('"', "&quot;")
         .replaceAll("'", "&#039;");
+}
+
+function showError(error) {
+    console.error(error);
+    document.body.innerHTML = `<main class="error-screen"><h1>Activity error</h1><p>${escapeHtml(error.message)}</p></main>`;
 }
 
 async function start() {
@@ -194,8 +315,7 @@ async function start() {
         throw new Error("Activity channel identity mismatch");
     }
 
-    const initialGame = await startSnakeGame();
-    renderGame(authentication.user, initialGame);
+    renderLauncher(authentication.user);
 }
 
 start().catch((error) => {
