@@ -167,7 +167,7 @@ Runtime databases are real state and must never be reset.
 | Profile customization | DONE | NOT STARTED | PENDING |
 | Mini-games | DONE | NOT TESTED | PENDING AFTER IMPLEMENTATION |
 | Social / Friends / Romantic | DONE | NOT TESTED | PENDING AFTER IMPLEMENTATION |
-| Discord Activities | SNAKE LOCAL UI + AUTHENTICATED SESSION FOUNDATION | NOT TESTED | PENDING REAL BOUNDARY |
+| Discord Activities | SNAKE LOCAL UI + INSTANCE/GUILD-BOUND SESSION FOUNDATION | NOT TESTED | PENDING REAL BOUNDARY |
 | PvP | REMOVED | — | — |
 | Collecting | REMOVED FOR NOW | — | — |
 
@@ -327,11 +327,11 @@ Important security boundary: the trusted-result layer does **not** verify an ext
 3. Waits for `discordSdk.ready()`.
 4. Calls the SDK `authorize` command for an authorization code with `identify` scope.
 5. Sends the one-time code to `/api/discord/token` with credentials enabled.
-6. Receives the backend-issued Discord access token.
-7. Calls `discordSdk.commands.authenticate({ access_token })` exactly once.
-8. Requests `/api/discord/session` using the HTTP-only session cookie.
-9. Verifies the server session user ID matches the SDK-authenticated Discord user.
-10. Shows the authenticated username.
+6. Sends the SDK-provided `instanceId`, `guildId` and `channelId` with the authorization code.
+7. Receives the backend-issued Discord access token.
+8. Calls `discordSdk.commands.authenticate({ access_token })` exactly once.
+9. Requests `/api/discord/session` using the HTTP-only session cookie.
+10. Verifies the server session user, Activity instance, guild and channel match the current SDK context.
 
 The browser never receives the Discord application client secret.
 
@@ -343,15 +343,18 @@ After exchanging the one-time authorization code, the backend now:
 
 - calls Discord `/users/@me` with the received access token;
 - obtains the actual Discord user ID and username from Discord rather than trusting browser-supplied identity;
+- requires an Activity `instance_id`, `guild_id` and `channel_id` for the community Activity session;
 - creates a cryptographically random server-side session ID;
-- stores the authenticated user identity server-side with a one-hour expiry;
+- stores the authenticated user identity together with the Activity instance/guild/channel binding and a one-hour expiry;
 - sends the session ID as an `HttpOnly` cookie scoped to `/api/discord`;
-- exposes `GET /api/discord/session` to return the identity bound to that cookie;
+- exposes `GET /api/discord/session` with the bound user, instance, guild and channel identifiers;
 - rejects missing/unknown/expired sessions with HTTP 401.
 
 The Discord access token itself is not stored in the Activity session and is not returned by the session endpoint. Session IDs are kept only in the backend process for this initial implementation.
 
-This is now a real server-side identity boundary for future game-result endpoints. It is **not yet the complete Activity security boundary**: the authenticated session is not yet bound to a Discord Activity instance/guild, and game-specific result validation has not been implemented.
+Discord's Embedded App SDK exposes `instanceId`, `guildId` and `channelId` to the Activity client. The instance ID identifies the unique Activity instance shared by users who joined the same running Activity. This implementation now carries those identifiers into the authenticated server session so future game-result endpoints can reject results sent for a different Activity instance or guild.
+
+This is still **not the complete Activity security boundary**: the backend currently binds the identifiers supplied by the authenticated Activity client but does not independently verify the Activity instance ID against Discord. Game-specific result validation and anti-cheat validation are also not implemented yet.
 
 ### Activity backend lifecycle — IMPLEMENTED
 
@@ -394,7 +397,7 @@ DISCORD_ACTIVITY_CLIENT_SECRET=<server-side Discord application client secret>
 
 `activities/client/src/style.css` provides the Activity shell, game card, score/status layout, controls, responsive canvas and mobile layout.
 
-This is implementation only and has **not** been runtime QA-tested. The Snake client is still local-only: it does **not** submit a result to the backend and does not grant XP/coins. The next security/game step is Activity instance/guild binding before accepting any result.
+This is implementation only and has **not** been runtime QA-tested. The Snake client is still local-only: it does **not** submit a result to the backend and does not grant XP/coins. The next security/game step is Snake backend result validation after the Activity instance/guild binding.
 
 ### Planned final Activity boundary
 
@@ -403,7 +406,7 @@ Discord Activity iframe
         ↓
 Embedded App SDK authorize()
         ↓
-one-time authorization code
+one-time authorization code + instance/guild/channel context
         ↓
 InsaneBot backend /api/discord/token
         ↓
@@ -411,7 +414,7 @@ Discord OAuth token exchange
         ↓
 Discord /users/@me
         ↓
-server-side authenticated session cookie
+server-side authenticated session bound to instance/guild/channel
         ↓
 Activity instance / guild verification
         ↓
@@ -483,22 +486,22 @@ c336d8bf63438d1f64420328fe01ef8bb59638ee → server-side authenticated Activity 
 e5225a0068274b68d8eb1a00ada83be387492504 → initial Snake Activity engine
 f174c78fe5d31ac35bcba4381511f11b5b1b56b3 → integrate Snake UI into Activity client
 668f85df25022e560cf49451c202d1e4c4d69c3f → Snake Activity interface styling
-CURRENT STATE UPDATE → Snake UI integration checkpoint
+e8adfabd1803b9890452c88e328dac5f97f82c2c → Activity instance/guild binding in client
+a0e29816a2e6effd88d5878a78ca36def1af15b8 → Activity instance/guild binding in backend
 ```
 
 ## 22. NEXT IMPLEMENTATION ORDER
 
 ```text
-1. Activity instance/guild binding
-2. Snake backend result validation
-3. Snake → trusted reward pipeline
-4. Sudoku UI/game
-5. Sudoku backend validation/rewards
-6. Wordle UI/game
-7. Wordle backend validation/rewards
-8. Remaining planned implementation
-9. Full sequential QA
-10. Regression and technical cleanup
+1. Snake backend result endpoint and authoritative validation
+2. Snake → trusted reward pipeline
+3. Sudoku UI/game
+4. Sudoku backend validation/rewards
+5. Wordle UI/game
+6. Wordle backend validation/rewards
+7. Remaining planned implementation
+8. Full sequential QA
+9. Regression and technical cleanup
 ```
 
 ## 23. QA PRINCIPLE
