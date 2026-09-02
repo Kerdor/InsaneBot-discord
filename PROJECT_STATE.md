@@ -413,7 +413,7 @@ b27608d81ed8bdbf33eb188131722906429700b7 → Snake result submission from Activi
 4a5d6e3bc569c67bb75109a8a9b53afd7f2315a0 → PROJECT_STATE after Snake validation foundation
 66564974132545bccff6b50c585984012d8e6642 → Snake seed binding hardening
 7e5e1302287243bdaf08ba5573b49f5b79ab8e48 → Snake trusted reward integration
- e8604abdfe11fcd8d2b935640989e0e0a74596ca → ActivityServerCog disnake Cog inheritance
+e8604abdfe11fcd8d2b935640989e0e0a74596ca → ActivityServerCog disnake Cog inheritance
 ```
 
 ## 22. CURRENT IMPLEMENTATION ORDER
@@ -438,3 +438,48 @@ b27608d81ed8bdbf33eb188131722906429700b7 → Snake result submission from Activi
 - Activities must remain real Discord Activities.
 - Current Activity implementation is **NOT QA PASSED** until exercised in the real Discord Activity environment.
 - The 2026-09-02 startup failure was caused by `ActivityServerCog` not inheriting from `commands.Cog`; this has been fixed in commit `e8604abdfe11fcd8d2b935640989e0e0a74596ca`.
+
+## 24. ACTIVITY LOCAL LAUNCH CHECKPOINT — 2026-09-02
+
+Local Activity client setup completed.
+
+Client:
+- Node.js installed and available:
+  - Node `v24.20.0`
+  - npm `11.19.0`
+- `npm install` completed successfully.
+- `npm run build` completed successfully with Vite `8.2.2`.
+- Production build generated in `activities/client/dist/`.
+- Vite development server starts successfully at:
+  `http://localhost:5173/`
+
+Cloudflare Tunnel:
+- `cloudflared` installed for Windows x64.
+- Version: `2026.8.3`.
+- Quick Tunnel successfully established:
+  `https://downloads-graphical-james-sailing.trycloudflare.com`
+- Tunnel successfully connects to local Activity client on port `5173`.
+- QUIC connectivity and Cloudflare API pre-checks passed.
+- Tunnel is currently a temporary Quick Tunnel and does not provide a stable production URL.
+
+Discord Developer Portal:
+- Activity URL Mapping configured and saved.
+- Public Activity URL currently points through the Cloudflare Quick Tunnel.
+- URL mapping changes confirmed saved.
+
+Current local launch state:
+```text
+Discord bot             → running
+Activity backend        → 127.0.0.1:8080
+Vite client             → 127.0.0.1:5173
+Cloudflare Tunnel       → public HTTPS → localhost:5173
+Discord URL Mapping     → saved
+```
+
+Next step:
+- Launch the Activity from Discord on the TEST server.
+- Verify that the real Discord Activity opens correctly.
+- Then perform runtime testing of SDK authentication → backend session → Snake start → gameplay → authoritative result submission → XP/coin reward.
+- This is still `RUNTIME QA PENDING`.
+
+The local Activity client, backend, tunnel and Discord URL Mapping are therefore considered configured for the next real Discord Activity runtime check, but **no successful real Activity launch has yet been recorded**.
