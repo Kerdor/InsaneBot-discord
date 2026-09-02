@@ -66,10 +66,12 @@ databases/
   profile_customization.py moderation.py tickets.py voice_stats.py voice_rooms.py social.py activities.py
 utils/profile_card.py activity_registry.py activity_rewards.py
 activities/
+  __init__.py
+  server.py
   client/package.json
   client/index.html
   client/src/main.js
-  server.py
+  client/vite.config.js
 ```
 
 Legacy `get_roles.py` remains unloaded. `reaction_logs.py` remains intentionally disabled.
@@ -163,7 +165,7 @@ Runtime databases are real state and must never be reset.
 | Profile customization | DONE | NOT STARTED | PENDING |
 | Mini-games | DONE | NOT TESTED | PENDING AFTER IMPLEMENTATION |
 | Social / Friends / Romantic | DONE | NOT TESTED | PENDING AFTER IMPLEMENTATION |
-| Discord Activities | FOUNDATION + CLIENT AUTH FOUNDATION | NOT TESTED | PENDING REAL BOUNDARY |
+| Discord Activities | FOUNDATION + CLIENT AUTH FOUNDATION + DEV PROXY | NOT TESTED | PENDING REAL BOUNDARY |
 | PvP | REMOVED | — | — |
 | Collecting | REMOVED FOR NOW | — | — |
 
@@ -343,7 +345,15 @@ It:
 - does not log the authorization code or access token;
 - does not expose the client secret to the browser.
 
-This backend is currently a standalone server module. It has **not yet been wired into the bot lifecycle**, and the Vite development proxy has not yet been added. Therefore Activity authentication is implementation-foundation only and is not runtime-verified.
+This backend is currently a standalone server module. It has **not yet been wired into the bot lifecycle**, so authentication is implementation-foundation only and is not runtime-verified.
+
+### Activity client development proxy — IMPLEMENTED
+
+`activities/client/vite.config.js` now proxies `/api/*` requests to `http://127.0.0.1:8080` during Vite development. This matches the intended local Activity backend port without adding another frontend dependency.
+
+### Activity backend package — IMPLEMENTED
+
+`activities/__init__.py` marks the backend directory as a Python package so it can be imported cleanly when the backend is wired into the application lifecycle.
 
 ### Planned final Activity boundary
 
@@ -397,7 +407,6 @@ Additional:
 - Activity reward idempotency/recovery across all reward stores;
 - Activity registry validation and initial-game implementation details;
 - Activity backend lifecycle integration;
-- Activity Vite development proxy;
 - Activity environment configuration for client ID/secret;
 - Activity URL mapping and Developer Portal configuration;
 - authenticated session handling;
@@ -437,15 +446,16 @@ Current checkpoint:
 Core community/progression systems → IMPLEMENTED
 Mini-games → IMPLEMENTED / QA PENDING
 Social / Friends / Romantic → IMPLEMENTED / QA PENDING
-Discord Activities → CLIENT + AUTH FOUNDATION / BACKEND LIFECYCLE + UI + GAMES REMAIN
+Discord Activities → FOUNDATION + CLIENT AUTH FOUNDATION + DEV PROXY / BACKEND LIFECYCLE + UI + GAMES REMAIN
 Activity registry → IMPLEMENTED / QA PENDING
 Activity XP reward idempotency → IMPLEMENTED
 Activity Economy reward idempotency → IMPLEMENTED
 Activity reward pipeline wiring → IMPLEMENTED / QA PENDING
 Activity client package → IMPLEMENTED
 Activity client authentication → FOUNDATION IMPLEMENTED
-Activity OAuth backend → FOUNDATION IMPLEMENTED / NOT WIRED TO BOT
-Activity frontend UI → MINIMAL STATUS ONLY
+Activity OAuth backend → FOUNDATION IMPLEMENTED
+Activity Vite development proxy → IMPLEMENTED
+Activity backend lifecycle integration → NEXT IMPLEMENTATION TARGET
 Initial Activities → Snake, Sudoku, Wordle
 Future Activities → 2048, Minesweeper, Tetris, Flappy Bird, Connect Four, Chess, Checkers
 Full QA → NOT STARTED
@@ -466,10 +476,10 @@ a5d8bf9c138f5cb28e231b5d565572a479e9ca3d → Activity result lookup/history laye
 3348a0793009dcae7d9cf9fdb120a2ac897ec4f2 → Economy reward idempotency
 86196954830ed8f1b2eaec3d584753fedb903c3d → Activity reward pipeline wiring / retry recovery
 9680d41c2e7a64df751f13d7430d7232a1c4b12a → Discord Activity client package foundation
-52cfd3be6cb1c6dd630b54250e8cca64162fbf5f → Discord Activity client authentication foundation
-94ac969005a2850b80c71b0b035976a816d3eaf9 → Discord Activity client entry page
-d99ce4f68b881faab87cf499f9a56ea7cf5e1e77 → Discord Activity OAuth token exchange backend
-CURRENT STATE UPDATE → Activity OAuth/backend foundation checkpoint
+66c87d300dbb83b8c2d0caa743f4839de65ee8a5 → Activity client authentication foundation
+ac68eee9d9ef9f3c99889aa8b31931ea1a01c688 → Activity Vite development proxy
+e493e67a8a8c36ac1be51b3bed6a70482a12a48a → Activity backend package marker
+CURRENT STATE UPDATE → Activity backend/proxy checkpoint
 ```
 
 ## 24. NEW-CHAT CONTINUATION
