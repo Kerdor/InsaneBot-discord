@@ -4,12 +4,14 @@ import logging
 import os
 import threading
 
+from disnake.ext import commands
+
 from activities.server import create_activity_server
 
 logger = logging.getLogger(__name__)
 
 
-class ActivityServerCog:
+class ActivityServerCog(commands.Cog):
     """Keep the local Activity OAuth backend alive with the bot process."""
 
     def __init__(self, bot):
