@@ -2,8 +2,8 @@ from __future__ import annotations
 
 from dataclasses import dataclass
 
-from databases.activities import init_activities, record_result
-from databases.economy import add_balance
+from databases.activities import get_result, init_activities, record_result
+from databases.economy import add_reward_balance
 from databases.xp import add_xp
 from utils.activity_registry import get_activity
 
@@ -34,19 +34,53 @@ def apply_trusted_result(result: TrustedActivityResult) -> bool:
         raise ValueError("Activity result must contain a reward")
 
     init_activities()
-    inserted = record_result(
-        result.result_id,
-        result.activity_key,
-        result.guild_id,
-        result.user_id,
-        result.xp_reward,
-        result.coin_reward,
-    )
-    if not inserted:
-        return False
+    existing = get_result(result.result_id)
+    if existing is not None:
+        if (
+            existing["activity_key"] != result.activity_key
+            or existing["guild_id"] != result.guild_id
+            or existing["user_id"] != result.user_id
+            or existing["xp_reward"] != result.xp_reward
+            or existing["coin_reward"] != result.coin_reward
+        ):
+            raise ValueError("Activity result_id already exists with different result data")
+        inserted = False
+    else:
+        inserted = record_result(
+            result.result_id,
+            result.activity_key,
+            result.guild_id,
+            result.user_id,
+            result.xp_reward,
+            result.coin_reward,
+        )
+        if not inserted:
+            existing = get_result(result.result_id)
+            if existing is None:
+                raise RuntimeError("Activity result could not be recorded")
+            if (
+                existing["activity_key"] != result.activity_key
+                or existing["guild_id"] != result.guild_id
+                or existing["user_id"] != result.user_id
+                or existing["xp_reward"] != result.xp_reward
+                or existing["coin_reward"] != result.coin_reward
+            ):
+                raise ValueError("Activity result_id already exists with different result data")
 
+    xp_applied = False
+    coin_applied = False
     if result.xp_reward:
-        add_xp(result.guild_id, result.user_id, result.xp_reward)
+        _, xp_applied = add_xp(
+            result.guild_id,
+            result.user_id,
+            result.xp_reward,
+            reward_id=result.result_id,
+        )
     if result.coin_reward:
-        add_balance(result.guild_id, result.user_id, result.coin_reward)
-    return True
+        _, coin_applied = add_reward_balance(
+            result.guild_id,
+            result.user_id,
+            result.coin_reward,
+            reward.result_id if False else result.result_id,
+        )
+    return inserted or xp_applied or coin_applied
