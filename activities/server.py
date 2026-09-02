@@ -167,6 +167,7 @@ class ActivityRequestHandler(BaseHTTPRequestHandler):
             score = payload.get("score")
             reason = payload.get("reason")
             tick_count = payload.get("tick_count")
+            seed = payload.get("seed")
             inputs = payload.get("inputs")
             instance_id = payload.get("instance_id")
             guild_id = payload.get("guild_id")
@@ -189,6 +190,9 @@ class ActivityRequestHandler(BaseHTTPRequestHandler):
                 return
             if not isinstance(tick_count, int) or isinstance(tick_count, bool) or not 1 <= tick_count <= SNAKE_MAX_TICKS:
                 self._send_json(400, {"error": "Invalid Snake tick count"})
+                return
+            if not isinstance(seed, int) or isinstance(seed, bool) or not 0 <= seed <= 0xFFFFFFFF:
+                self._send_json(400, {"error": "Invalid Snake seed"})
                 return
             if not isinstance(inputs, list) or len(inputs) > SNAKE_MAX_INPUTS:
                 self._send_json(400, {"error": "Invalid Snake input trace"})
@@ -214,6 +218,9 @@ class ActivityRequestHandler(BaseHTTPRequestHandler):
                     return
                 if game["result_id"] != result_id:
                     self._send_json(403, {"error": "Snake result identity mismatch"})
+                    return
+                if game["seed"] != seed:
+                    self._send_json(403, {"error": "Snake seed identity mismatch"})
                     return
                 if game["user_id"] != session["user_id"]:
                     self._send_json(403, {"error": "Snake game user mismatch"})
