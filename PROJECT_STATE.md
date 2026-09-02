@@ -81,14 +81,7 @@ TEST_GUILD_ID=519209364280573954
 TEST_GUILDS=[519209364280573954]
 ```
 
-TEST guild: `Insane TEST` / `519209364280573954`. Production must not silently consume TEST mappings.
-
-Historical isolation/logging fixes:
-
-```text
-f4321d9aa022b7085c19b510cf965d073d4ed544 → TEST/MAIN isolation
-f19eedcf4f3bbc1476aabc9f17f6f355602e5590 → logging map compatibility
-```
+TEST guild: `Insane TEST` / `519209364280573954`.
 
 ## 5. ACTIVE COG LOAD ORDER
 
@@ -162,7 +155,7 @@ Runtime databases are real state and must never be reset.
 | Profile customization | DONE | NOT STARTED | PENDING |
 | Mini-games | DONE | NOT TESTED | PENDING AFTER IMPLEMENTATION |
 | Social / Friends / Romantic | DONE | NOT TESTED | PENDING AFTER IMPLEMENTATION |
-| Discord Activities | SNAKE DETERMINISTIC REPLAY + SESSION/INSTANCE/GUILD BOUNDARY | NOT TESTED | PENDING REAL ACTIVITY BOUNDARY |
+| Discord Activities | SNAKE + AUTHORITATIVE REPLAY + TRUSTED REWARDS | NOT TESTED | PENDING REAL ACTIVITY BOUNDARY |
 | PvP | REMOVED | — | — |
 | Collecting | REMOVED FOR NOW | — | — |
 
@@ -172,7 +165,7 @@ Implemented in `cogs/xp.py` + `databases/xp.py`: persistent guild/user XP, messa
 
 Defaults: message XP 15–25; message cooldown 60s; voice 5/min; level threshold `100 * level²`; message economy reward 2.
 
-`databases/xp.py` has `add_xp(guild_id, user_id, amount, reward_id=None)`. When `reward_id` is supplied, a persistent reward ledger prevents duplicate trusted Activity XP rewards across retries. Existing callers without `reward_id` retain original behavior.
+`databases/xp.py` supports `add_xp(guild_id, user_id, amount, reward_id=None)`. Supplying a reward ID makes trusted Activity XP rewards idempotent.
 
 ## 9. ECONOMY / DAILY
 
@@ -204,17 +197,7 @@ Known integration risk: quest completion and economy reward are separate persist
 
 ## 12. ACHIEVEMENTS
 
-Implemented:
-
-```text
-messages_1000
-voice_10h
-rich_10000
-shop_purchase
-active_7_days
-```
-
-Reuses XP, VoiceStats and Economy sources. Shop purchase consumes successful purchase event.
+Implemented: `messages_1000`, `voice_10h`, `rich_10000`, `shop_purchase`, `active_7_days`.
 
 ## 13. PROFILE
 
@@ -228,17 +211,15 @@ QA candidates: long names and Unicode/Cyrillic fallback.
 
 VoiceStats tracks persistent total/channel seconds and active sessions; AFK/bots excluded; restart recovery, channel moves and `on_ready` reconciliation.
 
-Voice rooms provide private/user-created rooms, controls, access/co-owner management, persistence and cleanup. These systems remain separate.
+Voice rooms provide private/user-created rooms, controls, access/co-owner management, persistence and cleanup.
 
 ## 15. VERIFICATION / MODERATION / TICKETS
 
-Verification: arithmetic panel, role transition and owner synchronization. TEST role-create condition remains audit candidate.
+Verification: arithmetic panel, role transition and owner synchronization.
 
 Moderation: `/warn`, `/timeout`, `/kick`, `/ban`, `/unban`, `/history`; persistent actions, settings, hierarchy checks, history, logging, modal actions and interaction hardening.
 
 Tickets: panel → modal → private thread → support → close confirmation → transcript → archive/lock; persistent state and ready recovery.
-
-Historical fixes include role hierarchy, ticket parent privacy, ticket interaction timeout, moderation timeout, moderation modal COG reuse and verification persistent view.
 
 ## 16. LOGGING / SERVER MANAGER / REBUILD
 
@@ -250,21 +231,17 @@ Server Manager handles active guild targeting, managed permissions, synchronizat
 
 Rebuild is owner-only, TEST-restricted, confirmed, mapping-aware and database-preserving.
 
-## 17. MINI-GAMES — IMPLEMENTED
+## 17. MINI-GAMES
 
-Files: `cogs/minigames.py`, `databases/xp.py`, `config.py`.
+`cogs/minigames.py` provides `/minigame` with `Математика`, `Реакция`, `Память`.
 
-Command: `/minigame` with `Математика`, `Реакция`, `Память`.
+Rules: one active game per guild/user; 30-second cooldown after success/failure; only initiating user operates buttons; expired games give no reward; XP-disabled servers cannot start; existing XP/economy rewards; no gambling/betting; success +15 XP and +25 coins when economy enabled; memory hides after 3 seconds; wrong answer gives no reward.
 
-Rules: one active game per guild/user; 30-second cooldown after success/failure; only initiating user can operate buttons; expired games give no reward; XP-disabled servers cannot start; rewards use existing XP/economy; no gambling/betting; success gives +15 XP and +25 coins when economy enabled; memory sequence hides after 3 seconds; wrong answer ends without reward.
+No runtime QA yet.
 
-No runtime QA yet. Known audit candidates: reward text when economy is disabled, timeout cooldown semantics, `_reward` dependency on XP COG and concurrency/restart behavior.
+## 18. SOCIAL / FRIENDS / ROMANTIC
 
-## 18. SOCIAL / FRIENDS / ROMANTIC — IMPLEMENTED
-
-Files: `databases/social.py`, `cogs/social.py`, `config.py`.
-
-Persistent `social.db` stores friend requests, normalized friendships, romantic requests and normalized romantic relationships.
+`databases/social.py` + `cogs/social.py` provide persistent guild-scoped friend and romantic relationships.
 
 Commands:
 
@@ -273,118 +250,53 @@ Commands:
 /friends add <member>
 /friends accept <member>
 /friends remove <member>
-
 /relationship
 /relationship propose <member>
 /relationship accept <member>
 /relationship end <member>
 ```
 
-Rules: self-add/proposal rejected; friend request requires acceptance; duplicate/reverse requests rejected; romantic proposal requires friendship; romance requires mutual acceptance; ending romance preserves friendship; all state is guild-scoped and persistent; pairs are normalized.
+Self/duplicate/reverse checks; romance requires friendship and mutual acceptance; ending romance preserves friendship; normalized pairs. No rewards attached yet.
 
-No XP/economy rewards are attached yet.
+## 19. DISCORD ACTIVITIES
 
-## 19. DISCORD ACTIVITIES — CURRENT IMPLEMENTATION
+### Roadmap
 
-### 19.1 Activity roadmap
-
-Initial activities:
-
-```text
-Snake
-Sudoku
-Wordle
-```
-
-Future activities:
-
-```text
-2048
-Minesweeper
-Tetris
-Flappy Bird
-Connect Four
-Chess
-Checkers
-```
+Initial: Snake, Sudoku, Wordle. Future: 2048, Minesweeper, Tetris, Flappy Bird, Connect Four, Chess, Checkers.
 
 Activities must be real Discord Activities, not slash-command simulations.
 
-### 19.2 Activity persistence / trusted reward foundation
+### Persistence / rewards
 
-`databases/activities.py` contains a persistent idempotent result ledger:
+`databases/activities.py` stores an idempotent result ledger keyed by `result_id`, with activity key, guild/user IDs, XP/coin rewards and timestamp.
+
+`utils/activity_registry.py` contains Activity definitions.
+
+`utils/activity_rewards.py` exposes `TrustedActivityResult` and `apply_trusted_result()`. It validates the trusted payload, persists the result idempotently, and applies XP/economy rewards using persistent reward IDs. It can recover after a partial cross-database application.
+
+The reward layer must only receive already-trusted results.
+
+### Client
+
+`activities/client/src/main.js` authenticates with the Discord Embedded App SDK, sends the one-time OAuth code to the backend, loads the server session, verifies user/instance/guild/channel identity, starts a server-issued Snake game, and submits the completed replay.
+
+`activities/client/src/snake.js` implements a real local Snake engine: 20×20 board, 120ms ticks, deterministic xorshift32 food generation, server-issued seed/game/result IDs, input trace, score and finish reason.
+
+Restart requests a fresh server-issued game.
+
+### OAuth/session backend
+
+`activities/server.py` provides a dependency-free threaded backend.
+
+OAuth flow:
 
 ```text
-result_id
-activity_key
-guild_id
-user_id
-xp_reward
-coin_reward
-received_at
+Discord Activity SDK authorize
+→ backend exchanges one-time code
+→ Discord /users/@me
+→ opaque HttpOnly server session
+→ session bound to instance_id + guild_id + channel_id
 ```
-
-`result_id` is the primary key. Exposed operations:
-
-```text
-has_result(result_id)
-record_result(result_id, activity_key, guild_id, user_id, xp_reward, coin_reward)
-get_result(result_id)
-get_user_results(guild_id, user_id, activity_key=None, limit=100)
-```
-
-`utils/activity_registry.py` contains the Activity definition registry. `utils/activity_rewards.py` contains the trusted-result reward application layer.
-
-The trusted reward layer:
-- validates trusted Activity result data;
-- persists results idempotently;
-- verifies reused result IDs have identical payloads;
-- applies XP and Economy through persistent reward ledgers;
-- can recover from partial application on retry;
-- does not claim cross-database atomicity.
-
-**Important:** `activity_rewards.py` must only receive already-trusted results. External identity/session verification and game anti-cheat validation happen before it.
-
-### 19.3 Activity client
-
-`activities/client/package.json` uses the official `@discord/embedded-app-sdk` dependency and Vite build scripts.
-
-`activities/client/index.html` is the Vite entry page.
-
-`activities/client/vite.config.js` proxies `/api/*` to `http://127.0.0.1:8080` for local development.
-
-`activities/client/src/main.js`:
-
-1. Reads `VITE_DISCORD_CLIENT_ID`.
-2. Creates `DiscordSDK`.
-3. Waits for `discordSdk.ready()`.
-4. Calls SDK `authorize` with `identify` scope.
-5. Sends the one-time code plus SDK `instanceId`, `guildId`, `channelId` to `/api/discord/token`.
-6. Receives the backend-issued Discord access token.
-7. Calls `discordSdk.commands.authenticate({ access_token })` once.
-8. Loads `/api/discord/session` with credentials.
-9. Verifies user, Activity instance, guild and channel identity against SDK values.
-10. Requests `/api/activities/snake/start` for a server-issued Snake game.
-11. Passes the server-issued `seed`, `game_id` and `result_id` to the Snake client.
-12. Sends Snake finish data to `/api/activities/snake/result`.
-
-The browser never receives the Discord application client secret.
-
-### 19.4 Activity OAuth/session backend
-
-`activities/server.py` provides a dependency-free `ThreadingHTTPServer` backend.
-
-After exchanging the Discord authorization code, it:
-- calls Discord `/users/@me`;
-- obtains the authenticated Discord user ID and username from Discord;
-- requires Activity `instance_id`, `guild_id`, `channel_id`;
-- creates a cryptographically random opaque server-side session ID;
-- stores user identity + Activity instance/guild/channel + one-hour expiry;
-- sends the session as an `HttpOnly` cookie scoped to `/api/discord`;
-- exposes `GET /api/discord/session`;
-- rejects missing/unknown/expired sessions with 401;
-- does not store the Discord access token in the session;
-- keeps sessions in memory for the current implementation.
 
 Environment:
 
@@ -395,124 +307,62 @@ DISCORD_ACTIVITY_CLIENT_ID=<server-side Discord application client ID>
 DISCORD_ACTIVITY_CLIENT_SECRET=<server-side Discord application client secret>
 ```
 
-`DISCORD_ACTIVITY_CLIENT_SECRET` must remain server-side and must never be placed in Vite client environment variables.
+Client secret is never exposed to the browser. Sessions are currently in memory and expire after one hour.
 
-### 19.5 Snake local engine — deterministic replay implemented
+### Snake authoritative validation
 
-`activities/client/src/snake.js` remains a local real-time Snake engine, but it now has a deterministic replay boundary.
+`POST /api/activities/snake/start` requires the authenticated session and creates a server-issued cryptographic 32-bit seed, `game_id`, and `result_id`. The game is bound to user, instance, guild and channel and expires after 15 minutes.
 
-Game rules remain:
-- 20×20 board;
-- initial snake `(10,10),(9,10),(8,10)`;
-- initial direction right;
-- fixed 120ms tick;
-- wall/self collision;
-- food only on free cells;
-- score increments on food;
-- win when the board is filled.
+`POST /api/activities/snake/result` requires the matching game/result/seed/context and a complete input trace. The backend replays Snake with the same deterministic PRNG and board rules and verifies legal directions, ticks, collisions, food, score and finish reason. The accepted game is consumed so it cannot be submitted twice.
 
-Changes now implemented:
-- food generation uses a deterministic `xorshift32` PRNG;
-- server-issued seed is used for the game;
-- game ID and result ID are bound to the current server-issued game;
-- completed tick count is recorded;
-- accepted direction inputs are recorded as `{tick, direction}` events;
-- finish callback returns reason, score, tick count, seed, game ID, result ID and full input trace;
-- restart requests a fresh server-issued game instead of inventing a result ID client-side.
-
-The client-side random seed fallback remains only for a raw local `SnakeGame.reset()` call; the actual Activity flow always supplies the server-issued seed.
-
-### 19.6 Snake authoritative replay validation — IMPLEMENTED
-
-`POST /api/activities/snake/start` now:
-- requires an authenticated Activity session;
-- generates a cryptographically random 32-bit seed;
-- generates server-side `game_id` and `result_id`;
-- stores the game bound to user, Activity instance, guild and channel;
-- applies a 15-minute game TTL;
-- returns `game_id`, `result_id`, `seed`.
-
-`POST /api/activities/snake/result` now requires:
-
-```text
-game_id
-result_id
-activity_key
-score
-reason
-tick_count
-seed
-inputs
-instance_id
-guild_id
-channel_id
-```
-
-Validation includes:
-- authenticated session required;
-- result/activity identity validation;
-- instance/guild/channel must match the authenticated session;
-- game must exist and not be expired;
-- game must belong to the same user and Activity context;
-- result ID must equal the server-issued result ID;
-- submitted seed must equal the server-issued game seed;
-- input trace and tick limits are enforced;
-- direction names must be valid;
-- illegal reverse-direction transitions are rejected;
-- the backend replays Snake from the server-issued seed using the same deterministic xorshift32 PRNG and free-cell ordering as the client;
-- wall collisions and self collisions are replayed;
-- food consumption and score are replayed;
-- final tick count, score and finish reason must exactly match the authoritative replay;
-- accepted games are consumed so the same game cannot be submitted twice.
-
-Current limits:
+Limits:
 
 ```text
 SNAKE_MAX_SCORE = 397
 SNAKE_MAX_INPUTS = 20000
 SNAKE_MAX_TICKS = 100000
-SNAKE_GAME_TTL = 900 seconds
+SNAKE_GAME_TTL = 900
 ```
 
-The result is currently stored in the backend's in-memory `activity_results` map. **Rewards are intentionally not wired here yet.** This is the security/validation boundary that must precede `activity_rewards.py`.
+### Snake trusted reward integration — IMPLEMENTED
 
-### 19.7 Security status
-
-Current chain:
+Only after replay validation succeeds, `activities/server.py` creates a `TrustedActivityResult` bound to the authenticated user/guild and server-issued result ID. Reward amounts are calculated on the backend as:
 
 ```text
-Discord SDK
-  ↓
-authorize
-  ↓
-server OAuth exchange
-  ↓
-Discord /users/@me identity
-  ↓
-HttpOnly server session
-  ↓
-instance_id + guild_id + channel_id binding
-  ↓
-server-issued Snake seed/game_id/result_id
-  ↓
-deterministic client replay data
-  ↓
-authoritative server replay
-  ↓
-validated trusted Activity result
+XP = score * 15
+coins = score * 25
 ```
 
-This is substantially stronger than the previous score-only endpoint: a browser can no longer simply submit an arbitrary plausible score and have it accepted without a matching server-issued game and replay.
+The result is passed to `apply_trusted_result()` from `utils/activity_rewards.py`.
+
+Reward chain:
+
+```text
+Discord identity/session
+→ server-issued game
+→ deterministic replay validation
+→ TrustedActivityResult
+→ persistent idempotent Activity result
+→ persistent idempotent XP
+→ persistent idempotent coins
+```
+
+Reward amounts are never accepted from the browser. The response includes `xp_reward`, `coin_reward`, and `reward_applied`.
+
+**Implementation is complete; runtime QA is still pending.**
+
+## 20. SECURITY STATUS
+
+Current Activity security boundary prevents a client from simply submitting an arbitrary score. A result must correspond to a server-issued game, seed and result ID, authenticated user/context, and a valid deterministic replay.
 
 Still not implemented:
-- independent Discord-side verification of the Activity instance ID beyond the authenticated Activity context;
-- persistent storage of active Activity game sessions;
-- Activity result reward wiring;
-- Sudoku implementation;
-- Wordle implementation;
-- full real Discord Activity boundary/runtime QA.
+- persistent active-game storage across backend restarts;
+- independent external verification of Activity instance state beyond the authenticated SDK/session context;
+- Sudoku;
+- Wordle;
+- full real Discord Activity runtime QA.
 
-## 20. RECENT ACTIVITY CHECKPOINTS
+## 21. RECENT ACTIVITY CHECKPOINTS
 
 ```text
 1fd67f7fbb319a61b691022c6e7c1801c57e5a9c → Activity result ledger
@@ -540,33 +390,29 @@ a0e29816a2e6effd88d5878a78ca36def1af15b8 → Activity instance/guild binding in 
 3c62e09eeb98f06ad7af4d3d6e5222d06a508d54 → Snake client completion/result callback
 b27608d81ed8bdbf33eb188131722906429700b7 → Snake result submission from Activity client
 00e58c1e267e0da6997c017059451df9130232a2 → Snake backend result validation endpoint
-4a5d6e3bc569c67bb75109a8a9b53afd7f2315a0 → PROJECT_STATE update after Snake validation foundation
-640ac0b3306271b23f5dbf0c8c4ff5866322b518 → deterministic Snake engine and input trace
-68029850727f69f42514bd4de061c91dccf5779d → authoritative Snake replay validation boundary
-b9d92a282c455f0ed85e028d0bfe06f178d26da8 → server-issued Snake result ID binding
-0b19754e43544b9fe0d5b54ff5e404d3ad838da2 → Activity client final server-issued game binding
+4a5d6e3bc569c67bb75109a8a9b53afd7f2315a0 → PROJECT_STATE after Snake validation foundation
 66564974132545bccff6b50c585984012d8e6642 → Snake seed binding hardening
+7e5e1302287243bdaf08ba5573b49f5b79ab8e48 → Snake trusted reward integration
 ```
 
-## 21. CURRENT IMPLEMENTATION ORDER
+## 22. CURRENT IMPLEMENTATION ORDER
 
-Do not start broad QA yet. Continue implementation in this order:
-
-1. **Snake → trusted reward pipeline**: after authoritative replay validation, convert only validated results into `TrustedActivityResult` and apply configured XP/coins idempotently.
-2. **Sudoku UI/game**.
-3. **Sudoku authoritative backend validation + rewards**.
-4. **Wordle UI/game**.
-5. **Wordle authoritative backend validation + rewards**.
+1. Runtime QA of Snake end-to-end, including reward persistence and duplicate submission.
+2. Sudoku UI/game.
+3. Sudoku authoritative backend validation + rewards.
+4. Wordle UI/game.
+5. Wordle authoritative backend validation + rewards.
 6. Remaining planned Activities.
-7. Complete real Discord Activity boundary/runtime checks.
+7. Complete real Discord Activity boundary checks.
 8. Full sequential QA of all systems.
 9. Integration regression and technical cleanup.
 
-## 22. IMPORTANT CURRENT NOTES
+## 23. IMPORTANT CURRENT NOTES
 
-- No Activity rewards should be granted from raw client-submitted Snake scores.
-- `activity_rewards.py` is deliberately downstream of the authoritative validation boundary.
-- Do not reset or recreate existing runtime databases while continuing Activity work.
-- Do not turn Activities into slash-command simulations.
-- Do not call current Activity implementation `QA PASSED` until it has been exercised in the real Discord Activity environment.
-- Current implementation has not been runtime-tested in the real Discord Activity boundary.
+- Raw client-submitted Snake scores never directly grant rewards.
+- `activity_rewards.py` is downstream of authoritative validation.
+- XP and Economy reward IDs use the trusted `result_id`, so retrying the same validated result does not intentionally duplicate rewards.
+- Activity games/results are currently in memory; a backend restart invalidates active games.
+- Runtime databases must never be reset.
+- Activities must remain real Discord Activities.
+- Current Activity implementation is **NOT QA PASSED** until exercised in the real Discord Activity environment.
