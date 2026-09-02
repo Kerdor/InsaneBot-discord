@@ -24,11 +24,12 @@ export class SnakeGame {
         this.cellSize = canvas.width / GRID_SIZE;
         this.timer = null;
         this.gameId = null;
+        this.resultId = null;
         this.seed = null;
         this.reset();
     }
 
-    reset(seed = null, gameId = null) {
+    reset(seed = null, gameId = null, resultId = null) {
         this.stop();
         this.snake = [
             { x: 10, y: 10 },
@@ -42,6 +43,7 @@ export class SnakeGame {
         this.inputs = [];
         this.seed = seed === null ? createRandomSeed() : seed >>> 0;
         this.gameId = gameId;
+        this.resultId = resultId;
         this.randomState = this.seed;
         this.food = this.createFood();
         this.running = false;
@@ -137,6 +139,7 @@ export class SnakeGame {
             tick_count: this.tickCount,
             seed: this.seed,
             game_id: this.gameId,
+            result_id: this.resultId,
             inputs: this.inputs.slice(),
         });
     }
