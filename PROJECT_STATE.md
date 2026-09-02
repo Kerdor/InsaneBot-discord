@@ -169,7 +169,7 @@ Implemented in `cogs/xp.py` + `databases/xp.py`: persistent guild/user XP, messa
 
 Defaults: message XP 15–25; message cooldown 60s; voice 5/min; level threshold `100 * level²`; message economy reward 2.
 
-`databases/xp.py` also has `add_xp(guild_id, user_id, amount)` for generic progression XP without modifying message/voice counters.
+`databases/xp.py` also has `add_xp(guild_id, user_id, amount, reward_id=None)` for generic progression XP without modifying message/voice counters. When `reward_id` is supplied, the XP database records an idempotent reward ledger entry so the same trusted Activity XP reward can be retried without being applied twice. Existing callers that omit `reward_id` retain the original behavior.
 
 ## 9. ECONOMY / DAILY
 
@@ -296,7 +296,11 @@ get_user_results(guild_id, user_id, activity_key=None, limit=100)
 
 A static Activity registry exists in `utils/activity_registry.py`. It defines the initial release games and agreed future expansion list without assigning unapproved reward balances or pretending that external Activities already exist.
 
-A trusted-result application layer now exists in `utils/activity_rewards.py`. It accepts a `TrustedActivityResult`, validates the Activity identity, IDs and non-negative reward values, persists the result through the idempotent Activity ledger, and only then applies the supplied XP and coin rewards through the existing XP/Economy database APIs. A duplicate `result_id` is rejected before any second reward application.
+A trusted-result application layer exists in `utils/activity_rewards.py`. It accepts a `TrustedActivityResult`, validates the Activity identity, IDs and non-negative reward values, persists the result through the idempotent Activity ledger, and applies the supplied XP and coin rewards through the existing XP/Economy database APIs.
+
+The XP side now supports an optional `reward_id` and stores a persistent reward ledger in `xp.db`. This makes a trusted Activity XP reward idempotent across retries: if the same `reward_id` is encountered again with the same guild/user/amount, XP is not added a second time. Existing XP callers are unaffected when no reward ID is supplied.
+
+The current Activity reward pipeline still has a separate-database recovery boundary for the Economy side and Activity result ledger. The next implementation target is to add the same idempotent reward-claim mechanism to `economy.py`, then make `activity_rewards.py` retry-safe across both reward stores. Absolute multi-database transaction atomicity is not claimed.
 
 Important boundary: this layer accepts **already trusted** results only. It does not claim to verify an external Discord Activity. External signature verification, identity/guild verification, anti-cheat validation and a real Activity client/backend remain outside the current implementation.
 
@@ -363,6 +367,7 @@ Additional:
 - social command and relationship concurrency/edge cases;
 - Activity signature/identity/guild verification and reward integration;
 - Activity reward atomicity across the separate XP/Economy/Activity SQLite databases;
+- Activity reward idempotency/recovery across all reward stores;
 - Activity registry validation and initial-game implementation details.
 
 Do not fix speculative issues without inspecting source/behavior first.
@@ -401,6 +406,8 @@ Social / Friends / Romantic → IMPLEMENTED / QA PENDING
 Discord Activities → FOUNDATION / trusted-result pipeline implemented / initial games planned: Snake, Sudoku, Wordle
 Activity registry → IMPLEMENTED / QA PENDING
 Future Activities → 2048, Minesweeper, Tetris, Flappy Bird, Connect Four, Chess, Checkers
+Activity XP reward idempotency → IMPLEMENTED
+Activity Economy reward idempotency → NEXT IMPLEMENTATION TARGET
 Full QA → NOT STARTED
 ```
 
@@ -415,7 +422,8 @@ e90ab1944b3d93ca091b7ac2ccac964df9d532d4 → social commands/COG
 9e584c6d80add5497c118db0aec0d5a23b0bc2da → Activity registry
 a5d8bf9c138f5cb28e231b5d565572a479e9ca3d → Activity result lookup/history layer
 0f1f501f4cab242453f88fd390d74312b36cfade → trusted Activity reward pipeline
-CURRENT STATE UPDATE → trusted Activity pipeline checkpoint
+e2e9ed79d22fe8ac7a5f54fb1bf6259321f1d7e7 → idempotent XP reward ledger
+CURRENT STATE UPDATE → XP reward ledger checkpoint
 ```
 
 ## 24. NEW-CHAT CONTINUATION
