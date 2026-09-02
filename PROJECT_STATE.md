@@ -167,7 +167,7 @@ Runtime databases are real state and must never be reset.
 | Profile customization | DONE | NOT STARTED | PENDING |
 | Mini-games | DONE | NOT TESTED | PENDING AFTER IMPLEMENTATION |
 | Social / Friends / Romantic | DONE | NOT TESTED | PENDING AFTER IMPLEMENTATION |
-| Discord Activities | SNAKE UI IMPLEMENTATION STARTED + AUTHENTICATED SESSION FOUNDATION | NOT TESTED | PENDING REAL BOUNDARY |
+| Discord Activities | SNAKE LOCAL UI + AUTHENTICATED SESSION FOUNDATION | NOT TESTED | PENDING REAL BOUNDARY |
 | PvP | REMOVED | — | — |
 | Collecting | REMOVED FOR NOW | — | — |
 
@@ -376,9 +376,9 @@ DISCORD_ACTIVITY_CLIENT_SECRET=<server-side Discord application client secret>
 
 `activities/__init__.py` marks the backend directory as a Python package.
 
-### Snake Activity UI — IMPLEMENTATION STARTED
+### Snake Activity UI — IMPLEMENTED (LOCAL CLIENT)
 
-`activities/client/src/snake.js` now contains the first playable Snake engine for the Activity client:
+`activities/client/src/snake.js` contains the first playable Snake engine for the Activity client:
 
 - 20×20 grid;
 - keyboard arrow controls;
@@ -390,7 +390,11 @@ DISCORD_ACTIVITY_CLIENT_SECRET=<server-side Discord application client secret>
 - win state when the board is filled;
 - no external frontend dependency beyond the existing Activity SDK/Vite setup.
 
-The engine is currently a local client game only. It does **not** yet submit a result to the backend or grant XP/coins. UI integration into the Activity page and authoritative backend result validation are the next Snake steps.
+`activities/client/src/main.js` now creates the Snake game after authenticated session setup and binds the game controls to the Activity page. The page includes Start/New Game controls, score/status display, canvas and authenticated username.
+
+`activities/client/src/style.css` provides the Activity shell, game card, score/status layout, controls, responsive canvas and mobile layout.
+
+This is implementation only and has **not** been runtime QA-tested. The Snake client is still local-only: it does **not** submit a result to the backend and does not grant XP/coins. The next security/game step is Activity instance/guild binding before accepting any result.
 
 ### Planned final Activity boundary
 
@@ -427,7 +431,9 @@ High priority:
 - quest completion/reward atomicity;
 - moderation punishment vs logging failure;
 - TEST verification role-create condition;
-- profile card long names and Unicode/Cyrillic fallback.
+- profile card long names and Unicode/Cyrillic fallback;
+- Activity instance/guild verification and authenticated session binding;
+- Snake authoritative backend result validation and anti-cheat boundary.
 
 Additional:
 
@@ -441,14 +447,12 @@ Additional:
 - duplicate event handling;
 - mini-game reward integration/concurrency;
 - social command and relationship concurrency/edge cases;
-- Activity instance/guild verification;
-- Activity game-result validation and anti-cheat boundary;
 - Activity reward atomicity across separate XP/Economy/Activity SQLite databases;
 - Activity reward idempotency/recovery across all reward stores;
 - Activity registry validation and initial-game implementation details;
 - Activity URL mapping and Developer Portal configuration;
 - authenticated session lifecycle/persistence beyond the initial in-process session store;
-- Snake UI integration and authoritative result submission.
+- Sudoku/Wordle implementation and backend validation.
 
 ## 21. RECENT IMPLEMENTATION CHECKPOINTS
 
@@ -477,23 +481,24 @@ ff7790043a234c97654da9aeb6d1c2e1ced6b2d3 → Activity client session preparation
 71a0076ab26869e5f0e7dcb334f7fe0441bab4a8 → Activity client authentication flow correction
 c336d8bf63438d1f64420328fe01ef8bb59638ee → server-side authenticated Activity session
 e5225a0068274b68d8eb1a00ada83be387492504 → initial Snake Activity engine
-CURRENT STATE UPDATE → Snake implementation checkpoint
+f174c78fe5d31ac35bcba4381511f11b5b1b56b3 → integrate Snake UI into Activity client
+668f85df25022e560cf49451c202d1e4c4d69c3f → Snake Activity interface styling
+CURRENT STATE UPDATE → Snake UI integration checkpoint
 ```
 
 ## 22. NEXT IMPLEMENTATION ORDER
 
 ```text
-1. Integrate Snake engine into Activity page
-2. Add Snake UI controls/status/restart
-3. Activity instance/guild binding
-4. Snake backend result validation
-5. Snake → trusted reward pipeline
-6. Sudoku UI/game
-7. Sudoku backend validation/rewards
-8. Wordle UI/game
-9. Wordle backend validation/rewards
-10. Remaining planned implementation
-11. Full sequential QA
+1. Activity instance/guild binding
+2. Snake backend result validation
+3. Snake → trusted reward pipeline
+4. Sudoku UI/game
+5. Sudoku backend validation/rewards
+6. Wordle UI/game
+7. Wordle backend validation/rewards
+8. Remaining planned implementation
+9. Full sequential QA
+10. Regression and technical cleanup
 ```
 
 ## 23. QA PRINCIPLE
