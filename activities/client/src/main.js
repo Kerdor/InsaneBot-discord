@@ -40,7 +40,26 @@ async function authenticate() {
 
 async function start() {
     await authenticate();
-    document.body.textContent = "InsaneBot Activity connected";
+
+    const { user } = await discordSdk.commands.authenticate({
+        access_token: await getAccessToken(),
+    });
+
+    document.body.textContent = `InsaneBot Activity connected as ${user.username}`;
+}
+
+async function getAccessToken() {
+    const response = await fetch("/api/discord/session", {
+        method: "GET",
+        credentials: "include",
+    });
+
+    if (!response.ok) {
+        throw new Error(`Activity session failed: ${response.status}`);
+    }
+
+    const { access_token: accessToken } = await response.json();
+    return accessToken;
 }
 
 start().catch((error) => {
