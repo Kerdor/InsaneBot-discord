@@ -18,7 +18,7 @@ def _connect() -> sqlite3.Connection:
 
 
 def init_xp() -> None:
-    """Create the persistent XP table when the database is initialized."""
+    """Create the persistent XP tables when the database is initialized."""
     with _connect() as connection:
         connection.execute(
             """
@@ -30,6 +30,17 @@ def init_xp() -> None:
                 message_count INTEGER NOT NULL DEFAULT 0,
                 voice_xp INTEGER NOT NULL DEFAULT 0,
                 PRIMARY KEY (guild_id, user_id)
+            )
+            """
+        )
+        connection.execute(
+            """
+            CREATE TABLE IF NOT EXISTS reward_ledger (
+                reward_id TEXT PRIMARY KEY,
+                guild_id INTEGER NOT NULL,
+                user_id INTEGER NOT NULL,
+                amount INTEGER NOT NULL,
+                applied_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP
             )
             """
         )
@@ -87,12 +98,36 @@ def add_voice_xp(guild_id: int, user_id: int, amount: int) -> sqlite3.Row:
         ).fetchone()
 
 
-def add_xp(guild_id: int, user_id: int, amount: int) -> sqlite3.Row:
+def add_xp(guild_id: int, user_id: int, amount: int, reward_id: str | None = None) -> sqlite3.Row:
     """Add generic progression XP without altering message or voice counters."""
     if amount <= 0:
         raise ValueError("XP amount must be positive")
+    if reward_id is not None and not reward_id.strip():
+        raise ValueError("XP reward_id must not be empty")
     ensure_user(guild_id, user_id)
     with _connect() as connection:
+        if reward_id is not None:
+            inserted = connection.execute(
+                "INSERT OR IGNORE INTO reward_ledger (reward_id, guild_id, user_id, amount) VALUES (?, ?, ?, ?)",
+                (reward_id, guild_id, user_id, amount),
+            ).rowcount
+            if not inserted:
+                existing = connection.execute(
+                    "SELECT guild_id, user_id, amount FROM reward_ledger WHERE reward_id = ?",
+                    (reward_id,),
+                ).fetchone()
+                if existing is None:
+                    raise RuntimeError("XP reward ledger state is inconsistent")
+                if (
+                    int(existing["guild_id"]) != guild_id
+                    or int(existing["user_id"]) != user_id
+                    or int(existing["amount"]) != amount
+                ):
+                    raise ValueError("XP reward_id is already associated with different reward data")
+                return connection.execute(
+                    "SELECT * FROM user_xp WHERE guild_id = ? AND user_id = ?",
+                    (guild_id, user_id),
+                ).fetchone()
         connection.execute(
             "UPDATE user_xp SET xp = xp + ? WHERE guild_id = ? AND user_id = ?",
             (amount, guild_id, user_id),
