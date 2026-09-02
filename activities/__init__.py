@@ -1,0 +1,1 @@
+"""Discord Activity backend package."""
