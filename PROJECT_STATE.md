@@ -67,6 +67,7 @@ activities/
   client/index.html
   client/src/main.js
   client/src/snake.js
+  client/src/style.css
   client/vite.config.js
 ```
 
@@ -155,7 +156,7 @@ Runtime databases are real state and must never be reset.
 | Profile customization | DONE | NOT STARTED | PENDING |
 | Mini-games | DONE | NOT TESTED | PENDING AFTER IMPLEMENTATION |
 | Social / Friends / Romantic | DONE | NOT TESTED | PENDING AFTER IMPLEMENTATION |
-| Discord Activities | SNAKE + AUTHORITATIVE REPLAY + TRUSTED REWARDS | NOT TESTED | PENDING REAL ACTIVITY BOUNDARY |
+| Discord Activities | SNAKE + AUTHORITATIVE REPLAY + TRUSTED REWARDS + MULTI-GAME LAUNCHER | NOT TESTED | PENDING REAL ACTIVITY BOUNDARY |
 | PvP | REMOVED | — | — |
 | Collecting | REMOVED FOR NOW | — | — |
 
@@ -278,7 +279,15 @@ The reward layer must only receive already-trusted results.
 
 ### Client
 
-`activities/client/src/main.js` authenticates with the Discord Embedded App SDK, sends the one-time OAuth code to the backend, loads the server session, verifies user/instance/guild/channel identity, starts a server-issued Snake game, and submits the completed replay.
+`activities/client/src/main.js` authenticates with the Discord Embedded App SDK, sends the one-time OAuth code to the backend, loads the server session, verifies user/instance/guild/channel identity, renders a multi-game launcher, and opens the selected implemented Activity.
+
+The launcher currently exposes:
+- Snake — available;
+- Sudoku — coming soon;
+- Wordle — coming soon;
+- 2048, Minesweeper and Tetris — future placeholders.
+
+Selecting Snake starts the existing server-issued Snake game. The Snake screen includes a return-to-games button, so additional Activities can be added without creating separate Discord Applications.
 
 `activities/client/src/snake.js` implements a real local Snake engine: 20×20 board, 120ms ticks, deterministic xorshift32 food generation, server-issued seed/game/result IDs, input trace, score and finish reason.
 
@@ -371,6 +380,14 @@ e8604abdfe11fcd8d2b935640989e0e0a74596ca → Fix ActivityServerCog disnake Cog i
 
 Runtime verification after this fix is still pending.
 
+### Multi-game launcher — IMPLEMENTED 2026-09-02
+
+The Activity client no longer starts Snake immediately on Activity launch. After Discord SDK authentication and session/context verification, it now renders a single InsaneBot game launcher.
+
+The launcher is intentionally client-side and lightweight: it does not change the existing Activity authentication/session or Snake security boundary. Only Snake is currently selectable; planned games are displayed as non-interactive placeholders until their actual implementations and authoritative validation are added.
+
+The launcher architecture keeps one Discord Application / one Activity entry point while allowing multiple games to live inside that Activity experience.
+
 ## 20. SECURITY STATUS
 
 Current Activity security boundary prevents a client from simply submitting an arbitrary score. A result must correspond to a server-issued game, seed and result ID, authenticated user/context, and a valid deterministic replay.
@@ -414,6 +431,8 @@ b27608d81ed8bdbf33eb188131722906429700b7 → Snake result submission from Activi
 66564974132545bccff6b50c585984012d8e6642 → Snake seed binding hardening
 7e5e1302287243bdaf08ba5573b49f5b79ab8e48 → Snake trusted reward integration
 e8604abdfe11fcd8d2b935640989e0e0a74596ca → ActivityServerCog disnake Cog inheritance
+2e116631355e05e4d59cc4780a6fd13b8f2c8bb7 → multi-game Activity launcher
+7d6c04ee9cf078e4f329c2a1b7a29fbb65e1f396 → multi-game Activity launcher styling
 ```
 
 ## 22. CURRENT IMPLEMENTATION ORDER
@@ -438,6 +457,7 @@ e8604abdfe11fcd8d2b935640989e0e0a74596ca → ActivityServerCog disnake Cog inher
 - Activities must remain real Discord Activities.
 - Current Activity implementation is **NOT QA PASSED** until exercised in the real Discord Activity environment.
 - The 2026-09-02 startup failure was caused by `ActivityServerCog` not inheriting from `commands.Cog`; this has been fixed in commit `e8604abdfe11fcd8d2b935640989e0e0a74596ca`.
+- The Activity launcher now provides one entry point for multiple games; adding another game does not require creating another Discord Application.
 
 ## 24. ACTIVITY LOCAL LAUNCH CHECKPOINT — 2026-09-02
 
@@ -483,3 +503,41 @@ Next step:
 - This is still `RUNTIME QA PENDING`.
 
 The local Activity client, backend, tunnel and Discord URL Mapping are therefore considered configured for the next real Discord Activity runtime check, but **no successful real Activity launch has yet been recorded**.
+
+## 25. MULTI-GAME ACTIVITY LAUNCHER CHECKPOINT — 2026-09-02
+
+Implemented the first multi-game Activity layer without changing the Discord Application, Activity URL Mapping, authentication/session flow, Snake backend, authoritative replay validation, or reward pipeline.
+
+Current behavior:
+```text
+Discord Activity
+→ SDK authentication
+→ server session/context verification
+→ InsaneBot game launcher
+→ Snake
+```
+
+Launcher entries:
+```text
+Snake         → available
+Sudoku        → coming soon
+Wordle        → coming soon
+2048          → future
+Minesweeper   → future
+Tetris        → future
+```
+
+Files changed:
+- `activities/client/src/main.js` — launcher, Activity selection, Snake navigation.
+- `activities/client/src/style.css` — launcher/card responsive styling.
+- `PROJECT_STATE.md` — this checkpoint.
+
+No new dependency was added.
+
+Runtime status remains:
+```text
+IMPLEMENTATION → DONE for launcher layer
+REAL DISCORD QA → PENDING
+```
+
+Next implementation target remains **Sudoku UI/game**, while Snake should be runtime-QA'd before relying on the complete Activity reward chain in production.
