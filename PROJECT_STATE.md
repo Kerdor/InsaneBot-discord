@@ -136,7 +136,7 @@ Runtime databases are real state and must never be reset.
 | System | Implementation | Runtime | QA |
 |---|---|---|---|
 | Configuration / TEST-MAIN | DONE | PARTIAL | PENDING |
-| COG loading / startup | DONE | HISTORICALLY VERIFIED | PENDING |
+| COG loading / startup | DONE | PARTIAL | PENDING |
 | Owner/admin | DONE | PARTIAL | PENDING |
 | Server Manager | DONE | PARTIAL | PENDING |
 | Rebuild | DONE | PARTIAL | PENDING |
@@ -351,6 +351,26 @@ Reward amounts are never accepted from the browser. The response includes `xp_re
 
 **Implementation is complete; runtime QA is still pending.**
 
+### Activity startup fix — IMPLEMENTED 2026-09-02
+
+Runtime startup exposed a COG registration error in `cogs.activity_server`: `ActivityServerCog` was a plain class, while `disnake` requires objects passed to `bot.add_cog()` to derive from `commands.Cog`.
+
+The lifecycle COG was corrected to inherit from `commands.Cog` and import `commands` from `disnake.ext`. No Activity backend logic, routes, validation, reward logic, configuration or database behavior was changed.
+
+The reported startup failure was:
+
+```text
+TypeError: cogs must derive from Cog
+```
+
+Commit:
+
+```text
+e8604abdfe11fcd8d2b935640989e0e0a74596ca → Fix ActivityServerCog disnake Cog inheritance
+```
+
+Runtime verification after this fix is still pending.
+
 ## 20. SECURITY STATUS
 
 Current Activity security boundary prevents a client from simply submitting an arbitrary score. A result must correspond to a server-issued game, seed and result ID, authenticated user/context, and a valid deterministic replay.
@@ -393,6 +413,7 @@ b27608d81ed8bdbf33eb188131722906429700b7 → Snake result submission from Activi
 4a5d6e3bc569c67bb75109a8a9b53afd7f2315a0 → PROJECT_STATE after Snake validation foundation
 66564974132545bccff6b50c585984012d8e6642 → Snake seed binding hardening
 7e5e1302287243bdaf08ba5573b49f5b79ab8e48 → Snake trusted reward integration
+ e8604abdfe11fcd8d2b935640989e0e0a74596ca → ActivityServerCog disnake Cog inheritance
 ```
 
 ## 22. CURRENT IMPLEMENTATION ORDER
@@ -416,3 +437,4 @@ b27608d81ed8bdbf33eb188131722906429700b7 → Snake result submission from Activi
 - Runtime databases must never be reset.
 - Activities must remain real Discord Activities.
 - Current Activity implementation is **NOT QA PASSED** until exercised in the real Discord Activity environment.
+- The 2026-09-02 startup failure was caused by `ActivityServerCog` not inheriting from `commands.Cog`; this has been fixed in commit `e8604abdfe11fcd8d2b935640989e0e0a74596ca`.
