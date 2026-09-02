@@ -75,9 +75,8 @@ def stop_bot(process: subprocess.Popen) -> None:
     stop_process(process, "бот")
 
 
-def stop_activity_processes(activity_client: subprocess.Popen, cloudflare: subprocess.Popen) -> None:
-    stop_process(cloudflare, "Cloudflare Tunnel")
-    stop_process(activity_client, "Activity client")
+def stop_activity_client(process: subprocess.Popen) -> None:
+    stop_process(process, "Activity client")
 
 
 def start_all() -> tuple[subprocess.Popen, subprocess.Popen, subprocess.Popen]:
@@ -89,9 +88,22 @@ def start_all() -> tuple[subprocess.Popen, subprocess.Popen, subprocess.Popen]:
     return bot, activity_client, cloudflare
 
 
-def stop_all(bot: subprocess.Popen, activity_client: subprocess.Popen, cloudflare: subprocess.Popen) -> None:
+def restart_app_processes(
+    bot: subprocess.Popen,
+    activity_client: subprocess.Popen,
+) -> tuple[subprocess.Popen, subprocess.Popen]:
+    stop_bot(bot)
+    stop_activity_client(activity_client)
+    return start_bot(), start_activity_client()
+
+
+def stop_all(
+    bot: subprocess.Popen,
+    activity_client: subprocess.Popen,
+    cloudflare: subprocess.Popen,
+) -> None:
     stop_process(cloudflare, "Cloudflare Tunnel")
-    stop_process(activity_client, "Activity client")
+    stop_activity_client(activity_client)
     stop_bot(bot)
 
 
@@ -128,9 +140,8 @@ def main() -> None:
                 continue
 
             print(f"[RUNNER] Обнаружены изменения: {old_head} -> {new_head}", flush=True)
-            stop_all(bot, activity_client, cloudflare)
+            bot, activity_client = restart_app_processes(bot, activity_client)
             current_head = new_head
-            bot, activity_client, cloudflare = start_all()
 
     except KeyboardInterrupt:
         print("\n[RUNNER] Получен Ctrl+C.", flush=True)
