@@ -432,7 +432,7 @@ b27608d81ed8bdbf33eb188131722906429700b7 → Snake result submission from Activi
 7e5e1302287243bdaf08ba5573b49f5b79ab8e48 → Snake trusted reward integration
 e8604abdfe11fcd8d2b935640989e0e0a74596ca → ActivityServerCog disnake Cog inheritance
 2e116631355e05e4d59cc4780a6fd13b8f2c8bb7 → multi-game Activity launcher
-7d6c04ee9cf078e4f329c2a1b7a29fbb65e1f396 → multi-game Activity launcher styling
+7d6c04ee9cf078e4f329c2a1b7a29fbb1e396 → multi-game Activity launcher styling
 ```
 
 ## 22. CURRENT IMPLEMENTATION ORDER
@@ -476,8 +476,7 @@ Client:
 Cloudflare Tunnel:
 - `cloudflared` installed for Windows x64.
 - Version: `2026.8.3`.
-- Quick Tunnel successfully established:
-  `https://downloads-graphical-james-sailing.trycloudflare.com`
+- Quick Tunnel successfully established previously.
 - Tunnel successfully connects to local Activity client on port `5173`.
 - QUIC connectivity and Cloudflare API pre-checks passed.
 - Tunnel is currently a temporary Quick Tunnel and does not provide a stable production URL.
@@ -486,23 +485,6 @@ Discord Developer Portal:
 - Activity URL Mapping configured and saved.
 - Public Activity URL currently points through the Cloudflare Quick Tunnel.
 - URL mapping changes confirmed saved.
-
-Current local launch state:
-```text
-Discord bot             → running
-Activity backend        → 127.0.0.1:8080
-Vite client             → 127.0.0.1:5173
-Cloudflare Tunnel       → public HTTPS → localhost:5173
-Discord URL Mapping     → saved
-```
-
-Next step:
-- Launch the Activity from Discord on the TEST server.
-- Verify that the real Discord Activity opens correctly.
-- Then perform runtime testing of SDK authentication → backend session → Snake start → gameplay → authoritative result submission → XP/coin reward.
-- This is still `RUNTIME QA PENDING`.
-
-The local Activity client, backend, tunnel and Discord URL Mapping are therefore considered configured for the next real Discord Activity runtime check, but **no successful real Activity launch has yet been recorded**.
 
 ## 25. MULTI-GAME ACTIVITY LAUNCHER CHECKPOINT — 2026-09-02
 
@@ -540,4 +522,36 @@ IMPLEMENTATION → DONE for launcher layer
 REAL DISCORD QA → PENDING
 ```
 
-Next implementation target remains **Sudoku UI/game**, while Snake should be runtime-QA'd before relying on the complete Activity reward chain in production.
+## 26. DEV RUNNER ACTIVITY LAUNCH CHECKPOINT — 2026-09-02
+
+`dev_runner.py` now starts the complete local Activity environment together with the Discord bot.
+
+Startup flow:
+```text
+python dev_runner.py
+→ Discord bot
+→ Activity backend (inside bot process, 127.0.0.1:8080)
+→ Vite Activity client (127.0.0.1:5173)
+→ Cloudflare Quick Tunnel → public HTTPS
+```
+
+The Activity backend is already managed by `cogs.activity_server`, so `dev_runner.py` does not start a second backend process.
+
+The runner also keeps the Cloudflare Quick Tunnel alive when Git changes are detected. Only the bot and Vite client are restarted after `git pull`, preventing unnecessary regeneration of the temporary Quick Tunnel URL during normal development restarts.
+
+On `Ctrl+C`, the runner stops the tunnel, Activity client and bot.
+
+Important limitation:
+- The Cloudflare Quick Tunnel URL is temporary. If the runner itself is restarted, a new Quick Tunnel URL may be generated, so Discord Developer Portal URL Mapping may need to be updated to the new public URL.
+
+Commit:
+```text
+2f389dc4d83806cbbef48130585064a30f5aaee9 → Keep Activity tunnel stable during dev restarts
+```
+
+Current intended local startup command:
+```text
+python dev_runner.py
+```
+
+Runtime Activity QA is still pending.
