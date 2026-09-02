@@ -167,7 +167,7 @@ Runtime databases are real state and must never be reset.
 | Profile customization | DONE | NOT STARTED | PENDING |
 | Mini-games | DONE | NOT TESTED | PENDING AFTER IMPLEMENTATION |
 | Social / Friends / Romantic | DONE | NOT TESTED | PENDING AFTER IMPLEMENTATION |
-| Discord Activities | SNAKE LOCAL UI + INSTANCE/GUILD-BOUND SESSION FOUNDATION | NOT TESTED | PENDING REAL BOUNDARY |
+| Discord Activities | SNAKE LOCAL UI + INSTANCE/GUILD-BOUND SESSION + RESULT ENDPOINT FOUNDATION | NOT TESTED | PENDING REAL BOUNDARY |
 | PvP | REMOVED | — | — |
 | Collecting | REMOVED FOR NOW | — | — |
 
@@ -393,11 +393,29 @@ DISCORD_ACTIVITY_CLIENT_SECRET=<server-side Discord application client secret>
 - win state when the board is filled;
 - no external frontend dependency beyond the existing Activity SDK/Vite setup.
 
-`activities/client/src/main.js` now creates the Snake game after authenticated session setup and binds the game controls to the Activity page. The page includes Start/New Game controls, score/status display, canvas and authenticated username.
+`activities/client/src/main.js` creates the Snake game after authenticated session setup, binds the game controls, and submits a completed result to `/api/activities/snake/result` with the current Activity instance/guild/channel context.
+
+`activities/client/src/snake.js` reports the final score and finish reason (`game_over` or `win`) to the page callback. Restart resets the local game without submitting a new result.
 
 `activities/client/src/style.css` provides the Activity shell, game card, score/status layout, controls, responsive canvas and mobile layout.
 
-This is implementation only and has **not** been runtime QA-tested. The Snake client is still local-only: it does **not** submit a result to the backend and does not grant XP/coins. The next security/game step is Snake backend result validation after the Activity instance/guild binding.
+This is implementation only and has **not** been runtime QA-tested. The backend now has a result endpoint that requires an authenticated session and verifies the submitted Activity instance, guild and channel against that session. It also validates the Activity key, result ID and Snake score range. It stores the accepted result in the current backend process but does **not** yet perform authoritative replay/anti-cheat validation and does not yet grant XP/coins.
+
+### Snake result endpoint — VALIDATION FOUNDATION IMPLEMENTED
+
+`activities/server.py` exposes `POST /api/activities/snake/result`.
+
+The endpoint:
+
+- requires the authenticated HTTP-only Activity session;
+- validates `result_id` format;
+- requires `activity_key == "snake"`;
+- validates the score as an integer in the possible 20×20-board range (`0..397`);
+- rejects a result whose instance, guild or channel differs from the authenticated session;
+- binds the stored result to the authenticated session's Discord `user_id`, guild, instance and channel;
+- keeps the accepted result in the backend process for the current implementation.
+
+This is a **validation boundary foundation**, not authoritative game validation. Because the current Snake client uses local random food and does not submit a complete replay/input trace, a malicious client could still fabricate a plausible score. The next Snake security step is deterministic/replay-based server validation before the trusted reward pipeline is called.
 
 ### Planned final Activity boundary
 
@@ -418,7 +436,7 @@ server-side authenticated session bound to instance/guild/channel
         ↓
 Activity instance / guild verification
         ↓
-validated Snake/Sudoku/Wordle result
+authoritative validated Snake/Sudoku/Wordle result
         ↓
 utils/activity_rewards.py
         ↓
@@ -436,7 +454,7 @@ High priority:
 - TEST verification role-create condition;
 - profile card long names and Unicode/Cyrillic fallback;
 - Activity instance/guild verification and authenticated session binding;
-- Snake authoritative backend result validation and anti-cheat boundary.
+- Snake deterministic replay validation and anti-cheat boundary.
 
 Additional:
 
@@ -488,12 +506,15 @@ f174c78fe5d31ac35bcba4381511f11b5b1b56b3 → integrate Snake UI into Activity cl
 668f85df25022e560cf49451c202d1e4c4d69c3f → Snake Activity interface styling
 e8adfabd1803b9890452c88e328dac5f97f82c2c → Activity instance/guild binding in client
 a0e29816a2e6effd88d5878a78ca36def1af15b8 → Activity instance/guild binding in backend
+3c62e09eeb98f06ad7af4d3d6e5222d06a508d54 → Snake client completion/result callback
+b27608d81ed8bdbf33eb188131722906429700b7 → Snake result submission from Activity client
+00e58c1e267e0da6997c017059451df9130232a2 → Snake backend result validation endpoint
 ```
 
 ## 22. NEXT IMPLEMENTATION ORDER
 
 ```text
-1. Snake backend result endpoint and authoritative validation
+1. Snake deterministic replay/input validation and anti-cheat boundary
 2. Snake → trusted reward pipeline
 3. Sudoku UI/game
 4. Sudoku backend validation/rewards
