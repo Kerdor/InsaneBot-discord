@@ -81,6 +81,6 @@ def apply_trusted_result(result: TrustedActivityResult) -> bool:
             result.guild_id,
             result.user_id,
             result.coin_reward,
-            reward.result_id if False else result.result_id,
+            result.result_id,
         )
     return inserted or xp_applied or coin_applied
