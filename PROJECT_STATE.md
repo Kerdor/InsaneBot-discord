@@ -20,13 +20,8 @@ Current phase: **IMPLEMENTATION FIRST**
 - **Update `PROJECT_STATE.md` after every project action/change.**
 - `IMPLEMENTED` does not mean `QA PASSED`.
 - CI success is not runtime QA.
-
-### User development priority
-
-1. Implement all agreed/planned systems first.
-2. Do not start full system-by-system QA until planned implementation is complete.
-3. Then perform integration cleanup, sequential QA, regression and technical cleanup.
-4. Update `PROJECT_STATE.md` after every implementation/QA action.
+- Do not start full system-by-system QA until planned implementation is complete.
+- User prefers technical-editor/developer work: identify the problem briefly, preserve logic/architecture, make minimal changes, and give exact ready-to-use code when manual replacement is needed.
 
 ## 2. PRODUCT CONCEPT
 
@@ -167,17 +162,17 @@ Runtime databases are real state and must never be reset.
 | Profile customization | DONE | NOT STARTED | PENDING |
 | Mini-games | DONE | NOT TESTED | PENDING AFTER IMPLEMENTATION |
 | Social / Friends / Romantic | DONE | NOT TESTED | PENDING AFTER IMPLEMENTATION |
-| Discord Activities | SNAKE LOCAL UI + INSTANCE/GUILD-BOUND SESSION + RESULT ENDPOINT FOUNDATION | NOT TESTED | PENDING REAL BOUNDARY |
+| Discord Activities | SNAKE DETERMINISTIC REPLAY + SESSION/INSTANCE/GUILD BOUNDARY | NOT TESTED | PENDING REAL ACTIVITY BOUNDARY |
 | PvP | REMOVED | — | — |
 | Collecting | REMOVED FOR NOW | — | — |
 
 ## 8. XP / LEVELS
 
-Implemented in `cogs/xp.py` + `databases/xp.py`: persistent guild/user XP, message XP/cooldown, message count, counted voice XP, AFK exclusion, levels, `/level`, `/xp_ranking`, level-up DM, voice-session recovery, message economy reward, profile integration.
+Implemented in `cogs/xp.py` + `databases/xp.py`: persistent guild/user XP, message XP/cooldown, message count, counted voice XP, AFK exclusion, levels, `/level`, `/xp_ranking`, level-up DM, voice-session recovery, message economy reward and profile integration.
 
 Defaults: message XP 15–25; message cooldown 60s; voice 5/min; level threshold `100 * level²`; message economy reward 2.
 
-`databases/xp.py` has `add_xp(guild_id, user_id, amount, reward_id=None)` for generic progression XP. When `reward_id` is supplied, a persistent reward ledger prevents duplicate trusted Activity XP rewards across retries. Existing callers without `reward_id` retain original behavior.
+`databases/xp.py` has `add_xp(guild_id, user_id, amount, reward_id=None)`. When `reward_id` is supplied, a persistent reward ledger prevents duplicate trusted Activity XP rewards across retries. Existing callers without `reward_id` retain original behavior.
 
 ## 9. ECONOMY / DAILY
 
@@ -203,11 +198,21 @@ voice_30 → 30 counted voice minutes → 100 coins
 voice_sessions_3 → 3 counted voice joins → 75 coins
 ```
 
-Persistent per guild/user/date; UTC date; capped progress; one claim; bots/webhooks excluded; AFK excluded; voice recovery. Known integration risk: quest completion and economy reward are separate persistence operations.
+Persistent per guild/user/date; UTC date; capped progress; one claim; bots/webhooks excluded; AFK excluded; voice recovery.
+
+Known integration risk: quest completion and economy reward are separate persistence operations.
 
 ## 12. ACHIEVEMENTS
 
-Implemented: `messages_1000`, `voice_10h`, `rich_10000`, `shop_purchase`, `active_7_days`.
+Implemented:
+
+```text
+messages_1000
+voice_10h
+rich_10000
+shop_purchase
+active_7_days
+```
 
 Reuses XP, VoiceStats and Economy sources. Shop purchase consumes successful purchase event.
 
@@ -215,7 +220,9 @@ Reuses XP, VoiceStats and Economy sources. Shop purchase consumes successful pur
 
 `/profile` generates a 1000×460 PNG via Pillow with avatar, display name, level/XP, total XP, coins/rare currency, message count, voice XP, achievement count and bio.
 
-`/profile_customize`: background color, accent color, bio, reset. Guild/user scoped persistence; colors normalized; bio max 70 chars. Long names and Unicode/Cyrillic remain QA candidates.
+`/profile_customize`: background color, accent color, bio, reset. Guild/user scoped persistence; colors normalized; bio max 70 chars.
+
+QA candidates: long names and Unicode/Cyrillic fallback.
 
 ## 14. VOICE
 
@@ -249,7 +256,7 @@ Files: `cogs/minigames.py`, `databases/xp.py`, `config.py`.
 
 Command: `/minigame` with `Математика`, `Реакция`, `Память`.
 
-Rules: one active game per guild/user; 30-second cooldown after success/failure; only initiating user can operate buttons; expired games give no reward; XP-disabled servers cannot start; rewards use existing XP/economy; no gambling/betting; success gives +15 XP and +25 coins when economy enabled; existing XP level calculation is reused; memory sequence hides after 3 seconds; wrong answer ends without reward.
+Rules: one active game per guild/user; 30-second cooldown after success/failure; only initiating user can operate buttons; expired games give no reward; XP-disabled servers cannot start; rewards use existing XP/economy; no gambling/betting; success gives +15 XP and +25 coins when economy enabled; memory sequence hides after 3 seconds; wrong answer ends without reward.
 
 No runtime QA yet. Known audit candidates: reward text when economy is disabled, timeout cooldown semantics, `_reward` dependency on XP COG and concurrency/restart behavior.
 
@@ -277,11 +284,35 @@ Rules: self-add/proposal rejected; friend request requires acceptance; duplicate
 
 No XP/economy rewards are attached yet.
 
-## 19. DISCORD ACTIVITIES — FOUNDATION IMPLEMENTED
+## 19. DISCORD ACTIVITIES — CURRENT IMPLEMENTATION
 
-A persistent idempotent result ledger exists in `databases/activities.py`.
+### 19.1 Activity roadmap
 
-Stored fields:
+Initial activities:
+
+```text
+Snake
+Sudoku
+Wordle
+```
+
+Future activities:
+
+```text
+2048
+Minesweeper
+Tetris
+Flappy Bird
+Connect Four
+Chess
+Checkers
+```
+
+Activities must be real Discord Activities, not slash-command simulations.
+
+### 19.2 Activity persistence / trusted reward foundation
+
+`databases/activities.py` contains a persistent idempotent result ledger:
 
 ```text
 result_id
@@ -293,9 +324,7 @@ coin_reward
 received_at
 ```
 
-`result_id` is the primary key and duplicate results are ignored.
-
-The Activity persistence layer exposes:
+`result_id` is the primary key. Exposed operations:
 
 ```text
 has_result(result_id)
@@ -304,61 +333,58 @@ get_result(result_id)
 get_user_results(guild_id, user_id, activity_key=None, limit=100)
 ```
 
-A static Activity registry exists in `utils/activity_registry.py`. Initial release: Snake, Sudoku, Wordle. Future list: 2048, Minesweeper, Tetris, Flappy Bird, Connect Four, Chess, Checkers.
+`utils/activity_registry.py` contains the Activity definition registry. `utils/activity_rewards.py` contains the trusted-result reward application layer.
 
-A trusted-result application layer exists in `utils/activity_rewards.py`. It validates trusted Activity result data, persists it idempotently, verifies reused result IDs have identical payloads, and applies XP/Economy through their persistent reward ledgers.
+The trusted reward layer:
+- validates trusted Activity result data;
+- persists results idempotently;
+- verifies reused result IDs have identical payloads;
+- applies XP and Economy through persistent reward ledgers;
+- can recover from partial application on retry;
+- does not claim cross-database atomicity.
 
-The pipeline passes `result.result_id` as the reward ID to XP and Economy. Retries can therefore recover after partial application without duplicating already-applied rewards. Absolute cross-database transaction atomicity is not claimed because Activity, XP and Economy remain separate SQLite databases.
+**Important:** `activity_rewards.py` must only receive already-trusted results. External identity/session verification and game anti-cheat validation happen before it.
 
-Important security boundary: the trusted-result layer does **not** verify an external Activity itself. External identity/guild verification, signature/session verification and anti-cheat validation must happen before this layer is called.
+### 19.3 Activity client
 
-### Activity client package — IMPLEMENTED
-
-`activities/client/package.json` contains the official `@discord/embedded-app-sdk` dependency and Vite build scripts.
-
-### Activity client authentication — FOUNDATION IMPLEMENTED
+`activities/client/package.json` uses the official `@discord/embedded-app-sdk` dependency and Vite build scripts.
 
 `activities/client/index.html` is the Vite entry page.
 
-`activities/client/src/main.js` now:
+`activities/client/vite.config.js` proxies `/api/*` to `http://127.0.0.1:8080` for local development.
 
-1. Reads `VITE_DISCORD_CLIENT_ID` from the Vite environment.
-2. Creates `new DiscordSDK(clientId)`.
+`activities/client/src/main.js`:
+
+1. Reads `VITE_DISCORD_CLIENT_ID`.
+2. Creates `DiscordSDK`.
 3. Waits for `discordSdk.ready()`.
-4. Calls the SDK `authorize` command for an authorization code with `identify` scope.
-5. Sends the one-time code to `/api/discord/token` with credentials enabled.
-6. Sends the SDK-provided `instanceId`, `guildId` and `channelId` with the authorization code.
-7. Receives the backend-issued Discord access token.
-8. Calls `discordSdk.commands.authenticate({ access_token })` exactly once.
-9. Requests `/api/discord/session` using the HTTP-only session cookie.
-10. Verifies the server session user, Activity instance, guild and channel match the current SDK context.
+4. Calls SDK `authorize` with `identify` scope.
+5. Sends the one-time code plus SDK `instanceId`, `guildId`, `channelId` to `/api/discord/token`.
+6. Receives the backend-issued Discord access token.
+7. Calls `discordSdk.commands.authenticate({ access_token })` once.
+8. Loads `/api/discord/session` with credentials.
+9. Verifies user, Activity instance, guild and channel identity against SDK values.
+10. Requests `/api/activities/snake/start` for a server-issued Snake game.
+11. Passes the server-issued `seed`, `game_id` and `result_id` to the Snake client.
+12. Sends Snake finish data to `/api/activities/snake/result`.
 
 The browser never receives the Discord application client secret.
 
-### Activity OAuth backend — AUTHENTICATED SESSION FOUNDATION IMPLEMENTED
+### 19.4 Activity OAuth/session backend
 
-`activities/server.py` provides the dependency-free `ThreadingHTTPServer` backend for Activity authentication.
+`activities/server.py` provides a dependency-free `ThreadingHTTPServer` backend.
 
-After exchanging the one-time authorization code, the backend now:
-
-- calls Discord `/users/@me` with the received access token;
-- obtains the actual Discord user ID and username from Discord rather than trusting browser-supplied identity;
-- requires an Activity `instance_id`, `guild_id` and `channel_id` for the community Activity session;
-- creates a cryptographically random server-side session ID;
-- stores the authenticated user identity together with the Activity instance/guild/channel binding and a one-hour expiry;
-- sends the session ID as an `HttpOnly` cookie scoped to `/api/discord`;
-- exposes `GET /api/discord/session` with the bound user, instance, guild and channel identifiers;
-- rejects missing/unknown/expired sessions with HTTP 401.
-
-The Discord access token itself is not stored in the Activity session and is not returned by the session endpoint. Session IDs are kept only in the backend process for this initial implementation.
-
-Discord's Embedded App SDK exposes `instanceId`, `guildId` and `channelId` to the Activity client. The instance ID identifies the unique Activity instance shared by users who joined the same running Activity. This implementation now carries those identifiers into the authenticated server session so future game-result endpoints can reject results sent for a different Activity instance or guild.
-
-This is still **not the complete Activity security boundary**: the backend currently binds the identifiers supplied by the authenticated Activity client but does not independently verify the Activity instance ID against Discord. Game-specific result validation and anti-cheat validation are also not implemented yet.
-
-### Activity backend lifecycle — IMPLEMENTED
-
-`cogs/activity_server.py` starts the Activity backend in a daemon thread when the bot loads the COG and shuts it down on COG unload.
+After exchanging the Discord authorization code, it:
+- calls Discord `/users/@me`;
+- obtains the authenticated Discord user ID and username from Discord;
+- requires Activity `instance_id`, `guild_id`, `channel_id`;
+- creates a cryptographically random opaque server-side session ID;
+- stores user identity + Activity instance/guild/channel + one-hour expiry;
+- sends the session as an `HttpOnly` cookie scoped to `/api/discord`;
+- exposes `GET /api/discord/session`;
+- rejects missing/unknown/expired sessions with 401;
+- does not store the Discord access token in the session;
+- keeps sessions in memory for the current implementation.
 
 Environment:
 
@@ -369,139 +395,143 @@ DISCORD_ACTIVITY_CLIENT_ID=<server-side Discord application client ID>
 DISCORD_ACTIVITY_CLIENT_SECRET=<server-side Discord application client secret>
 ```
 
-`DISCORD_ACTIVITY_CLIENT_SECRET` must remain server-side and must never be placed in the Vite client environment.
+`DISCORD_ACTIVITY_CLIENT_SECRET` must remain server-side and must never be placed in Vite client environment variables.
 
-### Activity client development proxy — IMPLEMENTED
+### 19.5 Snake local engine — deterministic replay implemented
 
-`activities/client/vite.config.js` proxies `/api/*` requests to `http://127.0.0.1:8080` during Vite development.
+`activities/client/src/snake.js` remains a local real-time Snake engine, but it now has a deterministic replay boundary.
 
-### Activity backend package — IMPLEMENTED
+Game rules remain:
+- 20×20 board;
+- initial snake `(10,10),(9,10),(8,10)`;
+- initial direction right;
+- fixed 120ms tick;
+- wall/self collision;
+- food only on free cells;
+- score increments on food;
+- win when the board is filled.
 
-`activities/__init__.py` marks the backend directory as a Python package.
+Changes now implemented:
+- food generation uses a deterministic `xorshift32` PRNG;
+- server-issued seed is used for the game;
+- game ID and result ID are bound to the current server-issued game;
+- completed tick count is recorded;
+- accepted direction inputs are recorded as `{tick, direction}` events;
+- finish callback returns reason, score, tick count, seed, game ID, result ID and full input trace;
+- restart requests a fresh server-issued game instead of inventing a result ID client-side.
 
-### Snake Activity UI — IMPLEMENTED (LOCAL CLIENT)
+The client-side random seed fallback remains only for a raw local `SnakeGame.reset()` call; the actual Activity flow always supplies the server-issued seed.
 
-`activities/client/src/snake.js` contains the first playable Snake engine for the Activity client:
+### 19.6 Snake authoritative replay validation — IMPLEMENTED
 
-- 20×20 grid;
-- keyboard arrow controls;
-- automatic movement at a fixed tick rate;
-- food spawning only on free cells;
-- wall and self collision;
-- score tracking;
-- restart/reset-ready game state;
-- win state when the board is filled;
-- no external frontend dependency beyond the existing Activity SDK/Vite setup.
+`POST /api/activities/snake/start` now:
+- requires an authenticated Activity session;
+- generates a cryptographically random 32-bit seed;
+- generates server-side `game_id` and `result_id`;
+- stores the game bound to user, Activity instance, guild and channel;
+- applies a 15-minute game TTL;
+- returns `game_id`, `result_id`, `seed`.
 
-`activities/client/src/main.js` creates the Snake game after authenticated session setup, binds the game controls, and submits a completed result to `/api/activities/snake/result` with the current Activity instance/guild/channel context.
-
-`activities/client/src/snake.js` reports the final score and finish reason (`game_over` or `win`) to the page callback. Restart resets the local game without submitting a new result.
-
-`activities/client/src/style.css` provides the Activity shell, game card, score/status layout, controls, responsive canvas and mobile layout.
-
-This is implementation only and has **not** been runtime QA-tested. The backend now has a result endpoint that requires an authenticated session and verifies the submitted Activity instance, guild and channel against that session. It also validates the Activity key, result ID and Snake score range. It stores the accepted result in the current backend process but does **not** yet perform authoritative replay/anti-cheat validation and does not yet grant XP/coins.
-
-### Snake result endpoint — VALIDATION FOUNDATION IMPLEMENTED
-
-`activities/server.py` exposes `POST /api/activities/snake/result`.
-
-The endpoint:
-
-- requires the authenticated HTTP-only Activity session;
-- validates `result_id` format;
-- requires `activity_key == "snake"`;
-- validates the score as an integer in the possible 20×20-board range (`0..397`);
-- rejects a result whose instance, guild or channel differs from the authenticated session;
-- binds the stored result to the authenticated session's Discord `user_id`, guild, instance and channel;
-- keeps the accepted result in the backend process for the current implementation.
-
-This is a **validation boundary foundation**, not authoritative game validation. Because the current Snake client uses local random food and does not submit a complete replay/input trace, a malicious client could still fabricate a plausible score. The next Snake security step is deterministic/replay-based server validation before the trusted reward pipeline is called.
-
-### Planned final Activity boundary
+`POST /api/activities/snake/result` now requires:
 
 ```text
-Discord Activity iframe
-        ↓
-Embedded App SDK authorize()
-        ↓
-one-time authorization code + instance/guild/channel context
-        ↓
-InsaneBot backend /api/discord/token
-        ↓
-Discord OAuth token exchange
-        ↓
-Discord /users/@me
-        ↓
-server-side authenticated session bound to instance/guild/channel
-        ↓
-Activity instance / guild verification
-        ↓
-authoritative validated Snake/Sudoku/Wordle result
-        ↓
-utils/activity_rewards.py
-        ↓
-idempotent XP / Economy / Activity persistence
+game_id
+result_id
+activity_key
+score
+reason
+tick_count
+seed
+inputs
+instance_id
+guild_id
+channel_id
 ```
 
-The final game-result endpoint must not trust arbitrary browser-supplied `user_id`, `guild_id`, reward amounts or completion claims. The backend must bind the result to the authenticated Activity session and validate game-specific rules before calling the trusted reward pipeline.
+Validation includes:
+- authenticated session required;
+- result/activity identity validation;
+- instance/guild/channel must match the authenticated session;
+- game must exist and not be expired;
+- game must belong to the same user and Activity context;
+- result ID must equal the server-issued result ID;
+- input trace and tick limits are enforced;
+- direction names must be valid;
+- illegal reverse-direction transitions are rejected;
+- the backend replays Snake from the server-issued seed using the same deterministic xorshift32 PRNG and free-cell ordering as the client;
+- wall collisions and self collisions are replayed;
+- food consumption and score are replayed;
+- final tick count, score and finish reason must exactly match the authoritative replay;
+- accepted games are consumed so the same game cannot be submitted twice.
 
-## 20. KNOWN AUDIT / IMPLEMENTATION ITEMS
-
-High priority:
-
-- quest completion/reward atomicity;
-- moderation punishment vs logging failure;
-- TEST verification role-create condition;
-- profile card long names and Unicode/Cyrillic fallback;
-- Activity instance/guild verification and authenticated session binding;
-- Snake deterministic replay validation and anti-cheat boundary.
-
-Additional:
-
-- exact `active_7_days` semantics;
-- voice achievement timing;
-- legacy `get_roles.py`;
-- disabled `reaction_logs.py`;
-- guild-only command behavior;
-- permission/role hierarchy edges;
-- interaction acknowledgement;
-- duplicate event handling;
-- mini-game reward integration/concurrency;
-- social command and relationship concurrency/edge cases;
-- Activity reward atomicity across separate XP/Economy/Activity SQLite databases;
-- Activity reward idempotency/recovery across all reward stores;
-- Activity registry validation and initial-game implementation details;
-- Activity URL mapping and Developer Portal configuration;
-- authenticated session lifecycle/persistence beyond the initial in-process session store;
-- Sudoku/Wordle implementation and backend validation.
-
-## 21. RECENT IMPLEMENTATION CHECKPOINTS
+Current limits:
 
 ```text
-27c49fd4c0ff0cf42c83d0e3851ed1eec1698d70 → persistent social database
-e90ab1944b3d93ca091b7ac2ccac964df9d532d4 → social commands/COG
-89b0027ee6f19570393cecf012837a70bb11f72 → load social COG
+SNAKE_MAX_SCORE = 397
+SNAKE_MAX_INPUTS = 20000
+SNAKE_MAX_TICKS = 100000
+SNAKE_GAME_TTL = 900 seconds
+```
+
+The result is currently stored in the backend's in-memory `activity_results` map. **Rewards are intentionally not wired here yet.** This is the security/validation boundary that must precede `activity_rewards.py`.
+
+### 19.7 Security status
+
+Current chain:
+
+```text
+Discord SDK
+  ↓
+authorize
+  ↓
+server OAuth exchange
+  ↓
+Discord /users/@me identity
+  ↓
+HttpOnly server session
+  ↓
+instance_id + guild_id + channel_id binding
+  ↓
+server-issued Snake seed/game_id/result_id
+  ↓
+deterministic client replay data
+  ↓
+authoritative server replay
+  ↓
+validated trusted Activity result
+```
+
+This is substantially stronger than the previous score-only endpoint: a browser can no longer simply submit an arbitrary plausible score and have it accepted without a matching server-issued game and replay.
+
+Still not implemented:
+- independent Discord-side verification of the Activity instance ID beyond the authenticated Activity context;
+- persistent storage of active Activity game sessions;
+- Activity result reward wiring;
+- Sudoku implementation;
+- Wordle implementation;
+- full real Discord Activity boundary/runtime QA.
+
+## 20. RECENT ACTIVITY CHECKPOINTS
+
+```text
 1fd67f7fbb319a61b691022c6e7c1801c57e5a9c → Activity result ledger
 5946224802115e94940c5f2ab87f7bc6729731ab → Activity roadmap expanded
 9e584c6d80add5497c118db0aec0d5a23b0bc2da → Activity registry
-a5d8bf9c138f5cb28e231b5d565572a479e9ca3d → Activity result lookup/history layer
 0f1f501f4cab242453f88fd390d74312b36cfade → trusted Activity reward pipeline
 082cab6e5fd383d4de31c34d1773cafd50cf0aa3 → XP reward idempotency
 3348a0793009dcae7d9cf9fdb120a2ac897ec4f2 → Economy reward idempotency
-86196954830ed8f1b2eaec3d584753fedb903c3d → Activity reward pipeline wiring / retry recovery
-9680d41c2e7a64df751f13d7430d7232a1c4b12a → Discord Activity client package foundation
+86196954830ed8f1b2eaec3d584753fedb903c3d → Activity reward pipeline wiring/retry recovery
+9680d41c2e7a64df751f13d7430d7232a1c4b12a → Activity client package foundation
 66c87d300dbb83b8c2d0caa743f4839de65ee8a5 → Activity client authentication foundation
-ac68eee9d9ef9f3c99889aa8b31931ea1a01c688 → Activity Vite development proxy
-e493e67a8a8c36ac1be51b3bed6a70482a12a48a → Activity backend package marker
+ac68eee9d9ef9f3c99889aa8b31931ea1a01c688 → Activity Vite dev proxy
 4632635f78b56cd6b66cb2f1a1c1d7975131e717 → Activity backend lifecycle COG foundation
-c38fff4767db250725d497398d4f84319cf1eac9 → Activity backend lifecycle configuration
+c38fff4767db250725d497398d4f84319cf1eac9 → Activity lifecycle/config integration
 46e5cac3d285483a24834ee347d7b1231d4d27c6 → Activity COG load integration
-844cdf33a6edc9c6bf0ebe95c13ca5da65bbbc0d6 → Activity lifecycle checkpoint
 5b283447339a59d7ce4c81b916f517d94abe16d5 → Activity session groundwork
 ff7790043a234c97654da9aeb6d1c2e1ced6b2d3 → Activity client session preparation
 71a0076ab26869e5f0e7dcb334f7fe0441bab4a8 → Activity client authentication flow correction
 c336d8bf63438d1f64420328fe01ef8bb59638ee → server-side authenticated Activity session
-e5225a0068274b68d8eb1a00ada83be387492504 → initial Snake Activity engine
+844cdf33a6edc9c6bf0ebe95c13ca5da65bbbc0d6 → Activity lifecycle checkpoint
 f174c78fe5d31ac35bcba4381511f11b5b1b56b3 → integrate Snake UI into Activity client
 668f85df25022e560cf49451c202d1e4c4d69c3f → Snake Activity interface styling
 e8adfabd1803b9890452c88e328dac5f97f82c2c → Activity instance/guild binding in client
@@ -509,24 +539,32 @@ a0e29816a2e6effd88d5878a78ca36def1af15b8 → Activity instance/guild binding in 
 3c62e09eeb98f06ad7af4d3d6e5222d06a508d54 → Snake client completion/result callback
 b27608d81ed8bdbf33eb188131722906429700b7 → Snake result submission from Activity client
 00e58c1e267e0da6997c017059451df9130232a2 → Snake backend result validation endpoint
+4a5d6e3bc569c67bb75109a8a9b53afd7f2315a0 → PROJECT_STATE update after Snake validation foundation
+640ac0b3306271b23f5dbf0c8c4ff5866322b518 → deterministic Snake engine and input trace
+68029850727f69f42514bd4de061c91dccf5779d → authoritative Snake replay validation boundary
+b9d92a282c455f0ed85e028d0bfe06f178d26da8 → server-issued Snake result ID binding
+0b19754e43544b9fe0d5b54ff5e404d3ad838da2 → Activity client final server-issued game binding
 ```
 
-## 22. NEXT IMPLEMENTATION ORDER
+## 21. CURRENT IMPLEMENTATION ORDER
 
-```text
-1. Snake deterministic replay/input validation and anti-cheat boundary
-2. Snake → trusted reward pipeline
-3. Sudoku UI/game
-4. Sudoku backend validation/rewards
-5. Wordle UI/game
-6. Wordle backend validation/rewards
-7. Remaining planned implementation
-8. Full sequential QA
-9. Regression and technical cleanup
-```
+Do not start broad QA yet. Continue implementation in this order:
 
-## 23. QA PRINCIPLE
+1. **Snake → trusted reward pipeline**: after authoritative replay validation, convert only validated results into `TrustedActivityResult` and apply configured XP/coins idempotently.
+2. **Sudoku UI/game**.
+3. **Sudoku authoritative backend validation + rewards**.
+4. **Wordle UI/game**.
+5. **Wordle authoritative backend validation + rewards**.
+6. Remaining planned Activities.
+7. Complete real Discord Activity boundary/runtime checks.
+8. Full sequential QA of all systems.
+9. Integration regression and technical cleanup.
 
-QA starts only after the agreed implementation scope is complete. When QA begins, test one system/flow at a time and wait for the real runtime result before marking it `QA PASSED`.
+## 22. IMPORTANT CURRENT NOTES
 
-Never infer runtime success from source code alone.
+- No Activity rewards should be granted from raw client-submitted Snake scores.
+- `activity_rewards.py` is deliberately downstream of the authoritative validation boundary.
+- Do not reset or recreate existing runtime databases while continuing Activity work.
+- Do not turn Activities into slash-command simulations.
+- Do not call current Activity implementation `QA PASSED` until it has been exercised in the real Discord Activity environment.
+- Current implementation has not been runtime-tested in the real Discord Activity boundary.
