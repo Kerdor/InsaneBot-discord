@@ -21,6 +21,16 @@ DISCORD_TOKEN_URL = "https://discord.com/api/oauth2/token"
 DISCORD_USER_URL = "https://discord.com/api/users/@me"
 ACTIVITY_SESSION_TTL = 3600
 SNAKE_MAX_SCORE = 397
+SNAKE_MAX_INPUTS = 20000
+SNAKE_MAX_TICKS = 100000
+SNAKE_GAME_TTL = 900
+SNAKE_GRID_SIZE = 20
+SNAKE_DIRECTIONS = {
+    "ArrowUp": (0, -1),
+    "ArrowDown": (0, 1),
+    "ArrowLeft": (-1, 0),
+    "ArrowRight": (1, 0),
+}
 
 
 class ActivityRequestHandler(BaseHTTPRequestHandler):
@@ -91,6 +101,9 @@ class ActivityRequestHandler(BaseHTTPRequestHandler):
         if self.path == "/api/discord/token":
             self._handle_token_exchange()
             return
+        if self.path == "/api/activities/snake/start":
+            self._handle_snake_start()
+            return
         if self.path == "/api/activities/snake/result":
             self._handle_snake_result()
             return
@@ -98,13 +111,45 @@ class ActivityRequestHandler(BaseHTTPRequestHandler):
 
     def _read_json_body(self) -> dict | None:
         content_length = int(self.headers.get("Content-Length", "0"))
-        if content_length <= 0 or content_length > 16 * 1024:
+        if content_length <= 0 or content_length > 256 * 1024:
             return None
         payload = json.loads(self.rfile.read(content_length).decode("utf-8"))
         return payload if isinstance(payload, dict) else None
 
+    def _handle_snake_start(self) -> None:
+        """Create a server-issued deterministic Snake game for this session."""
+        session = self._get_session()
+        if session is None:
+            self._send_json(401, {"error": "Activity session is not authenticated"})
+            return
+
+        game_id = secrets.token_urlsafe(24)
+        result_id = secrets.token_urlsafe(24)
+        seed = secrets.randbits(32)
+        game = {
+            "game_id": game_id,
+            "result_id": result_id,
+            "seed": seed,
+            "user_id": session["user_id"],
+            "instance_id": session["instance_id"],
+            "guild_id": session["guild_id"],
+            "channel_id": session["channel_id"],
+            "created_at": time.time(),
+        }
+        with self.server.activity_games_lock:
+            self.server.activity_games[game_id] = game
+
+        self._send_json(
+            200,
+            {
+                "game_id": game_id,
+                "result_id": result_id,
+                "seed": seed,
+            },
+        )
+
     def _handle_snake_result(self) -> None:
-        """Validate a Snake result against the authenticated Activity session."""
+        """Replay and validate a Snake result against the authenticated game."""
         session = self._get_session()
         if session is None:
             self._send_json(401, {"error": "Activity session is not authenticated"})
@@ -116,21 +161,37 @@ class ActivityRequestHandler(BaseHTTPRequestHandler):
                 self._send_json(400, {"error": "Invalid request body"})
                 return
 
+            game_id = payload.get("game_id")
             result_id = payload.get("result_id")
             activity_key = payload.get("activity_key")
             score = payload.get("score")
+            reason = payload.get("reason")
+            tick_count = payload.get("tick_count")
+            inputs = payload.get("inputs")
             instance_id = payload.get("instance_id")
             guild_id = payload.get("guild_id")
             channel_id = payload.get("channel_id")
 
+            if not isinstance(game_id, str) or not game_id.strip() or len(game_id) > 128:
+                self._send_json(400, {"error": "Valid game ID is required"})
+                return
             if not isinstance(result_id, str) or not result_id.strip() or len(result_id) > 128:
                 self._send_json(400, {"error": "Valid result ID is required"})
                 return
             if activity_key != "snake":
                 self._send_json(400, {"error": "Invalid Activity key"})
                 return
+            if reason not in {"game_over", "win"}:
+                self._send_json(400, {"error": "Invalid Snake finish reason"})
+                return
             if not isinstance(score, int) or isinstance(score, bool) or not 0 <= score <= SNAKE_MAX_SCORE:
                 self._send_json(400, {"error": "Invalid Snake score"})
+                return
+            if not isinstance(tick_count, int) or isinstance(tick_count, bool) or not 1 <= tick_count <= SNAKE_MAX_TICKS:
+                self._send_json(400, {"error": "Invalid Snake tick count"})
+                return
+            if not isinstance(inputs, list) or len(inputs) > SNAKE_MAX_INPUTS:
+                self._send_json(400, {"error": "Invalid Snake input trace"})
                 return
             if instance_id != session["instance_id"]:
                 self._send_json(403, {"error": "Activity instance identity mismatch"})
@@ -142,22 +203,167 @@ class ActivityRequestHandler(BaseHTTPRequestHandler):
                 self._send_json(403, {"error": "Activity channel identity mismatch"})
                 return
 
-            result = {
-                "result_id": result_id,
-                "activity_key": "snake",
-                "guild_id": session["guild_id"],
-                "user_id": session["user_id"],
-                "score": score,
-                "instance_id": session["instance_id"],
-                "channel_id": session["channel_id"],
-            }
-            self.server.activity_results[result_id] = result
+            with self.server.activity_games_lock:
+                game = self.server.activity_games.get(game_id)
+                if game is None:
+                    self._send_json(404, {"error": "Snake game not found or already submitted"})
+                    return
+                if game["created_at"] + SNAKE_GAME_TTL <= time.time():
+                    self.server.activity_games.pop(game_id, None)
+                    self._send_json(410, {"error": "Snake game expired"})
+                    return
+                if game["result_id"] != result_id:
+                    self._send_json(403, {"error": "Snake result identity mismatch"})
+                    return
+                if game["user_id"] != session["user_id"]:
+                    self._send_json(403, {"error": "Snake game user mismatch"})
+                    return
+                if game["instance_id"] != session["instance_id"]:
+                    self._send_json(403, {"error": "Snake game instance mismatch"})
+                    return
+                if game["guild_id"] != session["guild_id"]:
+                    self._send_json(403, {"error": "Snake game guild mismatch"})
+                    return
+                if game["channel_id"] != session["channel_id"]:
+                    self._send_json(403, {"error": "Snake game channel mismatch"})
+                    return
+
+                validation = self._replay_snake(game["seed"], inputs, tick_count)
+                if validation is None:
+                    self._send_json(400, {"error": "Snake replay validation failed"})
+                    return
+                expected_score, expected_reason = validation
+                if expected_score != score or expected_reason != reason:
+                    self._send_json(400, {"error": "Snake result does not match server replay"})
+                    return
+
+                result = {
+                    "result_id": result_id,
+                    "activity_key": "snake",
+                    "guild_id": session["guild_id"],
+                    "user_id": session["user_id"],
+                    "score": score,
+                    "instance_id": session["instance_id"],
+                    "channel_id": session["channel_id"],
+                    "game_id": game_id,
+                    "reason": reason,
+                    "tick_count": tick_count,
+                }
+                self.server.activity_results[result_id] = result
+                self.server.activity_games.pop(game_id, None)
+
             self._send_json(200, {"accepted": True, "result": result})
         except (ValueError, UnicodeDecodeError):
             self._send_json(400, {"error": "Invalid JSON request"})
         except Exception as exc:
             print(f"[ACTIVITY RESULT] Snake validation failed: {type(exc).__name__}: {exc}")
             self._send_json(500, {"error": "Snake result validation failed"})
+
+    @staticmethod
+    def _next_snake_random(state: int) -> tuple[int, float]:
+        """Advance the same xorshift32 PRNG used by the Snake client."""
+        state &= 0xFFFFFFFF
+        state ^= (state << 13) & 0xFFFFFFFF
+        state ^= state >> 17
+        state ^= (state << 5) & 0xFFFFFFFF
+        state &= 0xFFFFFFFF
+        return state, state / 4294967296
+
+    @classmethod
+    def _snake_food(cls, snake: list[tuple[int, int]], random_state: int) -> tuple[tuple[int, int], int]:
+        """Return the deterministic next food position and updated PRNG state."""
+        occupied = set(snake)
+        free_cells = [
+            (x, y)
+            for y in range(SNAKE_GRID_SIZE)
+            for x in range(SNAKE_GRID_SIZE)
+            if (x, y) not in occupied
+        ]
+        if not free_cells:
+            return (0, 0), random_state
+        random_state, random_value = cls._next_snake_random(random_state)
+        return free_cells[int(random_value * len(free_cells))], random_state
+
+    @classmethod
+    def _replay_snake(
+        cls,
+        seed: int,
+        inputs: list,
+        tick_count: int,
+    ) -> tuple[int, str] | None:
+        """Replay the complete client game using only trusted seed and inputs."""
+        if not isinstance(seed, int) or isinstance(seed, bool) or not 0 <= seed <= 0xFFFFFFFF:
+            return None
+
+        snake = [(10, 10), (9, 10), (8, 10)]
+        direction = (1, 0)
+        next_direction = (1, 0)
+        random_state = seed
+        food, random_state = cls._snake_food(snake, random_state)
+        normalized_inputs = []
+        last_tick = -1
+
+        for item in inputs:
+            if not isinstance(item, dict):
+                return None
+            input_tick = item.get("tick")
+            input_direction = item.get("direction")
+            if (
+                not isinstance(input_tick, int)
+                or isinstance(input_tick, bool)
+                or input_tick < 0
+                or input_tick >= tick_count
+                or input_tick < last_tick
+                or input_direction not in SNAKE_DIRECTIONS
+            ):
+                return None
+            dx, dy = SNAKE_DIRECTIONS[input_direction]
+            if (dx, dy) == (-direction[0], -direction[1]):
+                return None
+            if (dx, dy) == (-next_direction[0], -next_direction[1]):
+                return None
+            next_direction = (dx, dy)
+            normalized_inputs.append((input_tick, next_direction))
+            last_tick = input_tick
+
+        input_index = 0
+        score = 0
+        for current_tick in range(tick_count):
+            while input_index < len(normalized_inputs) and normalized_inputs[input_index][0] == current_tick:
+                next_direction = normalized_inputs[input_index][1]
+                input_index += 1
+
+            direction = next_direction
+            head_x, head_y = snake[0]
+            next_head = (head_x + direction[0], head_y + direction[1])
+            if (
+                next_head[0] < 0
+                or next_head[0] >= SNAKE_GRID_SIZE
+                or next_head[1] < 0
+                or next_head[1] >= SNAKE_GRID_SIZE
+            ):
+                if current_tick + 1 != tick_count:
+                    return None
+                return score, "game_over"
+
+            body_to_check = snake[:-1]
+            if next_head in body_to_check:
+                if current_tick + 1 != tick_count:
+                    return None
+                return score, "game_over"
+
+            snake.insert(0, next_head)
+            if next_head == food:
+                score += 1
+                food, random_state = cls._snake_food(snake, random_state)
+                if len(snake) == SNAKE_GRID_SIZE * SNAKE_GRID_SIZE:
+                    if current_tick + 1 != tick_count:
+                        return None
+                    return score, "win"
+            else:
+                snake.pop()
+
+        return None
 
     def _handle_token_exchange(self) -> None:
         """Exchange a Discord Activity authorization code for an access token."""
@@ -268,5 +474,7 @@ def create_activity_server(host: str, port: int) -> ThreadingHTTPServer:
     server = ThreadingHTTPServer((host, port), ActivityRequestHandler)
     server.activity_sessions = {}
     server.activity_sessions_lock = threading.Lock()
+    server.activity_games = {}
+    server.activity_games_lock = threading.Lock()
     server.activity_results = {}
     return server
