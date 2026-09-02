@@ -17,7 +17,7 @@ Current phase: **IMPLEMENTATION FIRST**
 - Changed functions must be complete when manual replacement is required.
 - Never delete/reset runtime databases.
 - Normal changes go directly to `main`.
-- **Update PROJECT_STATE.md after every project action/change.**
+- **Update `PROJECT_STATE.md` after every project action/change.**
 - `IMPLEMENTED` does not mean `QA PASSED`.
 - CI success is not runtime QA.
 
@@ -67,6 +67,9 @@ databases/
 utils/profile_card.py activity_registry.py activity_rewards.py
 activities/
   client/package.json
+  client/index.html
+  client/src/main.js
+  server.py
 ```
 
 Legacy `get_roles.py` remains unloaded. `reaction_logs.py` remains intentionally disabled.
@@ -80,8 +83,7 @@ TEST_GUILD_ID=519209364280573954
 TEST_GUILDS=[519209364280573954]
 ```
 
-TEST guild: `Insane TEST` / `519209364280573954`.
-Production must not silently consume TEST mappings.
+TEST guild: `Insane TEST` / `519209364280573954`. Production must not silently consume TEST mappings.
 
 Historical isolation/logging fixes:
 
@@ -161,7 +163,7 @@ Runtime databases are real state and must never be reset.
 | Profile customization | DONE | NOT STARTED | PENDING |
 | Mini-games | DONE | NOT TESTED | PENDING AFTER IMPLEMENTATION |
 | Social / Friends / Romantic | DONE | NOT TESTED | PENDING AFTER IMPLEMENTATION |
-| Discord Activities | FOUNDATION + CLIENT STARTED | NOT TESTED | PENDING REAL BOUNDARY |
+| Discord Activities | FOUNDATION + CLIENT AUTH FOUNDATION | NOT TESTED | PENDING REAL BOUNDARY |
 | PvP | REMOVED | — | — |
 | Collecting | REMOVED FOR NOW | — | — |
 
@@ -171,13 +173,15 @@ Implemented in `cogs/xp.py` + `databases/xp.py`: persistent guild/user XP, messa
 
 Defaults: message XP 15–25; message cooldown 60s; voice 5/min; level threshold `100 * level²`; message economy reward 2.
 
-`databases/xp.py` also has `add_xp(guild_id, user_id, amount, reward_id=None)` for generic progression XP without modifying message/voice counters. When `reward_id` is supplied, the XP database records an idempotent reward ledger entry so the same trusted Activity XP reward can be retried without being applied twice. Existing callers that omit `reward_id` retain the original behavior.
+`databases/xp.py` has `add_xp(guild_id, user_id, amount, reward_id=None)` for generic progression XP. When `reward_id` is supplied, a persistent reward ledger prevents duplicate trusted Activity XP rewards across retries. Existing callers without `reward_id` retain original behavior.
 
 ## 9. ECONOMY / DAILY
 
 Implemented `/balance`, `/daily`, `/pay`, `/rich`; persistent coins and rare currency, message rewards, daily, transfers, ranking, settings and Admin Panel adjustment.
 
 Rare currency has persistence but no complete earning/spending loop yet.
+
+`economy_rewards` provides idempotent trusted reward application through `add_reward_balance()`.
 
 ## 10. SHOP
 
@@ -285,7 +289,7 @@ coin_reward
 received_at
 ```
 
-`result_id` is the primary key and duplicate results are ignored, providing the persistence/idempotency layer needed before rewards are applied.
+`result_id` is the primary key and duplicate results are ignored.
 
 The Activity persistence layer exposes:
 
@@ -296,67 +300,78 @@ get_result(result_id)
 get_user_results(guild_id, user_id, activity_key=None, limit=100)
 ```
 
-A static Activity registry exists in `utils/activity_registry.py`. It defines the initial release games and agreed future expansion list without assigning unapproved reward balances or pretending that external Activities already exist.
+A static Activity registry exists in `utils/activity_registry.py`. Initial release: Snake, Sudoku, Wordle. Future list: 2048, Minesweeper, Tetris, Flappy Bird, Connect Four, Chess, Checkers.
 
-A trusted-result application layer exists in `utils/activity_rewards.py`. It accepts a `TrustedActivityResult`, validates the Activity identity, IDs and non-negative reward values, persists the result through the idempotent Activity ledger, verifies that a reused `result_id` has identical result data, and applies the supplied XP and coin rewards through the existing idempotent XP/Economy reward APIs.
+A trusted-result application layer exists in `utils/activity_rewards.py`. It validates trusted Activity result data, persists it idempotently, verifies reused result IDs have identical payloads, and applies XP/Economy through their persistent reward ledgers.
 
-The XP side now supports an optional `reward_id` and stores a persistent reward ledger in `xp.db`. This makes a trusted Activity XP reward idempotent across retries: if the same `reward_id` is encountered again with the same guild/user/amount, XP is not added a second time. Existing XP callers are unaffected when no reward ID is supplied.
+The pipeline passes `result.result_id` as the reward ID to XP and Economy. Retries can therefore recover after partial application without duplicating already-applied rewards. Absolute cross-database transaction atomicity is not claimed because Activity, XP and Economy remain separate SQLite databases.
 
-The Economy side now has the same persistent idempotent reward mechanism in `economy.db`: `economy_rewards` stores `reward_id`, guild/user, amount and timestamp, and `add_reward_balance()` atomically checks/inserts the reward record together with the balance update.
+Important security boundary: the trusted-result layer does **not** verify an external Activity itself. External identity/guild verification, signature/session verification and anti-cheat validation must happen before this layer is called.
 
-The Activity reward pipeline now passes `result.result_id` as the reward ID to both XP and Economy. If the Activity result was persisted but a reward application was interrupted, a retry can safely continue: already-applied XP/coins are skipped by their reward ledgers while missing rewards are applied. A reused result ID with different payload is rejected instead of silently changing the stored result.
+### Activity client package — IMPLEMENTED
 
-The function returns whether this invocation inserted the Activity result or newly applied at least one reward. This preserves useful boolean semantics while allowing recovery calls to finish partially applied rewards.
+`activities/client/package.json` contains the official `@discord/embedded-app-sdk` dependency and Vite build scripts.
 
-Absolute multi-database transaction atomicity is still not claimed; Activity, XP and Economy remain separate SQLite databases. The new reward ledgers provide retry/recovery safety across the separate stores.
+### Activity client authentication — FOUNDATION IMPLEMENTED
 
-Important boundary: this layer accepts **already trusted** results only. It does not claim to verify an external Discord Activity. External signature verification, identity/guild verification, anti-cheat validation and a real Activity client/backend remain outside the current implementation.
+`activities/client/index.html` is the Vite entry page.
 
-The reward amounts are supplied by the trusted caller; no new reward balance has been invented here.
+`activities/client/src/main.js` now:
 
-### Activity client foundation — STARTED
+1. Reads `VITE_DISCORD_CLIENT_ID` from the Vite environment.
+2. Creates `new DiscordSDK(clientId)`.
+3. Waits for `discordSdk.ready()`.
+4. Calls the SDK `authorize` command for an authorization code with `identify` scope.
+5. Sends the one-time code to `/api/discord/token`.
+6. Receives the backend-issued Discord access token.
+7. Calls `discordSdk.commands.authenticate({ access_token })`.
+8. Shows a basic connected/failed status.
 
-`activities/client/package.json` has been added with the official `@discord/embedded-app-sdk` dependency and Vite build scripts. This is the beginning of the real web-based Activity client rather than a fake slash-command replacement. Discord documents Activities as web applications embedded in Discord via the Embedded App SDK. The client still requires the actual Activity frontend, OAuth/authentication flow, URL mapping and Developer Portal configuration before it can be launched.
+The browser never receives the Discord application client secret.
 
-### Planned Activity games
+### Activity OAuth backend — FOUNDATION IMPLEMENTED
 
-**Initial release:**
+`activities/server.py` provides a minimal dependency-free `ThreadingHTTPServer` handler for `POST /api/discord/token`.
 
-```text
-Snake (Змейка)
-Sudoku (Судоку)
-Wordle
-```
+It:
 
-These three are the first planned Activities and are intentionally kept as the initial scope.
+- requires `DISCORD_ACTIVITY_CLIENT_ID` and `DISCORD_ACTIVITY_CLIENT_SECRET` on the server;
+- validates the request body and authorization code;
+- exchanges the code with Discord's OAuth token endpoint using `application/x-www-form-urlencoded`;
+- returns only the resulting access token to the Activity client;
+- disables caching on the token response;
+- does not log the authorization code or access token;
+- does not expose the client secret to the browser.
 
-**Future expansion:**
+This backend is currently a standalone server module. It has **not yet been wired into the bot lifecycle**, and the Vite development proxy has not yet been added. Therefore Activity authentication is implementation-foundation only and is not runtime-verified.
 
-```text
-2048
-Minesweeper (Сапёр)
-Tetris
-Flappy Bird
-Connect Four (Четыре в ряд)
-Chess (Шахматы)
-Checkers (Шашки)
-```
-
-These are future Activities, not part of the initial implementation scope. They can be added later using the same trusted-result architecture.
-
-Required final architecture remains:
+### Planned final Activity boundary
 
 ```text
-Discord Activity
-      ↓
-verified/trusted result
-      ↓
-idempotent persistence
-      ↓
-XP / Economy / Quests / Achievements / Rankings / Profile
+Discord Activity iframe
+        ↓
+Embedded App SDK authorize()
+        ↓
+one-time authorization code
+        ↓
+InsaneBot backend /api/discord/token
+        ↓
+Discord OAuth token exchange using server-side secret
+        ↓
+SDK authenticate()
+        ↓
+verified Activity/session identity
+        ↓
+validated game result
+        ↓
+utils/activity_rewards.py
+        ↓
+idempotent XP / Economy / Activity persistence
 ```
 
-## 20. KNOWN AUDIT ITEMS
+The final game-result endpoint must not trust arbitrary browser-supplied `user_id`, `guild_id`, reward amounts or completion claims. The backend must bind the result to the authenticated Activity session and validate game-specific rules before calling the trusted reward pipeline.
+
+## 20. KNOWN AUDIT / IMPLEMENTATION ITEMS
 
 High priority:
 
@@ -381,7 +396,13 @@ Additional:
 - Activity reward atomicity across the separate XP/Economy/Activity SQLite databases;
 - Activity reward idempotency/recovery across all reward stores;
 - Activity registry validation and initial-game implementation details;
-- Activity client authentication, URL mapping, deployment and initial game implementation.
+- Activity backend lifecycle integration;
+- Activity Vite development proxy;
+- Activity environment configuration for client ID/secret;
+- Activity URL mapping and Developer Portal configuration;
+- authenticated session handling;
+- game-specific server-side result validation;
+- initial Snake/Sudoku/Wordle implementation.
 
 Do not fix speculative issues without inspecting source/behavior first.
 
@@ -416,13 +437,15 @@ Current checkpoint:
 Core community/progression systems → IMPLEMENTED
 Mini-games → IMPLEMENTED / QA PENDING
 Social / Friends / Romantic → IMPLEMENTED / QA PENDING
-Discord Activities → FOUNDATION + CLIENT STARTED / AUTH + UI + GAMES REMAIN
+Discord Activities → CLIENT + AUTH FOUNDATION / BACKEND LIFECYCLE + UI + GAMES REMAIN
 Activity registry → IMPLEMENTED / QA PENDING
 Activity XP reward idempotency → IMPLEMENTED
 Activity Economy reward idempotency → IMPLEMENTED
 Activity reward pipeline wiring → IMPLEMENTED / QA PENDING
 Activity client package → IMPLEMENTED
-Activity client authentication → NEXT IMPLEMENTATION TARGET
+Activity client authentication → FOUNDATION IMPLEMENTED
+Activity OAuth backend → FOUNDATION IMPLEMENTED / NOT WIRED TO BOT
+Activity frontend UI → MINIMAL STATUS ONLY
 Initial Activities → Snake, Sudoku, Wordle
 Future Activities → 2048, Minesweeper, Tetris, Flappy Bird, Connect Four, Chess, Checkers
 Full QA → NOT STARTED
@@ -433,7 +456,7 @@ Full QA → NOT STARTED
 ```text
 27c49fd4c0ff0cf42c83d0e3851ed1eec1698d70 → persistent social database
 e90ab1944b3d93ca091b7ac2ccac964df9d532d4 → social commands/COG
-89b002e7ee6f19570393cecf012837a70bb11f72 → load social COG
+89b0027ee6f19570393cecf012837a70bb11f72 → load social COG
 1fd67f7fbb319a61b691022c6e7c1801c57e5a9c → Activity result ledger
 5946224802115e94940c5f2ab87f7bc6729731ab → Activity roadmap expanded with initial and future games
 9e584c6d80add5497c118db0aec0d5a23b0bc2da → Activity registry
@@ -443,7 +466,10 @@ a5d8bf9c138f5cb28e231b5d565572a479e9ca3d → Activity result lookup/history laye
 3348a0793009dcae7d9cf9fdb120a2ac897ec4f2 → Economy reward idempotency
 86196954830ed8f1b2eaec3d584753fedb903c3d → Activity reward pipeline wiring / retry recovery
 9680d41c2e7a64df751f13d7430d7232a1c4b12a → Discord Activity client package foundation
-CURRENT STATE UPDATE → Activity client foundation checkpoint
+52cfd3be6cb1c6dd630b54250e8cca64162fbf5f → Discord Activity client authentication foundation
+94ac969005a2850b80c71b0b035976a816d3eaf9 → Discord Activity client entry page
+d99ce4f68b881faab87cf499f9a56ea7cf5e1e77 → Discord Activity OAuth token exchange backend
+CURRENT STATE UPDATE → Activity OAuth/backend foundation checkpoint
 ```
 
 ## 24. NEW-CHAT CONTINUATION
