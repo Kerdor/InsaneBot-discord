@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import shutil
 import subprocess
 import sys
 import time
@@ -38,23 +39,34 @@ def pull() -> bool:
     return result.returncode == 0
 
 
+def resolve_executable(*names: str) -> str:
+    for name in names:
+        executable = shutil.which(name)
+        if executable:
+            return executable
+    joined_names = ", ".join(names)
+    raise FileNotFoundError(f"Не найден исполняемый файл: {joined_names}")
+
+
 def start_bot() -> subprocess.Popen:
     print("[RUNNER] Запуск бота...", flush=True)
     return subprocess.Popen([sys.executable, str(MAIN_FILE)], cwd=PROJECT_DIR)
 
 
 def start_activity_client() -> subprocess.Popen:
-    print("[RUNNER] Запуск Activity client (Vite)...", flush=True)
+    npm = resolve_executable("npm.cmd", "npm.exe", "npm")
+    print(f"[RUNNER] Запуск Activity client (Vite): {npm}", flush=True)
     return subprocess.Popen(
-        ["npm.cmd", "run", "dev", "--", "--host", "127.0.0.1", "--port", "5173"],
+        [npm, "run", "dev", "--", "--host", "127.0.0.1", "--port", "5173"],
         cwd=ACTIVITY_CLIENT_DIR,
     )
 
 
 def start_cloudflare() -> subprocess.Popen:
-    print("[RUNNER] Запуск Cloudflare Quick Tunnel...", flush=True)
+    cloudflared = resolve_executable("cloudflared.exe", "cloudflared")
+    print(f"[RUNNER] Запуск Cloudflare Quick Tunnel: {cloudflared}", flush=True)
     return subprocess.Popen(
-        ["cloudflared", "tunnel", "--url", "http://127.0.0.1:5173"],
+        [cloudflared, "tunnel", "--url", "http://127.0.0.1:5173"],
         cwd=PROJECT_DIR,
     )
 
@@ -80,12 +92,25 @@ def stop_activity_client(process: subprocess.Popen) -> None:
 
 
 def start_all() -> tuple[subprocess.Popen, subprocess.Popen, subprocess.Popen]:
-    bot = start_bot()
-    time.sleep(1)
-    activity_client = start_activity_client()
-    time.sleep(2)
-    cloudflare = start_cloudflare()
-    return bot, activity_client, cloudflare
+    bot = None
+    activity_client = None
+    cloudflare = None
+
+    try:
+        bot = start_bot()
+        time.sleep(1)
+        activity_client = start_activity_client()
+        time.sleep(2)
+        cloudflare = start_cloudflare()
+        return bot, activity_client, cloudflare
+    except Exception:
+        if cloudflare is not None:
+            stop_process(cloudflare, "Cloudflare Tunnel")
+        if activity_client is not None:
+            stop_activity_client(activity_client)
+        if bot is not None:
+            stop_bot(bot)
+        raise
 
 
 def restart_app_processes(
