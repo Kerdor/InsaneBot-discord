@@ -8,6 +8,7 @@ from pathlib import Path
 
 PROJECT_DIR = Path(__file__).resolve().parent
 MAIN_FILE = PROJECT_DIR / "main.py"
+ACTIVITY_CLIENT_DIR = PROJECT_DIR / "activities" / "client"
 POLL_INTERVAL = 5
 
 
@@ -42,36 +43,83 @@ def start_bot() -> subprocess.Popen:
     return subprocess.Popen([sys.executable, str(MAIN_FILE)], cwd=PROJECT_DIR)
 
 
-def stop_bot(process: subprocess.Popen) -> None:
+def start_activity_client() -> subprocess.Popen:
+    print("[RUNNER] Запуск Activity client (Vite)...", flush=True)
+    return subprocess.Popen(
+        ["npm.cmd", "run", "dev", "--", "--host", "127.0.0.1", "--port", "5173"],
+        cwd=ACTIVITY_CLIENT_DIR,
+    )
+
+
+def start_cloudflare() -> subprocess.Popen:
+    print("[RUNNER] Запуск Cloudflare Quick Tunnel...", flush=True)
+    return subprocess.Popen(
+        ["cloudflared", "tunnel", "--url", "http://127.0.0.1:5173"],
+        cwd=PROJECT_DIR,
+    )
+
+
+def stop_process(process: subprocess.Popen, name: str) -> None:
     if process.poll() is None:
-        print("[RUNNER] Останавливаем старый процесс бота...", flush=True)
+        print(f"[RUNNER] Останавливаем {name}...", flush=True)
         process.terminate()
         try:
             process.wait(timeout=10)
         except subprocess.TimeoutExpired:
-            print("[RUNNER] Бот не завершился вовремя, принудительно останавливаем.", flush=True)
+            print(f"[RUNNER] {name} не завершился вовремя, принудительно останавливаем.", flush=True)
             process.kill()
             process.wait()
 
 
+def stop_bot(process: subprocess.Popen) -> None:
+    stop_process(process, "бот")
+
+
+def stop_activity_processes(activity_client: subprocess.Popen, cloudflare: subprocess.Popen) -> None:
+    stop_process(cloudflare, "Cloudflare Tunnel")
+    stop_process(activity_client, "Activity client")
+
+
+def start_all() -> tuple[subprocess.Popen, subprocess.Popen, subprocess.Popen]:
+    bot = start_bot()
+    time.sleep(1)
+    activity_client = start_activity_client()
+    time.sleep(2)
+    cloudflare = start_cloudflare()
+    return bot, activity_client, cloudflare
+
+
+def stop_all(bot: subprocess.Popen, activity_client: subprocess.Popen, cloudflare: subprocess.Popen) -> None:
+    stop_process(cloudflare, "Cloudflare Tunnel")
+    stop_process(activity_client, "Activity client")
+    stop_bot(bot)
+
+
 def main() -> None:
     print(f"[RUNNER] Автообновление включено. Проверка Git каждые {POLL_INTERVAL} сек.", flush=True)
+    print("[RUNNER] Запуск Discord bot + Activity client + Cloudflare Tunnel.", flush=True)
     print("[RUNNER] Для остановки нажмите Ctrl+C.", flush=True)
 
-    process = start_bot()
+    bot, activity_client, cloudflare = start_all()
     current_head = get_head()
 
     try:
         while True:
             time.sleep(POLL_INTERVAL)
 
-            if process.poll() is not None:
-                print(f"[RUNNER] Бот завершился с кодом {process.returncode}.", flush=True)
+            if bot.poll() is not None:
+                print(f"[RUNNER] Бот завершился с кодом {bot.returncode}.", flush=True)
+                return
+            if activity_client.poll() is not None:
+                print(f"[RUNNER] Activity client завершился с кодом {activity_client.returncode}.", flush=True)
+                return
+            if cloudflare.poll() is not None:
+                print(f"[RUNNER] Cloudflare Tunnel завершился с кодом {cloudflare.returncode}.", flush=True)
                 return
 
             old_head = current_head or get_head()
             if not pull():
-                print("[GIT] Pull не выполнен. Бот продолжает работать.", flush=True)
+                print("[GIT] Pull не выполнен. Процессы продолжают работать.", flush=True)
                 continue
 
             new_head = get_head()
@@ -80,13 +128,13 @@ def main() -> None:
                 continue
 
             print(f"[RUNNER] Обнаружены изменения: {old_head} -> {new_head}", flush=True)
-            stop_bot(process)
+            stop_all(bot, activity_client, cloudflare)
             current_head = new_head
-            process = start_bot()
+            bot, activity_client, cloudflare = start_all()
 
     except KeyboardInterrupt:
         print("\n[RUNNER] Получен Ctrl+C.", flush=True)
-        stop_bot(process)
+        stop_all(bot, activity_client, cloudflare)
 
 
 if __name__ == "__main__":
