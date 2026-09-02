@@ -36,8 +36,9 @@ button:active {
     padding: 24px;
 }
 
+.launcher-card,
 .game-card {
-    width: min(680px, 100%);
+    width: min(900px, 100%);
     padding: 24px;
     border: 1px solid #263041;
     border-radius: 18px;
@@ -45,12 +46,12 @@ button:active {
     box-shadow: 0 20px 60px rgba(0, 0, 0, 0.35);
 }
 
-.game-header {
+.launcher-header {
     display: flex;
     justify-content: space-between;
     gap: 20px;
     align-items: flex-start;
-    margin-bottom: 18px;
+    margin-bottom: 22px;
 }
 
 .eyebrow {
@@ -63,6 +64,123 @@ button:active {
 h1 {
     margin: 0;
     font-size: 32px;
+}
+
+.launcher-subtitle {
+    margin: 6px 0 0;
+    color: #aeb8c7;
+}
+
+.player-badge {
+    max-width: 220px;
+    padding: 9px 13px;
+    border-radius: 10px;
+    background: #0f1520;
+    color: #cbd5e1;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+}
+
+.activity-grid {
+    display: grid;
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+    gap: 12px;
+}
+
+.activity-card {
+    width: 100%;
+    min-height: 112px;
+    display: grid;
+    grid-template-columns: auto 1fr auto;
+    align-items: center;
+    gap: 14px;
+    padding: 16px;
+    border: 1px solid #2b3547;
+    border-radius: 14px;
+    background: #1b2230;
+    color: #f9fafb;
+    text-align: left;
+    transition: border-color 0.15s ease, background 0.15s ease, transform 0.15s ease;
+}
+
+.activity-card:not(:disabled):hover {
+    border-color: #5865f2;
+    background: #20293a;
+    transform: translateY(-1px);
+}
+
+.activity-card-disabled {
+    cursor: default;
+    opacity: 0.58;
+}
+
+.activity-icon {
+    width: 52px;
+    height: 52px;
+    display: grid;
+    place-items: center;
+    border-radius: 13px;
+    background: #0f1520;
+    font-size: 28px;
+}
+
+.activity-card-content {
+    min-width: 0;
+}
+
+.activity-card-content strong,
+.activity-card-content span {
+    display: block;
+}
+
+.activity-card-content strong {
+    margin-bottom: 5px;
+    font-size: 18px;
+}
+
+.activity-card-content span {
+    color: #9ca3af;
+    font-size: 13px;
+    line-height: 1.35;
+}
+
+.activity-status {
+    align-self: start;
+    padding: 5px 8px;
+    border-radius: 8px;
+    background: #0f1520;
+    color: #aeb8c7;
+    font-size: 11px;
+    white-space: nowrap;
+}
+
+.activity-status-available {
+    color: #fff;
+    background: #5865f2;
+}
+
+.game-topbar {
+    margin-bottom: 8px;
+}
+
+.back-button {
+    padding: 7px 10px;
+    background: transparent;
+    color: #aeb8c7;
+}
+
+.back-button:hover {
+    background: #20293a;
+    color: #fff;
+}
+
+.game-header {
+    display: flex;
+    justify-content: space-between;
+    gap: 20px;
+    align-items: flex-start;
+    margin-bottom: 18px;
 }
 
 .status {
@@ -135,13 +253,25 @@ h1 {
     color: #9ca3af;
 }
 
+@media (max-width: 680px) {
+    .activity-grid {
+        grid-template-columns: 1fr;
+    }
+}
+
 @media (max-width: 520px) {
     .activity-shell {
         padding: 10px;
     }
 
+    .launcher-card,
     .game-card {
         padding: 16px;
+    }
+
+    .launcher-header {
+        gap: 10px;
+        flex-direction: column;
     }
 
     .game-header {
@@ -150,5 +280,15 @@ h1 {
 
     h1 {
         font-size: 26px;
+    }
+
+    .activity-card {
+        grid-template-columns: auto 1fr;
+    }
+
+    .activity-status {
+        grid-column: 2;
+        justify-self: start;
+        margin-top: -7px;
     }
 }
