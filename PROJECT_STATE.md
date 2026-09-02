@@ -166,7 +166,7 @@ Runtime databases are real state and must never be reset.
 | Profile customization | DONE | NOT STARTED | PENDING |
 | Mini-games | DONE | NOT TESTED | PENDING AFTER IMPLEMENTATION |
 | Social / Friends / Romantic | DONE | NOT TESTED | PENDING AFTER IMPLEMENTATION |
-| Discord Activities | FOUNDATION + CLIENT AUTH FOUNDATION + DEV PROXY + BACKEND LIFECYCLE | NOT TESTED | PENDING REAL BOUNDARY |
+| Discord Activities | FOUNDATION + AUTHENTICATED SESSION FOUNDATION | NOT TESTED | PENDING REAL BOUNDARY |
 | PvP | REMOVED | — | — |
 | Collecting | REMOVED FOR NOW | — | — |
 
@@ -325,40 +325,55 @@ Important security boundary: the trusted-result layer does **not** verify an ext
 2. Creates `new DiscordSDK(clientId)`.
 3. Waits for `discordSdk.ready()`.
 4. Calls the SDK `authorize` command for an authorization code with `identify` scope.
-5. Sends the one-time code to `/api/discord/token`.
+5. Sends the one-time code to `/api/discord/token` with credentials enabled.
 6. Receives the backend-issued Discord access token.
-7. Calls `discordSdk.commands.authenticate({ access_token })`.
-8. Shows a basic connected/failed status.
+7. Calls `discordSdk.commands.authenticate({ access_token })` exactly once.
+8. Requests `/api/discord/session` using the HTTP-only session cookie.
+9. Verifies the server session user ID matches the SDK-authenticated Discord user.
+10. Shows the authenticated username.
 
 The browser never receives the Discord application client secret.
 
-### Activity OAuth backend — FOUNDATION IMPLEMENTED
+### Activity OAuth backend — AUTHENTICATED SESSION FOUNDATION IMPLEMENTED
 
-`activities/server.py` provides a minimal dependency-free `ThreadingHTTPServer` handler for `POST /api/discord/token`.
+`activities/server.py` provides the dependency-free `ThreadingHTTPServer` backend for Activity authentication.
 
-It:
+After exchanging the one-time authorization code, the backend now:
 
-- requires `DISCORD_ACTIVITY_CLIENT_ID` and `DISCORD_ACTIVITY_CLIENT_SECRET` on the server;
-- validates the request body and authorization code;
-- exchanges the code with Discord's OAuth token endpoint using `application/x-www-form-urlencoded`;
-- returns only the resulting access token to the Activity client;
-- disables caching on the token response;
-- does not log the authorization code or access token;
-- does not expose the client secret to the browser.
+- calls Discord `/users/@me` with the received access token;
+- obtains the actual Discord user ID and username from Discord rather than trusting browser-supplied identity;
+- creates a cryptographically random server-side session ID;
+- stores the authenticated user identity server-side with a one-hour expiry;
+- sends the session ID as an `HttpOnly` cookie scoped to `/api/discord`;
+- exposes `GET /api/discord/session` to return the identity bound to that cookie;
+- rejects missing/unknown/expired sessions with HTTP 401.
 
-### Activity backend lifecycle — IMPLEMENTED FOUNDATION
+The Discord access token itself is not stored in the Activity session and is not returned by the session endpoint. Session IDs are kept only in the backend process for this initial implementation.
 
-`cogs/activity_server.py` starts the Activity HTTP backend as a daemon thread when the bot loads the COG and shuts it down on COG unload. Host/port are read from `DISCORD_ACTIVITY_HOST` and `DISCORD_ACTIVITY_PORT` with validation. The COG is included in the normal load order, so the backend now lives inside the InsaneBot process lifecycle.
+This is now a real server-side identity boundary for future game-result endpoints. It is **not yet the complete Activity security boundary**: the authenticated session is not yet bound to a Discord Activity instance/guild, and game-specific result validation has not been implemented.
 
-This is still not runtime-verified. The OAuth/session boundary is the next implementation step.
+### Activity backend lifecycle — IMPLEMENTED
+
+`cogs/activity_server.py` starts the Activity backend in a daemon thread when the bot loads the COG and shuts it down on COG unload.
+
+Environment:
+
+```text
+DISCORD_ACTIVITY_HOST=127.0.0.1
+DISCORD_ACTIVITY_PORT=8080
+DISCORD_ACTIVITY_CLIENT_ID=<server-side Discord application client ID>
+DISCORD_ACTIVITY_CLIENT_SECRET=<server-side Discord application client secret>
+```
+
+`DISCORD_ACTIVITY_CLIENT_SECRET` must remain server-side and must never be placed in the Vite client environment.
 
 ### Activity client development proxy — IMPLEMENTED
 
-`activities/client/vite.config.js` proxies `/api/*` requests to `http://127.0.0.1:8080` during Vite development. This matches the intended local Activity backend port without adding another frontend dependency.
+`activities/client/vite.config.js` proxies `/api/*` requests to `http://127.0.0.1:8080` during Vite development.
 
 ### Activity backend package — IMPLEMENTED
 
-`activities/__init__.py` marks the backend directory as a Python package so it can be imported cleanly when the backend is wired into the application lifecycle.
+`activities/__init__.py` marks the backend directory as a Python package.
 
 ### Planned final Activity boundary
 
@@ -371,9 +386,13 @@ one-time authorization code
         ↓
 InsaneBot backend /api/discord/token
         ↓
-Discord OAuth token exchange using server-side secret
+Discord OAuth token exchange
         ↓
-verified Activity/session identity
+Discord /users/@me
+        ↓
+server-side authenticated session cookie
+        ↓
+Activity instance / guild verification
         ↓
 validated game result
         ↓
@@ -405,25 +424,24 @@ Additional:
 - duplicate event handling;
 - mini-game reward integration/concurrency;
 - social command and relationship concurrency/edge cases;
-- Activity signature/identity/guild verification and reward integration;
-- Activity reward atomicity across the separate XP/Economy/Activity SQLite databases;
+- Activity instance/guild verification;
+- Activity game-result validation and anti-cheat boundary;
+- Activity reward atomicity across separate XP/Economy/Activity SQLite databases;
 - Activity reward idempotency/recovery across all reward stores;
 - Activity registry validation and initial-game implementation details;
-- Activity environment configuration for client ID/secret;
 - Activity URL mapping and Developer Portal configuration;
-- authenticated session handling;
-- initial Activity UI/game implementation;
-- Activity runtime verification.
+- authenticated session lifecycle/persistence beyond the initial in-process session store.
 
-## 21. IMPLEMENTATION CHECKPOINT
+## 21. RECENT IMPLEMENTATION CHECKPOINTS
 
 ```text
 27c49fd4c0ff0cf42c83d0e3851ed1eec1698d70 → persistent social database
 e90ab1944b3d93ca091b7ac2ccac964df9d532d4 → social commands/COG
 89b0027ee6f19570393cecf012837a70bb11f72 → load social COG
 1fd67f7fbb319a61b691022c6e7c1801c57e5a9c → Activity result ledger
-5946224802115e94940c5f2ab87f7bc6729731ab → Activity roadmap expanded with initial/future games
+5946224802115e94940c5f2ab87f7bc6729731ab → Activity roadmap expanded
 9e584c6d80add5497c118db0aec0d5a23b0bc2da → Activity registry
+a5d8bf9c138f5cb28e231b5d565572a479e9ca3d → Activity result lookup/history layer
 0f1f501f4cab242453f88fd390d74312b36cfade → trusted Activity reward pipeline
 082cab6e5fd383d4de31c34d1773cafd50cf0aa3 → XP reward idempotency
 3348a0793009dcae7d9cf9fdb120a2ac897ec4f2 → Economy reward idempotency
@@ -432,13 +450,34 @@ e90ab1944b3d93ca091b7ac2ccac964df9d532d4 → social commands/COG
 66c87d300dbb83b8c2d0caa743f4839de65ee8a5 → Activity client authentication foundation
 ac68eee9d9ef9f3c99889aa8b31931ea1a01c688 → Activity Vite development proxy
 e493e67a8a8c36ac1be51b3bed6a70482a12a48a → Activity backend package marker
-c38fff4767db250725d497398d4f84319cf1eac9 → Activity lifecycle/config integration
-5b283447339a59d7ce4c81b916f517d94abe16d5 → Activity lifecycle follow-up checkpoint
-CURRENT STATE UPDATE → Activity backend lifecycle checkpoint
+4632635f78b56cd6b66cb2f1a1c1d7975131e717 → Activity backend lifecycle COG foundation
+c38fff4767db250725d497398d4f84319cf1eac9 → Activity backend lifecycle configuration
+46e5cac3d285483a24834ee347d7b1231d4d27c6 → Activity COG load integration
+844cdf33a6edc9c6bf0ebe95c13ca5da65bbbc0d6 → Activity lifecycle checkpoint
+5b283447339a59d7ce4c81b916f517d94abe16d5 → Activity session groundwork
+ff7790043a234c97654da9aeb6d1c2e1ced6b2d3 → Activity client session preparation
+71a0076ab26869e5f0e7dcb334f7fe0441bab4a8 → Activity client authentication flow correction
+c336d8bf63438d1f64420328fe01ef8bb59638ee → server-side authenticated Activity session
+CURRENT STATE UPDATE → authenticated Activity session checkpoint
 ```
 
-## 22. NEXT IMPLEMENTATION TARGET
+## 22. NEXT IMPLEMENTATION ORDER
 
-**Authenticated Activity session boundary.**
+```text
+1. Activity instance/guild binding
+2. Snake Activity UI + actual game state
+3. Snake backend result validation
+4. Snake → trusted reward pipeline
+5. Sudoku UI/game
+6. Sudoku backend validation/rewards
+7. Wordle UI/game
+8. Wordle backend validation/rewards
+9. Remaining planned implementation
+10. Full sequential QA
+```
 
-The next change must make the OAuth backend establish a server-side authenticated Activity session after Discord token exchange, without exposing or trusting client-controlled identity/reward fields. After that boundary is implemented and documented, proceed to the initial Snake Activity UI/game.
+## 23. QA PRINCIPLE
+
+QA starts only after the agreed implementation scope is complete. When QA begins, test one system/flow at a time and wait for the real runtime result before marking it `QA PASSED`.
+
+Never infer runtime success from source code alone.
