@@ -58,6 +58,30 @@ async function loadSession() {
     return response.json();
 }
 
+async function submitSnakeResult(result) {
+    const response = await fetch("/api/activities/snake/result", {
+        method: "POST",
+        headers: {
+            "Content-Type": "application/json",
+        },
+        credentials: "include",
+        body: JSON.stringify({
+            result_id: crypto.randomUUID(),
+            activity_key: "snake",
+            score: result.score,
+            instance_id: discordSdk.instanceId,
+            guild_id: discordSdk.guildId,
+            channel_id: discordSdk.channelId,
+        }),
+    });
+
+    if (!response.ok) {
+        throw new Error(`Snake result submission failed: ${response.status}`);
+    }
+
+    return response.json();
+}
+
 function renderGame(user) {
     document.body.innerHTML = `
         <main class="activity-shell">
@@ -89,12 +113,22 @@ function renderGame(user) {
     const canvas = document.querySelector("#snake-canvas");
     const score = document.querySelector("#score");
     const status = document.querySelector("#status");
-    const game = new SnakeGame(canvas, score, status);
+    const game = new SnakeGame(canvas, score, status, async (result) => {
+        try {
+            status.textContent = "Результат отправляется...";
+            await submitSnakeResult(result);
+            status.textContent = result.reason === "win"
+                ? "Победа! Результат принят"
+                : "Игра окончена — результат принят";
+        } catch (error) {
+            console.error(error);
+            status.textContent = "Результат не принят сервером";
+        }
+    });
 
     bindSnakeControls(game);
     document.querySelector("#start-button").addEventListener("click", () => game.start());
     document.querySelector("#restart-button").addEventListener("click", () => {
-        game.stop();
         game.reset();
     });
 }
