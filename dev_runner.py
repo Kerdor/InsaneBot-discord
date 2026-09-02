@@ -11,6 +11,8 @@ PROJECT_DIR = Path(__file__).resolve().parent
 MAIN_FILE = PROJECT_DIR / "main.py"
 ACTIVITY_CLIENT_DIR = PROJECT_DIR / "activities" / "client"
 POLL_INTERVAL = 5
+NODE_DIR = Path("C:/Program Files/nodejs")
+CLOUDFLARED_PATH = Path("C:/cloudflared/cloudflared.exe")
 
 
 def run_git(*args: str) -> subprocess.CompletedProcess[str]:
@@ -48,13 +50,23 @@ def resolve_executable(*names: str) -> str:
     raise FileNotFoundError(f"Не найден исполняемый файл: {joined_names}")
 
 
+def resolve_npm() -> str:
+    npm = shutil.which("npm.cmd") or shutil.which("npm.exe") or shutil.which("npm")
+    if npm:
+        return npm
+    npm_path = NODE_DIR / "npm.cmd"
+    if npm_path.is_file():
+        return str(npm_path)
+    raise FileNotFoundError(f"Не найден npm: {npm_path}")
+
+
 def start_bot() -> subprocess.Popen:
     print("[RUNNER] Запуск бота...", flush=True)
     return subprocess.Popen([sys.executable, str(MAIN_FILE)], cwd=PROJECT_DIR)
 
 
 def start_activity_client() -> subprocess.Popen:
-    npm = resolve_executable("npm.cmd", "npm.exe", "npm")
+    npm = resolve_npm()
     print(f"[RUNNER] Запуск Activity client (Vite): {npm}", flush=True)
     return subprocess.Popen(
         [npm, "run", "dev", "--", "--host", "127.0.0.1", "--port", "5173"],
@@ -63,7 +75,11 @@ def start_activity_client() -> subprocess.Popen:
 
 
 def start_cloudflare() -> subprocess.Popen:
-    cloudflared = resolve_executable("cloudflared.exe", "cloudflared")
+    cloudflared = shutil.which("cloudflared.exe") or shutil.which("cloudflared")
+    if not cloudflared and CLOUDFLARED_PATH.is_file():
+        cloudflared = str(CLOUDFLARED_PATH)
+    if not cloudflared:
+        raise FileNotFoundError(f"Не найден cloudflared: {CLOUDFLARED_PATH}")
     print(f"[RUNNER] Запуск Cloudflare Quick Tunnel: {cloudflared}", flush=True)
     return subprocess.Popen(
         [cloudflared, "tunnel", "--url", "http://127.0.0.1:5173"],
