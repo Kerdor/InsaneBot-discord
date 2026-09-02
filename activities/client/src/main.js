@@ -152,8 +152,7 @@ function renderGame(user, initialGame) {
         }
     });
 
-    game.reset(initialGame.seed, initialGame.game_id);
-    game.resultId = initialGame.result_id;
+    game.reset(initialGame.seed, initialGame.game_id, initialGame.result_id);
 
     bindSnakeControls(game);
     document.querySelector("#start-button").addEventListener("click", () => game.start());
@@ -161,8 +160,7 @@ function renderGame(user, initialGame) {
         try {
             status.textContent = "Создание новой игры...";
             const nextGame = await startSnakeGame();
-            game.reset(nextGame.seed, nextGame.game_id);
-            game.resultId = nextGame.result_id;
+            game.reset(nextGame.seed, nextGame.game_id, nextGame.result_id);
         } catch (error) {
             console.error(error);
             status.textContent = "Не удалось создать новую игру";
