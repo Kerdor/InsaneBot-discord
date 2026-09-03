@@ -11,9 +11,32 @@ from pathlib import Path
 PROJECT_DIR = Path(__file__).resolve().parent
 MAIN_FILE = PROJECT_DIR / "main.py"
 ACTIVITY_CLIENT_DIR = PROJECT_DIR / "activities" / "client"
+LOG_DIR = PROJECT_DIR / "logs"
+LOG_FILE = LOG_DIR / "dev_runner.log"
 POLL_INTERVAL = 5
 NODE_DIR = Path("C:/Program Files/nodejs")
 CLOUDFLARED_PATH = Path("C:/cloudflared/cloudflared.exe")
+
+LOG_HANDLE = None
+
+
+def setup_logging() -> None:
+    global LOG_HANDLE
+    LOG_DIR.mkdir(parents=True, exist_ok=True)
+    LOG_HANDLE = LOG_FILE.open("w", encoding="utf-8", buffering=1)
+    sys.stdout = LOG_HANDLE
+    sys.stderr = LOG_HANDLE
+    print("=" * 80, flush=True)
+    print(f"[RUNNER] Новый запуск. Лог: {LOG_FILE}", flush=True)
+    print("=" * 80, flush=True)
+
+
+def close_logging() -> None:
+    global LOG_HANDLE
+    if LOG_HANDLE is not None:
+        LOG_HANDLE.flush()
+        LOG_HANDLE.close()
+        LOG_HANDLE = None
 
 
 def run_git(*args: str) -> subprocess.CompletedProcess[str]:
@@ -63,7 +86,12 @@ def resolve_npm() -> str:
 
 def start_bot() -> subprocess.Popen:
     print("[RUNNER] Запуск бота...", flush=True)
-    return subprocess.Popen([sys.executable, str(MAIN_FILE)], cwd=PROJECT_DIR)
+    return subprocess.Popen(
+        [sys.executable, str(MAIN_FILE)],
+        cwd=PROJECT_DIR,
+        stdout=LOG_HANDLE,
+        stderr=subprocess.STDOUT,
+    )
 
 
 def start_activity_client() -> subprocess.Popen:
@@ -78,6 +106,8 @@ def start_activity_client() -> subprocess.Popen:
         [npm, "run", "dev", "--", "--host", "127.0.0.1", "--port", "5173"],
         cwd=ACTIVITY_CLIENT_DIR,
         env=env,
+        stdout=LOG_HANDLE,
+        stderr=subprocess.STDOUT,
     )
 
 
@@ -91,6 +121,8 @@ def start_cloudflare() -> subprocess.Popen:
     return subprocess.Popen(
         [cloudflared, "tunnel", "--url", "http://127.0.0.1:5173"],
         cwd=PROJECT_DIR,
+        stdout=LOG_HANDLE,
+        stderr=subprocess.STDOUT,
     )
 
 
@@ -156,6 +188,7 @@ def stop_all(
 
 
 def main() -> None:
+    setup_logging()
     print(f"[RUNNER] Автообновление включено. Проверка Git каждые {POLL_INTERVAL} сек.", flush=True)
     print("[RUNNER] Запуск Discord bot + Activity client + Cloudflare Tunnel.", flush=True)
     print("[RUNNER] Для остановки нажмите Ctrl+C.", flush=True)
@@ -194,6 +227,8 @@ def main() -> None:
     except KeyboardInterrupt:
         print("\n[RUNNER] Получен Ctrl+C.", flush=True)
         stop_all(bot, activity_client, cloudflare)
+    finally:
+        close_logging()
 
 
 if __name__ == "__main__":
