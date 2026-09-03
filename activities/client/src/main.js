@@ -4,11 +4,44 @@ import "./style.css";
 
 const clientId = import.meta.env.VITE_DISCORD_CLIENT_ID;
 
+function activityLog(message, data = null) {
+    const entry = {
+        time: new Date().toISOString(),
+        message,
+        ...(data === null ? {} : { data }),
+    };
+    console.log("[ACTIVITY]", JSON.stringify(entry));
+    fetch("/api/activity/log", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        credentials: "include",
+        body: JSON.stringify(entry),
+        keepalive: true,
+    }).catch(() => {});
+}
+
+window.addEventListener("error", (event) => {
+    activityLog("window.error", {
+        message: event.message,
+        source: event.filename,
+        line: event.lineno,
+        column: event.colno,
+    });
+});
+
+window.addEventListener("unhandledrejection", (event) => {
+    activityLog("unhandledrejection", {
+        message: event.reason instanceof Error ? event.reason.message : String(event.reason),
+    });
+});
+
 if (!clientId) {
+    activityLog("VITE_DISCORD_CLIENT_ID is not configured");
     throw new Error("VITE_DISCORD_CLIENT_ID is not configured");
 }
 
 const discordSdk = new DiscordSDK(clientId);
+activityLog("SDK created", { clientId });
 
 const ACTIVITIES = [
     {
@@ -56,8 +89,15 @@ const ACTIVITIES = [
 ];
 
 async function authenticate() {
+    activityLog("authenticate: waiting for SDK ready");
     await discordSdk.ready();
+    activityLog("authenticate: SDK ready", {
+        instanceId: discordSdk.instanceId,
+        guildId: discordSdk.guildId,
+        channelId: discordSdk.channelId,
+    });
 
+    activityLog("authenticate: requesting authorize");
     const { code } = await discordSdk.commands.authorize({
         client_id: clientId,
         response_type: "code",
@@ -65,6 +105,7 @@ async function authenticate() {
         prompt: "none",
         scope: ["identify"],
     });
+    activityLog("authenticate: authorize completed", { hasCode: Boolean(code) });
 
     const response = await fetch("/api/discord/token", {
         method: "POST",
@@ -79,31 +120,48 @@ async function authenticate() {
             channel_id: discordSdk.channelId,
         }),
     });
+    activityLog("authenticate: token endpoint response", { status: response.status });
 
     if (!response.ok) {
         throw new Error(`Discord authentication failed: ${response.status}`);
     }
 
     const { access_token: accessToken } = await response.json();
-    return discordSdk.commands.authenticate({
+    activityLog("authenticate: token received", { hasAccessToken: Boolean(accessToken) });
+    const authentication = await discordSdk.commands.authenticate({
         access_token: accessToken,
     });
+    activityLog("authenticate: SDK authentication completed", {
+        userId: authentication.user?.id,
+        username: authentication.user?.username,
+    });
+    return authentication;
 }
 
 async function loadSession() {
+    activityLog("session: requesting backend session");
     const response = await fetch("/api/discord/session", {
         method: "GET",
         credentials: "include",
     });
+    activityLog("session: backend response", { status: response.status });
 
     if (!response.ok) {
         throw new Error(`Activity session failed: ${response.status}`);
     }
 
-    return response.json();
+    const session = await response.json();
+    activityLog("session: loaded", {
+        userId: session.user_id,
+        instanceId: session.instance_id,
+        guildId: session.guild_id,
+        channelId: session.channel_id,
+    });
+    return session;
 }
 
 async function startSnakeGame() {
+    activityLog("snake: requesting new game");
     const response = await fetch("/api/activities/snake/start", {
         method: "POST",
         headers: {
@@ -116,15 +174,28 @@ async function startSnakeGame() {
             channel_id: discordSdk.channelId,
         }),
     });
+    activityLog("snake: start endpoint response", { status: response.status });
 
     if (!response.ok) {
         throw new Error(`Snake game start failed: ${response.status}`);
     }
 
-    return response.json();
+    const game = await response.json();
+    activityLog("snake: game created", {
+        gameId: game.game_id,
+        resultId: game.result_id,
+    });
+    return game;
 }
 
 async function submitSnakeResult(result) {
+    activityLog("snake: submitting result", {
+        gameId: result.game_id,
+        resultId: result.result_id,
+        score: result.score,
+        reason: result.reason,
+        tickCount: result.tick_count,
+    });
     const response = await fetch("/api/activities/snake/result", {
         method: "POST",
         headers: {
@@ -145,15 +216,19 @@ async function submitSnakeResult(result) {
             channel_id: discordSdk.channelId,
         }),
     });
+    activityLog("snake: result endpoint response", { status: response.status });
 
     if (!response.ok) {
         throw new Error(`Snake result submission failed: ${response.status}`);
     }
 
-    return response.json();
+    const submitted = await response.json();
+    activityLog("snake: result accepted", submitted);
+    return submitted;
 }
 
 function renderLauncher(user) {
+    activityLog("ui: rendering launcher", { username: user.username });
     document.body.innerHTML = `
         <main class="activity-shell">
             <section class="launcher-card">
@@ -179,6 +254,7 @@ function renderLauncher(user) {
         }
         card.addEventListener("click", () => {
             const activityKey = card.dataset.activityKey;
+            activityLog("ui: activity selected", { activityKey });
             if (activityKey === "snake") {
                 openSnake(user).catch(showError);
             }
@@ -218,6 +294,7 @@ async function openSnake(user) {
 }
 
 function renderGame(user, initialGame) {
+    activityLog("ui: rendering Snake", { gameId: initialGame.game_id });
     document.body.innerHTML = `
         <main class="activity-shell">
             <section class="game-card">
@@ -261,6 +338,7 @@ function renderGame(user, initialGame) {
                 : "Игра окончена — результат принят";
         } catch (error) {
             console.error(error);
+            activityLog("snake: result submission failed", { message: error.message });
             status.textContent = "Результат не принят сервером";
         }
     });
@@ -276,10 +354,12 @@ function renderGame(user, initialGame) {
             game.reset(nextGame.seed, nextGame.game_id, nextGame.result_id);
         } catch (error) {
             console.error(error);
+            activityLog("snake: restart failed", { message: error.message });
             status.textContent = "Не удалось создать новую игру";
         }
     });
     document.querySelector("#back-button").addEventListener("click", () => {
+        activityLog("ui: returning to launcher");
         renderLauncher(user);
     });
 }
@@ -295,10 +375,12 @@ function escapeHtml(value) {
 
 function showError(error) {
     console.error(error);
+    activityLog("ui: fatal error", { name: error.name, message: error.message, stack: error.stack });
     document.body.innerHTML = `<main class="error-screen"><h1>Activity error</h1><p>${escapeHtml(error.message)}</p></main>`;
 }
 
 async function start() {
+    activityLog("startup: begin");
     const authentication = await authenticate();
     const session = await loadSession();
 
@@ -315,10 +397,13 @@ async function start() {
         throw new Error("Activity channel identity mismatch");
     }
 
+    activityLog("startup: identity checks passed");
     renderLauncher(authentication.user);
+    activityLog("startup: launcher rendered");
 }
 
 start().catch((error) => {
     console.error(error);
+    activityLog("startup: fatal error", { name: error.name, message: error.message, stack: error.stack });
     document.body.innerHTML = `<main class="error-screen"><h1>Activity connection failed</h1><p>${escapeHtml(error.message)}</p></main>`;
 });
