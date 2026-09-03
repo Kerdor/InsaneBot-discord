@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import os
 import shutil
 import subprocess
 import sys
@@ -68,9 +69,15 @@ def start_bot() -> subprocess.Popen:
 def start_activity_client() -> subprocess.Popen:
     npm = resolve_npm()
     print(f"[RUNNER] Запуск Activity client (Vite): {npm}", flush=True)
+
+    env = dict(os.environ)
+    if NODE_DIR.is_dir():
+        env["PATH"] = f"{NODE_DIR};{env.get('PATH', '')}"
+
     return subprocess.Popen(
         [npm, "run", "dev", "--", "--host", "127.0.0.1", "--port", "5173"],
         cwd=ACTIVITY_CLIENT_DIR,
+        env=env,
     )
 
 
