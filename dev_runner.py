@@ -7,6 +7,8 @@ import sys
 import time
 from pathlib import Path
 
+from dotenv import load_dotenv
+
 
 PROJECT_DIR = Path(__file__).resolve().parent
 MAIN_FILE = PROJECT_DIR / "main.py"
@@ -19,6 +21,8 @@ NODE_DIR = Path("C:/Program Files/nodejs")
 CLOUDFLARED_PATH = Path("C:/cloudflared/cloudflared.exe")
 
 LOG_HANDLE = None
+
+load_dotenv(PROJECT_DIR / ".env")
 
 
 def setup_logging() -> None:
