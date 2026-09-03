@@ -13,6 +13,7 @@ MAIN_FILE = PROJECT_DIR / "main.py"
 ACTIVITY_CLIENT_DIR = PROJECT_DIR / "activities" / "client"
 LOG_DIR = PROJECT_DIR / "logs"
 LOG_FILE = LOG_DIR / "dev_runner.log"
+ACTIVITY_CLIENT_LOG_FILE = LOG_DIR / "activity_client.log"
 POLL_INTERVAL = 5
 NODE_DIR = Path("C:/Program Files/nodejs")
 CLOUDFLARED_PATH = Path("C:/cloudflared/cloudflared.exe")
@@ -24,6 +25,7 @@ def setup_logging() -> None:
     global LOG_HANDLE
     LOG_DIR.mkdir(parents=True, exist_ok=True)
     LOG_HANDLE = LOG_FILE.open("w", encoding="utf-8", buffering=1)
+    ACTIVITY_CLIENT_LOG_FILE.write_text("", encoding="utf-8")
     sys.stdout = LOG_HANDLE
     sys.stderr = LOG_HANDLE
     print("=" * 80, flush=True)
