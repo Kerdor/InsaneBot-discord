@@ -413,6 +413,14 @@ Commit:
 
 Runtime verification after this fix is pending.
 
+### Activity diagnostics logging — IMPLEMENTED 2026-09-03
+
+`dev_runner.py` now initializes the Activity client log as UTF-8 on every fresh runner start. The runner log is also opened explicitly as UTF-8, so Windows locale encoding should no longer produce `����` for Russian text.
+
+The Activity client now sends diagnostic lifecycle/error records to the backend and also writes them to the browser console. The diagnostics cover SDK startup, authorization, token/session requests, Snake requests/results, UI transitions, `window.error`, unhandled promise rejections and fatal startup errors.
+
+No OAuth tokens, authorization codes or client secrets are written to the diagnostic log.
+
 ## 20. SECURITY STATUS
 
 Current Activity security boundary prevents a client from simply submitting an arbitrary score. A result must correspond to a server-issued game, seed and result ID, authenticated user/context, and a valid deterministic replay.
@@ -459,6 +467,7 @@ e8604abdfe11fcd8d2b935640989e0e0a74596ca → ActivityServerCog disnake Cog inher
 2e116631355e05e4d59cc4780a6fd13b8f2c8bb7 → multi-game Activity launcher
 7d6c04ee9cf078e4f329c2a1b7a29fbb1e396 → multi-game Activity launcher styling
 6b845dbf5cb8fc458fb8bfd0f7003e9c67362c40 → Fix Activity client Node PATH in dev runner
+561de92330b78cc1c09718ef45c6aa7599a38ace → Reset Activity logs as UTF-8 on runner start
 ```
 
 ## 22. CURRENT IMPLEMENTATION ORDER
@@ -607,3 +616,16 @@ Vite client → previously failed due to Node PATH; fix applied
 Cloudflare Quick Tunnel → successfully created
 Real Activity QA → PENDING rerun after fix
 ```
+
+## 28. ACTIVITY LOG ENCODING FIX — 2026-09-03
+
+Runner log files are now explicitly created as UTF-8 and `activity_client.log` is truncated at every fresh `dev_runner.py` launch.
+
+This fixes the Windows locale-encoding issue that produced `����` instead of Cyrillic text in copied logs.
+
+Commit:
+```text
+561de92330b78cc1c09718ef45c6aa7599a38ace → Reset Activity logs as UTF-8 on runner start
+```
+
+Runtime QA after this logging fix is pending.
