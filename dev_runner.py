@@ -107,6 +107,9 @@ def start_activity_client() -> subprocess.Popen:
     env = dict(os.environ)
     if NODE_DIR.is_dir():
         env["PATH"] = f"{NODE_DIR};{env.get('PATH', '')}"
+    activity_client_id = env.get("DISCORD_ACTIVITY_CLIENT_ID", "").strip()
+    if activity_client_id:
+        env["VITE_DISCORD_CLIENT_ID"] = activity_client_id
 
     return subprocess.Popen(
         [npm, "run", "dev", "--", "--host", "127.0.0.1", "--port", "5173"],
