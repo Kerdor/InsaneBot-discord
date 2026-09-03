@@ -2,7 +2,7 @@
 
 Repository: https://github.com/Kerdor/InsaneBot-discord  
 Branch: `main`  
-State date: 2026-09-02  
+State date: 2026-09-03  
 Current phase: **IMPLEMENTATION FIRST**
 
 > This file is the authoritative hand-off document. GitHub `main` is the final source of truth when source and this document disagree.
@@ -22,6 +22,7 @@ Current phase: **IMPLEMENTATION FIRST**
 - CI success is not runtime QA.
 - Do not start full system-by-system QA until planned implementation is complete.
 - User prefers technical-editor/developer work: identify the problem briefly, preserve logic/architecture, make minimal changes, and give exact ready-to-use code when manual replacement is needed.
+- **When a code change is required, apply it directly to GitHub `main` without asking the user for permission or providing a manual patch first.**
 
 ## 2. PRODUCT CONCEPT
 
@@ -388,6 +389,30 @@ The launcher is intentionally client-side and lightweight: it does not change th
 
 The launcher architecture keeps one Discord Application / one Activity entry point while allowing multiple games to live inside that Activity experience.
 
+### Activity client startup — FIXED 2026-09-03
+
+Runtime testing showed that `npm.cmd` was found through the hardcoded Node.js fallback at `C:/Program Files/nodejs/npm.cmd`, but the spawned npm process could not resolve `node` because the Node.js directory was absent from the inherited `PATH`.
+
+The fix was applied directly to `dev_runner.py`: `start_activity_client()` now builds a child environment from `os.environ` and prepends `NODE_DIR` to `PATH` when the directory exists. No Activity client, Vite, backend, Discord authentication, tunnel, or reward logic was changed.
+
+Observed runtime failure before the fix:
+
+```text
+> insanebot-activities@0.1.0 dev
+> vite --host 127.0.0.1 --port 5173
+
+""node"" не является внутренней или внешней
+командой, исполняемой программой или пакетным файлом.
+```
+
+Commit:
+
+```text
+6b845dbf5cb8fc458fb8bfd0f7003e9c67362c40 → Fix Activity client Node PATH in dev runner
+```
+
+Runtime verification after this fix is pending.
+
 ## 20. SECURITY STATUS
 
 Current Activity security boundary prevents a client from simply submitting an arbitrary score. A result must correspond to a server-issued game, seed and result ID, authenticated user/context, and a valid deterministic replay.
@@ -433,6 +458,7 @@ b27608d81ed8bdbf33eb188131722906429700b7 → Snake result submission from Activi
 e8604abdfe11fcd8d2b935640989e0e0a74596ca → ActivityServerCog disnake Cog inheritance
 2e116631355e05e4d59cc4780a6fd13b8f2c8bb7 → multi-game Activity launcher
 7d6c04ee9cf078e4f329c2a1b7a29fbb1e396 → multi-game Activity launcher styling
+6b845dbf5cb8fc458fb8bfd0f7003e9c67362c40 → Fix Activity client Node PATH in dev runner
 ```
 
 ## 22. CURRENT IMPLEMENTATION ORDER
@@ -549,9 +575,35 @@ Commit:
 2f389dc4d83806cbbef48130585064a30f5aaee9 → Keep Activity tunnel stable during dev restarts
 ```
 
-Current intended local startup command:
+## 27. DEV RUNNER NODE PATH FIX — 2026-09-03
+
+Runtime test showed that Windows could not resolve `node` or `npm` from the interactive CMD `PATH`, while `dev_runner.py` correctly found `C:/Program Files/nodejs/npm.cmd` through its explicit fallback.
+
+The failure occurred because `npm.cmd` itself invokes `node`, but the child process inherited an environment without `C:/Program Files/nodejs` in `PATH`.
+
+`dev_runner.py` was changed directly on GitHub `main` so `start_activity_client()` creates a child environment from `os.environ` and prepends `NODE_DIR` to `PATH` when the Node directory exists.
+
+No Activity application logic, Vite configuration, backend logic, Discord authentication, Cloudflare tunnel behavior, Snake validation, or reward logic was changed.
+
+Observed failure:
 ```text
-python dev_runner.py
+> insanebot-activities@0.1.0 dev
+> vite --host 127.0.0.1 --port 5173
+
+""node"" не является внутренней или внешней
+командой, исполняемой программой или пакетным файлом.
 ```
 
-Runtime Activity QA is still pending.
+Commit:
+```text
+6b845dbf5cb8fc458fb8bfd0f7003e9c67362c40 → Fix Activity client Node PATH in dev runner
+```
+
+Current runtime status:
+```text
+Bot startup → successful
+Activity backend → successful
+Vite client → previously failed due to Node PATH; fix applied
+Cloudflare Quick Tunnel → successfully created
+Real Activity QA → PENDING rerun after fix
+```
