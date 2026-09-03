@@ -401,25 +401,52 @@ Observed runtime failure before the fix:
 > insanebot-activities@0.1.0 dev
 > vite --host 127.0.0.1 --port 5173
 
-""node"" не является внутренней или внешней
+"node" не является внутренней или внешней
 командой, исполняемой программой или пакетным файлом.
 ```
 
 Commit:
-
 ```text
 6b845dbf5cb8fc458fb8bfd0f7003e9c67362c40 → Fix Activity client Node PATH in dev runner
 ```
 
-Runtime verification after this fix is pending.
+Current runtime status:
+```text
+Bot startup → successful
+Activity backend → successful
+Vite client → previously failed due to Node PATH; fix applied
+Cloudflare Quick Tunnel → successfully created
+Real Activity QA → PENDING rerun after fix
+```
 
-### Activity diagnostics logging — IMPLEMENTED 2026-09-03
+### Activity diagnostics / UTF-8 logging — UPDATED 2026-09-03
 
-`dev_runner.py` now initializes the Activity client log as UTF-8 on every fresh runner start. The runner log is also opened explicitly as UTF-8, so Windows locale encoding should no longer produce `����` for Russian text.
+Runner-side UTF-8 initialization remains active in `dev_runner.py`:
+- `logs/dev_runner.log` opened as UTF-8;
+- `logs/activity_client.log` truncated as UTF-8 on every fresh runner start;
+- bot child process receives `PYTHONUTF8=1` and `PYTHONIOENCODING=utf-8`.
 
-The Activity client now sends diagnostic lifecycle/error records to the backend and also writes them to the browser console. The diagnostics cover SDK startup, authorization, token/session requests, Snake requests/results, UI transitions, `window.error`, unhandled promise rejections and fatal startup errors.
+`activities/client/src/main.js` sends diagnostic lifecycle/error records to `/api/activity/log` and also writes them to the browser console. Diagnostics cover SDK startup, authorization, token/session requests, Snake requests/results, UI transitions, `window.error`, unhandled promise rejections and fatal startup errors. OAuth tokens, authorization codes and client secrets are not written.
 
-No OAuth tokens, authorization codes or client secrets are written to the diagnostic log.
+The backend endpoint `POST /api/activity/log` is now implemented in `activities/server.py`. It accepts bounded diagnostic records, serializes diagnostic data safely with UTF-8, and appends them to `logs/activity_client.log` without exposing authentication secrets.
+
+Commit:
+```text
+fbe674dc9c8309db47c3bca7a4ccb3d6d54f0149 → Add Activity client diagnostic log endpoint
+```
+
+Current runtime result from the latest launch:
+```text
+Bot → SUCCESS
+Activity backend → SUCCESS
+Vite → SUCCESS
+Cloudflare Quick Tunnel → SUCCESS
+Tunnel connectivity pre-checks → PASS
+Activity screen → WHITE instead of previous BLUE screen
+Browser diagnostic log → PENDING real Activity launch
+```
+
+Next step: launch the Activity once more. The browser-side diagnostics should now be written to `logs/activity_client.log`; that log will identify where the white-screen startup stops.
 
 ## 20. SECURITY STATUS
 
@@ -468,6 +495,7 @@ e8604abdfe11fcd8d2b935640989e0e0a74596ca → ActivityServerCog disnake Cog inher
 7d6c04ee9cf078e4f329c2a1b7a29fbb1e396 → multi-game Activity launcher styling
 6b845dbf5cb8fc458fb8bfd0f7003e9c67362c40 → Fix Activity client Node PATH in dev runner
 561de92330b78cc1c09718ef45c6aa7599a38ace → Reset Activity logs as UTF-8 on runner start
+fbe674dc9c8309db47c3bca7a4ccb3d6d54f0149 → Add Activity client diagnostic log endpoint
 ```
 
 ## 22. CURRENT IMPLEMENTATION ORDER
@@ -599,7 +627,7 @@ Observed failure:
 > insanebot-activities@0.1.0 dev
 > vite --host 127.0.0.1 --port 5173
 
-""node"" не является внутренней или внешней
+"node" не является внутренней или внешней
 командой, исполняемой программой или пакетным файлом.
 ```
 
@@ -617,15 +645,33 @@ Cloudflare Quick Tunnel → successfully created
 Real Activity QA → PENDING rerun after fix
 ```
 
-## 28. ACTIVITY LOG ENCODING FIX — 2026-09-03
+## 28. ACTIVITY LOG ENCODING / DIAGNOSTIC BACKEND — 2026-09-03
 
-Runner log files are now explicitly created as UTF-8 and `activity_client.log` is truncated at every fresh `dev_runner.py` launch.
+Runner log files are explicitly created as UTF-8 and `activity_client.log` is truncated at every fresh `dev_runner.py` launch.
 
-This fixes the Windows locale-encoding issue that produced `����` instead of Cyrillic text in copied logs.
+The Activity client diagnostic sender in `activities/client/src/main.js` posts lifecycle and browser error records to `/api/activity/log` and also writes them to the browser console.
+
+The backend diagnostic endpoint is implemented in `activities/server.py`:
+- `POST /api/activity/log` is available;
+- diagnostic message/data are bounded;
+- records are appended to `logs/activity_client.log` as UTF-8;
+- OAuth tokens, authorization codes and client secrets are not logged;
+- Snake validation, rewards and authentication logic were not changed.
 
 Commit:
 ```text
-561de92330b78cc1c09718ef45c6aa7599a38ace → Reset Activity logs as UTF-8 on runner start
+fbe674dc9c8309db47c3bca7a4ccb3d6d54f0149 → Add Activity client diagnostic log endpoint
 ```
 
-Runtime QA after this logging fix is pending.
+Latest runtime launch:
+```text
+Bot → SUCCESS
+Activity backend → SUCCESS
+Vite → SUCCESS
+Cloudflare Quick Tunnel → SUCCESS
+Tunnel connectivity pre-checks → PASS
+Activity screen → WHITE instead of previous BLUE screen
+Browser diagnostic log → PENDING real Activity launch
+```
+
+Next step: launch the Activity again and then inspect `logs/activity_client.log`. This should show the exact browser-side startup failure or the point where initialization stops.
