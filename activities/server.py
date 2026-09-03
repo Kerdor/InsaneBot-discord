@@ -94,6 +94,9 @@ class ActivityRequestHandler(BaseHTTPRequestHandler):
         if self.path == "/api/discord/token":
             self._handle_token_exchange()
             return
+        if self.path == "/api/activity/log":
+            self._handle_activity_log()
+            return
         if self.path == "/api/activities/snake/start":
             self._handle_snake_start()
             return
@@ -108,6 +111,41 @@ class ActivityRequestHandler(BaseHTTPRequestHandler):
             return None
         payload = json.loads(self.rfile.read(content_length).decode("utf-8"))
         return payload if isinstance(payload, dict) else None
+
+    def _handle_activity_log(self) -> None:
+        try:
+            payload = self._read_json_body()
+            if payload is None:
+                self._send_json(400, {"error": "Invalid diagnostic log body"})
+                return
+            message = payload.get("message")
+            if not isinstance(message, str) or not message.strip() or len(message) > 500:
+                self._send_json(400, {"error": "Invalid diagnostic log message"})
+                return
+            entry = {
+                "time": payload.get("time") if isinstance(payload.get("time"), str) else "",
+                "message": message.strip(),
+            }
+            data = payload.get("data")
+            if data is not None:
+                try:
+                    serialized_data = json.dumps(data, ensure_ascii=False, separators=(",", ":"))
+                except (TypeError, ValueError):
+                    serialized_data = "<unserializable>"
+                if len(serialized_data) > 4000:
+                    serialized_data = serialized_data[:4000] + "..."
+                entry["data"] = serialized_data
+            log_dir = os.path.abspath(os.path.join(os.path.dirname(__file__), "..", "logs"))
+            os.makedirs(log_dir, exist_ok=True)
+            log_file = os.path.join(log_dir, "activity_client.log")
+            with open(log_file, "a", encoding="utf-8") as handle:
+                handle.write(json.dumps(entry, ensure_ascii=False) + "\n")
+            self._send_json(204, {})
+        except (ValueError, UnicodeDecodeError):
+            self._send_json(400, {"error": "Invalid diagnostic log JSON"})
+        except OSError as exc:
+            print(f"[ACTIVITY LOG] Write failed: {type(exc).__name__}: {exc}")
+            self._send_json(500, {"error": "Diagnostic log write failed"})
 
     def _handle_snake_start(self) -> None:
         session = self._get_session()
