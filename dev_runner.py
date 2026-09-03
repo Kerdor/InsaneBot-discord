@@ -88,9 +88,13 @@ def resolve_npm() -> str:
 
 def start_bot() -> subprocess.Popen:
     print("[RUNNER] Запуск бота...", flush=True)
+    env = dict(os.environ)
+    env["PYTHONUTF8"] = "1"
+    env["PYTHONIOENCODING"] = "utf-8"
     return subprocess.Popen(
         [sys.executable, str(MAIN_FILE)],
         cwd=PROJECT_DIR,
+        env=env,
         stdout=LOG_HANDLE,
         stderr=subprocess.STDOUT,
     )
